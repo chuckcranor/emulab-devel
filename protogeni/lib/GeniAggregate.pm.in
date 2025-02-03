@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023, 2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -391,7 +391,7 @@ sub Delete($$)
 	}
 	if ($sliver->Delete($purge) != 0) {
 	    print STDERR "Could not delete $sliver from $self\n";
-	    $sliver->SetStatus("broken");
+	    #$sliver->SetStatus("broken");
 	    $broken++;
 	    last;
 	}
@@ -3811,7 +3811,7 @@ sub UnProvision($;$)
     foreach my $sliver (@links) {
 	if ($sliver->UnProvision() != 0) {
 	    print STDERR "Could not unprovision $sliver in $self\n";
-	    $sliver->SetStatus("broken");
+	    #$sliver->SetStatus("broken");
 	    next;
 	}
     }
@@ -3851,7 +3851,7 @@ sub UnProvision($;$)
 	foreach my $sliver (@sliverlist) {
 	    if ($sliver->UnProvision($nophysfree) != 0) {
 		print STDERR "Could not unprovision $sliver in $self\n";
-		$sliver->SetStatus("broken");
+		#$sliver->SetStatus("broken");
 		next;
 	    }
 	}
@@ -3859,7 +3859,7 @@ sub UnProvision($;$)
     foreach my $sliver (values(%pnodes)) {
 	if ($sliver->UnProvision($nophysfree) != 0) {
 	    print STDERR "Could not unprovision $sliver in $self\n";
-	    $sliver->SetStatus("broken");
+	    #$sliver->SetStatus("broken");
 	    next;
 	}
     }
