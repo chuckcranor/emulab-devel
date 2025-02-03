@@ -93,7 +93,13 @@ $(function ()
 		}
 		if (json.code) {
 		    console.info(name + ": " + json.value);
-		    error = json.value;
+                    if (window.ISADMIN) {
+		        error = json.value;
+                    }
+                    else {
+                        // Generic message for mere users.
+                        error = "Unable to gather information, please try again later";
+                    }
 		}
 		else {
 		    images = json.value;

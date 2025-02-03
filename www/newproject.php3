@@ -23,6 +23,11 @@
 #
 include("defs.php3");
 
+if (!$CLASSICWEB_OVERRIDE) {
+    RedirectToPortal("signup.php");
+    return;
+}
+
 #
 # No PAGEHEADER since we spit out a Location header later. See below.
 # 

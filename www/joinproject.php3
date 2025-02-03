@@ -22,6 +22,11 @@
 #
 include("defs.php3");
 
+if (!$CLASSICWEB_OVERRIDE) {
+    RedirectToPortal("signup.php");
+    return;
+}
+
 #
 # This is a hack to support wikiregister.php3 - normally, this variable would
 # be cleared by OptionalPageArguments()
