@@ -3074,6 +3074,12 @@ $(function ()
 		// Context menu option
 		CMclone.find("li[id=nodetop]").removeClass("hidden");
 
+		// Reboot
+		clone.find(' [name=reboot]')
+		    .click(function (e) {
+			ActionHandler("reboot", [node]);
+		    });
+
 		// Insert into the table, we will attach the handlers below.
 		$('#listview_table')
 		    .find('tbody').append(clone)
