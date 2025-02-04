@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -690,7 +690,7 @@ handle_loadinfo()
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		echo "Failed to write image to disk, status $rc"
-		exit 1
+		return $rc
 	fi
 
 	# remove keyfiles
@@ -716,21 +716,41 @@ handle_loadinfo()
 		sgdisk -e /dev/$DISK >/dev/null 2>&1
 		rc=$?
 		if [ $rc -ne 0 ]; then
-		    echo "*** could not repair secondary GPT, trying gdisk"
+		    echo "*** sgdisk could not repair secondary GPT, trying gdisk"
 		fi
 	    fi
 	    if [ $rc -ne 0 ]; then
 		/bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+		rc=$?
+		if [ $rc -ne 0 ]; then
+		    echo "WARNING: could not repair secondary GPT"
+		fi
 	    fi
-	    echo "Re-reading partition table after GPT fixups ..."
-	    if [ -x /usr/sbin/partprobe ]; then
-		/usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
-	    else
-		echo w | fdisk /dev/$DISK > /dev/null 2>&1
+	    if [ $rc -eq 0 ]; then
+		echo "Re-reading partition table after GPT fixups ..."
+		if [ -x /usr/sbin/partprobe ]; then
+		    /usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
+		    if [ $? -ne 0 ]; then
+			echo "*** pausing and retrying partprobe"
+			sleep 1
+			/usr/sbin/partprobe /dev/$DISK
+		    fi
+		else
+		    echo w | fdisk /dev/$DISK > /dev/null 2>&1
+		fi
+		rc=$?
+		if [ $rc -ne 0 ]; then
+		    echo "WARNING: re-reading partition table failed"
+		fi
 	    fi
 	elif [ ! $rc -eq 0 ]; then
 	    echo "WARNING: get_part_type /dev/$DISK failed ($pttype, $?)"
 	fi
+
+	# Failing to fix up a GPT is not considered fatal.
+	# This is dubious, but in the common case (only case right now)
+	# of loading a single image, we are about to reboot anyway.
+	return 0
 }
 
 #

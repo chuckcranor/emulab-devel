@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -544,7 +544,9 @@ sub getpools($$)
 		if (!defined($dpool) || $dpool eq $pool) {
 		    $attrs->{'server'} = $srv;
 		    $attrs = get_poolattrs($attrs);
-		    $pools{"$srv/$pool"} = $attrs;
+		    if ($attrs) {
+			$pools{"$srv/$pool"} = $attrs;
+		    }
 		}
 	    }
 	} else {
