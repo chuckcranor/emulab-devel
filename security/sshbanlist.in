@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -45,17 +45,20 @@ sub usage()
     print "Usage: sshbanlist [-d] [-n]\n";
     exit(1);
 }
-my $optlist   = "dnsvU";
+my $optlist   = "dnsvUC";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
 my $verbose   = 1;
+my $allowCIDR = 0;
 
 #
 # Configure variables
 #
 my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
+my $TESTBED_NETWORK  = "@TESTBED_NETWORK@";
+my $TESTBED_NETMASK  = "@TESTBED_NETMASK@";
 my $CONTROL_NETWORK  = "@CONTROL_NETWORK@";
 my $CONTROL_NETMASK  = "@CONTROL_NETMASK@";
 my $PUBLIC_NETWORK   = "@PUBLIC_NETWORK@";
@@ -66,6 +69,7 @@ my $LOGINS	     = "/var/log/logins";
 # This runs on ops where things are a bit unusual.
 my $BANLIST	     = "/usr/local/www/apache24/data/sshbanlist.txt";
 my $WHITELIST        = "$TB/etc/sshwhitelist.txt";
+my $CIDRWHITELIST    = "$TB/etc/sshwhitelist-cidr.txt";
 my $BLOCKINGSET      = "$TB/etc/sshblockset.txt";
 my $DATAFILE         = "$TB/etc/sshbanlist.json";
 my $THRESHOLD	     = 10;
@@ -85,6 +89,7 @@ sub notify($);
 sub logit($);
 sub ProcessLoginFile($);
 sub GetList($);
+sub GetCIDRList($);
 sub GetBlockingSet();
 sub WriteBanList();
 sub ReadDataFile();
@@ -95,10 +100,6 @@ sub PurgeOldEntries();
 # Turn off line buffering on output
 #
 $| = 1; 
-
-if ($UID != 0 && !$impotent) {
-    fatal("Must be root to run this script\n");
-}
 
 my %options = ();
 if (! getopts($optlist, \%options)) {
@@ -115,6 +116,13 @@ if (defined($options{"s"})) {
 }
 if (defined($options{"v"})) {
     $verbose = 1;
+}
+if (defined($options{"C"})) {
+    $allowCIDR = 1;
+}
+
+if ($UID != 0 && !$impotent) {
+    fatal("Must be root to run this script\n");
 }
 
 # Load the Testbed support stuff.
@@ -182,10 +190,10 @@ my $datere = qr/(\w+\s+\d+\s+\d\d:\d\d:\d\d)/;
 #
 # We need these to flag problems from within inside.
 #
-my $public_netmask  = inet_aton($PUBLIC_NETMASK);
-my $public_network  = inet_aton($PUBLIC_NETWORK);
-my $control_netmask = inet_aton($CONTROL_NETMASK);
-my $control_network = inet_aton($CONTROL_NETWORK);
+my $public_netmask  = unpack("N", inet_aton($PUBLIC_NETMASK));
+my $public_network  = unpack("N", inet_aton($PUBLIC_NETWORK));
+my $control_netmask = unpack("N", inet_aton($CONTROL_NETMASK));
+my $control_network = unpack("N", inet_aton($CONTROL_NETWORK));
 
 #
 # The datafile stores the banned IPs and the timestamp they were banned (as
@@ -265,7 +273,7 @@ while (1) {
 	if ($outstandingCount) {
 	    WriteBanList();
 	}
-	elsif (time() - $lastdatawrite > 300) {
+	elsif (!$impotent && (time() - $lastdatawrite) > 300) {
 	    WriteDataFile();
 	}
 
@@ -293,16 +301,41 @@ sub ProcessLoginFile($)
     #
     # Reread the white list each time we process.
     #
-    my $whitelist = GetList($WHITELIST);
+    my $whitelist;
+    if ($allowCIDR) {
+	$whitelist = GetCIDRList($CIDRWHITELIST);
+    } else {
+	$whitelist = GetList($WHITELIST);
+    }
 
     # Yank anything new from the current ban list.
-    foreach my $ip (keys(%{$whitelist})) {
-	if (exists($counts->{$ip})) {
-	    if ($counts->{$ip}->{'banned'}) {
-		logit("Removing $ip from ban list cause its white listed");
-		$outstandingCount++;
+    if ($allowCIDR) {
+      again:
+	foreach my $ip (keys(%{$counts})) {
+	    if (eval { $whitelist->contains($ip) }) {
+		if ($counts->{$ip}->{'banned'}) {
+		    logit("Removing $ip from ban list cause its white listed");
+		    $outstandingCount++;
+		}
+		# XXX not very efficient, but easy
+		delete($counts->{$ip});
+		goto again;
+	    } elsif ($@) {
+		logit("Bogus IP '$ip' in ban list removed");
+		# XXX not very efficient, but easy
+		delete($counts->{$ip});
+		goto again;
 	    }
-	    delete($counts->{$ip});
+	}
+    } else {
+	foreach my $ip (keys(%{$whitelist})) {
+	    if (exists($counts->{$ip})) {
+		if ($counts->{$ip}->{'banned'}) {
+		    logit("Removing $ip from ban list cause its white listed");
+		    $outstandingCount++;
+		}
+		delete($counts->{$ip});
+	    }
 	}
     }
 
@@ -336,15 +369,31 @@ sub ProcessLoginFile($)
 	    if ($ip eq $BOSSNODE_IP);
 
 	# Ignore anything in the whitelist.
-	if (exists($whitelist->{$ip})) {
-	    if (exists($counts->{$ip})) {
-		if ($counts->{$ip}->{'banned'}) {
-		    logit("Removing $ip from ban list cause its white listed");
-		    $outstandingCount++;
+	if ($allowCIDR) {
+	    if (eval { $whitelist->contains($ip) }) {
+		if (exists($counts->{$ip})) {
+		    if ($counts->{$ip}->{'banned'}) {
+			logit("Removing $ip from ban list cause its white listed");
+			$outstandingCount++;
+		    }
+		    delete($counts->{$ip});
 		}
-		delete($counts->{$ip});
+		next;
+	    } elsif ($@) {
+		logit("Bogus IP '$ip' ignored");
+		next;
 	    }
-	    next;
+	} else {
+	    if (exists($whitelist->{$ip})) {
+		if (exists($counts->{$ip})) {
+		    if ($counts->{$ip}->{'banned'}) {
+			logit("Removing $ip from ban list cause its white listed");
+			$outstandingCount++;
+		    }
+		    delete($counts->{$ip});
+		}
+		next;
+	    }
 	}
 
 	if (!exists($counts->{$ip})) {
@@ -377,8 +426,8 @@ sub ProcessLoginFile($)
 	# reported but we do not want to ban it, too confusing for
 	# users (and us). Just log it for now.
 	#
-	my $public_masked  = inet_aton($ip) & $public_netmask;
-	my $control_masked = inet_aton($ip) & $control_netmask;
+	my $public_masked  = unpack("N", inet_aton($ip)) & $public_netmask;
+	my $control_masked = unpack("N", inet_aton($ip)) & $control_netmask;
 
 	if (($public_masked  eq $public_network ||
 	     $control_masked eq $control_network) &&
@@ -418,6 +467,10 @@ sub ProcessLoginFile($)
 		logit("Banning $ip");
 	    }
 	}
+    }
+
+    if ($debug > 1) {
+	logit("Processing file done");
     }
     return 0;
 }
@@ -515,6 +568,60 @@ sub GetList($)
     close(LIST);
     return $result;
 }
+
+#
+# Get a CIDR list from a file.
+# Only used for the white list so we can exclude blocks of IPs
+#
+sub GetCIDRList($)
+{
+    my ($filename) = @_;
+    require Net::CIDR::Set;
+
+    my $list = Net::CIDR::Set->new({type => 'ipv4'});
+    if (! -e $filename) {
+	logit("GetList: $filename does not exist");
+	return $list;
+    }
+    open(LIST, $filename) or
+	fatal("Could not open $filename");
+
+    while (<LIST>) {
+	next
+	    if ($_ =~ /^#/);
+
+	my $ip = $_;
+	chomp($ip);
+	eval { $list->add($ip) };
+	if ($@) {
+	    logit("Could not parse line from $filename: '$ip'");
+	}
+    }
+    close(LIST);
+
+    #
+    # We take out the Emulab public and node control nets as we deal
+    # with those specially.
+    #
+    my $net = "$PUBLIC_NETWORK/" . masktobits($public_netmask);
+    eval { $list->remove($net) };
+    if ($@) {
+	logit("WARNING: Could not remove '$net' from whitelist");
+    }
+    $net = "$CONTROL_NETWORK/" . masktobits($control_netmask);
+    eval { $list->remove($net) };
+    if ($@) {
+	logit("WARNING: Could not remove '$net' from whitelist");
+    }
+
+    if (0) {
+	print STDERR "Whitelist is:\n";
+	print STDERR "  $_\n" for $list->as_range_array(0);
+    }
+
+    return $list;
+}
+
 #
 # Grab a list of users from a file
 #
@@ -654,4 +761,17 @@ sub logit($)
     my $tstamp = strftime("%b %e %H:%M:%S", localtime);
 
     print STDERR "$tstamp: $message\n";
+}
+
+sub masktobits($)
+{
+    my ($mask) = @_;
+
+    my $bits = 32;
+    while ($bits && ($mask & 1) == 0) {
+	$bits--;
+	$mask >>= 1;
+    }
+
+    return $bits;
 }
