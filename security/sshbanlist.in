@@ -431,7 +431,8 @@ sub ProcessLoginFile($)
 
 	if (($public_masked  eq $public_network ||
 	     $control_masked eq $control_network) &&
-	    $ipinfo->{"count"} > $THRESHOLD) {
+	    ((defined($user) && exists($blockingset->{$user})) ||
+	     $ipinfo->{"count"} > $THRESHOLD)) {
 	    logit("*** Unusual number of password failures from $ip");
 	    # Reset, if we see a lot of these for the same ip,
 	    # might be time to take a look. 
