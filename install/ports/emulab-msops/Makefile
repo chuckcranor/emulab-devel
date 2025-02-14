@@ -53,6 +53,7 @@ RUN_DEPENDS+=	\
 # Unknown, but sound useful or important
 RUN_DEPENDS+=	\
 	p5-HTTP-Daemon-SSL>=1.04:${PORTSDIR}/www/p5-HTTP-Daemon-SSL \
+	p5-Net-CIDR-Set>=0.13:${PORTSDIR}/net/p5-Net-CIDR-Set \
 	expect:${PORTSDIR}/lang/expect \
 	openvpn:${PORTSDIR}/security/openvpn
 

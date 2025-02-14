@@ -40,7 +40,7 @@ RUN_DEPENDS+=	\
 	nmap:${PORTSDIR}/security/nmap \
 	smartctl:${PORTSDIR}/sysutils/smartmontools \
 	valgrind:${PORTSDIR}/devel/valgrind \
-	zip:${PORTSDIR}/archivers/zip \
+	zip:${PORTSDIR}/archivers/zip
 
 # For Leigh
 RUN_DEPENDS+=	\
@@ -53,6 +53,10 @@ RUN_DEPENDS+=	\
 	xrdb:${PORTSDIR}/x11/xrdb \
 	xset:${PORTSDIR}/x11/xset \
 	xsetroot:${PORTSDIR}/x11/xsetroot
+
+# Powder things
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi
 
 # Unknown, but sound useful or important
 RUN_DEPENDS+=	\
