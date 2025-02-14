@@ -29,6 +29,10 @@ RUN_DEPENDS+=	\
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \
 	bareos-fd:${PORTSDIR}/sysutils/bareos-client
 
+# For Powder
+RUN_DEPENDS+=	\
+	uhd:${PORTSDIR}/comms/uhd
+
 # Things we like
 RUN_DEPENDS+=	\
 	fio:${PORTSDIR}/benchmarks/fio \
