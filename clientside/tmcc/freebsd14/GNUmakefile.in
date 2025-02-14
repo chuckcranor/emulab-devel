@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,7 +149,7 @@ sysetc-install:	dir-install netif_emulab tweak-syslog
 	$(INSTALL) -m 744 $(SRCDIR)/rc.final $(SYSETCDIR)/rc.final
 	$(INSTALL) -m 555 ./netif_emulab $(SYSETCDIR)/rc.d/netif_emulab
 	rm -f $(SYSETCDIR)/rc.early
-	$(INSTALL) -m 644 $(SRCDIR)/loader.conf $(DESTDIR)/boot/loader.conf
+	$(INSTALL) -m 644 $(SRCDIR)/loader.conf $(DESTDIR)/boot/loader.conf.preemulab
 	$(INSTALL) -m 755 $(SRCDIR)/dhclient-exit-hooks \
 			$(SYSETCDIR)/dhclient-exit-hooks
 
