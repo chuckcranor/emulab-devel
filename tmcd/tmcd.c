@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2023 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -3232,7 +3232,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "join groups as g on p.pid=g.pid "
 				 "where p.trust!='none' "
 				 "      and u.webonly=0 "
-                                 "      and g.unix_id is not NULL "
+                                 "      and g.unix_gid is not NULL "
 				 "      and u.status='active' order by u.uid",
 				 15, passwdfield);
 	}
