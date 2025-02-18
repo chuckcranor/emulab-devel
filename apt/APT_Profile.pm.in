@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -3246,9 +3246,12 @@ sub SetRepo($$$$$$$)
 	"git checkout $repohash ";
     if (defined($reporef) && $reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
-	$command .= "&& git branch -ft $branchname origin/$branchname" .
-	    "&& git checkout -B $branchname HEAD && git submodule update --init --recursive";
+	$command .= "&& git branch -ft $branchname origin/$branchname " .
+	    "&& git checkout -B $branchname HEAD && git submodule update --init --recursive ";
     }
+    $command .= "&& ( [ ! -f /local/repository/test-common.py ] || ".
+	"sed -i'' -e 's/2.25.305821105408246119474742976030998643995/".
+	"2.25.305821105.408246119.47474297.603099864.3995/g' /local/repository/test-common.py ) ";
     $command .= "&& sudo chown -R $owner . ";
 
     #
