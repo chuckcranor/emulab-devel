@@ -86,7 +86,7 @@ function HideWaitWait(continuation)
     HideModal('#waitwait-modal', continuation);
 }
 
-function ShowConfirmModal(which, confirm, cancel)
+function ShowConfirmModal(which, confirm, cancel, check)
 {
     var canceled = function () {
 	console.info("canceled");
@@ -113,13 +113,21 @@ function ShowConfirmModal(which, confirm, cancel)
     }
 
     // Handler for the confirm kills the cancel handler.
-    $(which).find(".confirm-button").one("click.confirm", function (event) {
+    var confirm_handler = function (event) {
 	event.preventDefault();
 	console.info("confirmed");
+        if (check) {
+            // Caller is saying to hold off.
+            if (check() != 0) {
+                $(which).find(".confirm-button").one("click.confirm", confirm_handler);
+                return;
+            }
+        };
 	$(which).off('hidden.bs.modal', canceled);
 	$(which).find(".cancel-button").off("click.confirm");
 	HideModal(which, confirm);
-    });
+    };
+    $(which).find(".confirm-button").one("click.confirm", confirm_handler);
     ShowModal(which);
 }
     
