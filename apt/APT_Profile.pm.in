@@ -1634,13 +1634,9 @@ sub CheckEverything($$$$$$$$$$$)
     #
     # Spectrum sanity checks, then spectrum reservation checks.
     #
-    my $checkranges = 1
-	if (EmulabFeatures->FeatureEnabled("powder-verify-spectrum",
-					   $user, $project));
-
     my $spectrum;
     $retval = APT_Profile::CheckSpectrum($rspec, $perrmsg, \$spectrum,
-					 $resources, $checkranges);
+					 $resources);
     if ($retval) {
 	return $retval;
     }
@@ -2466,11 +2462,10 @@ sub CheckForDeprecatedImages($$$$)
 #
 # Check spectrum validity.
 #
-sub CheckSpectrum($$;$$$)
+sub CheckSpectrum($$;$$)
 {
-    my ($rspec, $pmsg, $pspectrum, $resources, $checkranges) = @_;
+    my ($rspec, $pmsg, $pspectrum, $resources) = @_;
     my $spectrum = [];
-    $checkranges = 0 if (!defined($checkranges));
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2533,8 +2528,6 @@ sub CheckSpectrum($$;$$$)
 	return 1;
     }
     
-    if ($checkranges) {
-
     my %global_errors = ();
     my %node_errors   = ();
     my %route_errors  = ();
@@ -2701,7 +2694,6 @@ sub CheckSpectrum($$;$$$)
 
 	$$pmsg = $message;
 	return 1;
-    }
     }
     if (0) {
 	$$pmsg = "oops";
