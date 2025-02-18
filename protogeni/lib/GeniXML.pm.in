@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2024 University of Utah and the Flux Group.
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -726,17 +726,23 @@ sub GetServices($)
 		$type = "execute";
 		my $cmd  = GetText("command", $current);
 		my $shell= GetText("shell", $current);
+		my $tag  = GetText("tag", $current);
 		$item = {"type"   => $type,
 			 "cmd"    => $cmd,
-			 "shell"  => $shell};
+			 "shell"  => $shell,
+			 "tag"    => $tag,
+			 "element"=> $current};
 	    }
 	    elsif ($type eq "install") {
 		$type = "install";
 		my $dir = GetText("install_path", $current);
 		my $url = GetText("url", $current);
+		my $tag = GetText("tag", $current);
 		$item = {"type"   => $type,
 			 "dir"    => $dir,
-			 "url"    => $url};
+			 "url"    => $url,
+			 "tag"    => $tag,
+			 "element"=> $current};
 	    }
 	    else {
 		next;

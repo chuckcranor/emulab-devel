@@ -3292,18 +3292,32 @@ sub SetRepoOnNode($$)
     my ($node, $command) = @_;
 
     my $service;
-    my $services = FindNodes("n:services", $node)->shift();
-    if (!defined($services)) {
-	$services = GeniXML::AddElement("services", $node);
+    my @services = GeniXML::GetServices($node);
+    if (!@services) {
+	my $services = GeniXML::AddElement("services", $node);
 	$service  = GeniXML::AddElement("execute", $services);
     }
     else {
-	$service = XML::LibXML::Element->new("execute");
-	$services->insertBefore($service,
-				FindNodes("n:execute", $services)->shift());
+	# Find existing service and update.
+	my @execute_services = GeniXML::GetExecuteServices($node);
+	foreach my $s (@execute_services) {
+	    my $tag = $s->{'tag'};
+	    
+	    if (defined($tag) && $tag eq "portal-repository") {
+		$service = $s->{'element'};
+		last;
+	    }
+	}
+	if (!defined($service)) {
+	    my $services = FindNodes("n:services", $node)->shift();
+	    $service = XML::LibXML::Element->new("execute");
+	    $services->insertBefore($service,
+				    FindNodes("n:execute", $services)->shift());
+	}
     }
     GeniXML::SetText("shell", $service, "/bin/sh");
     GeniXML::SetText("command", $service, $command);
+    GeniXML::SetText("tag", $service, "portal-repository");
     return 0;
 }
 
