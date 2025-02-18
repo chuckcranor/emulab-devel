@@ -772,6 +772,51 @@ function Do_SchedTerminate()
 }
 
 #
+# General request for info about an experiment.
+#
+function Do_RequestInfo()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args, $APTMAIL;
+    $this_uid = $this_user->uid();
+
+    # Really, only admins can do this.
+    if (StatusSetupAjax(0)) {
+	goto bad;
+    }
+    $uuid = $instance->uuid();
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "You do not have permission to do this.");
+	goto bad;
+    }
+    if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
+        $message = $ajax_args["message"];
+    }
+    else {
+        SPITAJAX_ERROR(1, "Please provide a message!");
+        return;
+    }
+    $target_email   = $creator->email();
+    $target_name    = $creator->name();
+    $instance_name  = $instance->pid() . "/" . $instance->name();
+    $instance_url   = $instance->StatusURL();
+    
+    TBMAIL("$target_name <$target_email>",
+           "Request for information about experiment $instance_name",
+           "Hi, we need more information about your experiment.\n\n".
+           $message . "\n\n\n".
+           "Thank you\n".
+           $instance_url,
+           "From: $APTMAIL");
+
+    SPITAJAX_RESPONSE(0);
+bad:
+    sleep(1);
+    return;
+}
+
+
+#
 # Request a console URL and pass back to the status page.
 #
 function Do_ConsoleURL()
