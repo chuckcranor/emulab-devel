@@ -180,6 +180,19 @@ $(function ()
 	$('#linktest_div').html(linktestString);
 	$('#destroy_div').html(destroyString);
 	$('#txgraph_div').html(templates["txgraph"]);
+
+        if (! window.APT_OPTIONS.isadmin) {
+            var mailto = "mailto:" + window.SUPPORT +
+                "?subject=Request assistance with experiment " +
+                expinfo.project + "/" + expinfo.name +
+                "&body=%0A%0A##---- PLEASE TYPE YOUR QUESTION ABOVE THIS LINE ----##" +
+                "%0A%0A" + window.location.href;
+            mailto = mailto.replace(/\ /g, "%20");
+            $('#request-help-button').attr("href", mailto);
+        }
+        else {
+            $('#request-info-button').click(RequestInfo);
+        }
 	
 	// Not allowed to copy repobased profiles.
 	if (expinfo.repourl) {
@@ -5690,6 +5703,33 @@ $(function ()
 		     });
 		 });
 	});
+    }
+
+    /*
+     * Ask user for info
+     */
+    function RequestInfo()
+    {
+        var check = function () {
+	    var message = $.trim($('#request-info-message').val());
+            if (message == "") {
+                // Only one error.
+                $('#request-info-modal .error-message').removeClass("hidden");
+                return 1
+            }
+            $('#request-info-modal .error-message').addClass("hidden");
+            return 0
+        };
+        var getinfo = function () {
+	    var message = $.trim($('#request-info-message').val());
+	    var args = {"uuid" : uuid, "message" : message};
+	    sup.CallServerMethod(null, "status", "RequestInfo", args,
+			         function(json) {
+                                     console.info("RequestInfo", json);
+                                 });
+        };
+        $('#request-info-modal .error-message').addClass("hidden");
+	sup.ShowConfirmModal("#request-info-modal", getinfo, undefined, check);
     }
 
     /*

@@ -205,8 +205,12 @@ $routing = array("geni-login" =>
 						     "Do_RequestExtension",
 						 "DenyExtension" =>
 						     "Do_DenyExtension",
+                                                 # This is an info request for extensions
 						 "MoreInfo" =>
 						     "Do_MoreInfo",
+                                                 # General request info about experiment
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
 						 "SchedTerminate" =>
 						     "Do_SchedTerminate",
 						 "SnapShot" =>
