@@ -479,23 +479,11 @@ if (!($debug || $foreground)) {
 	AddAuditInfo("cc", "stoller\@emulab.net");
     }
     AddAuditInfo("brand", $project->Brand());
-    #
-    # Should we be saving these? Needs more thought?
-    #
-    my $tmp = $instance->GetLogFile();
-    if ($tmp) {
-	# Purge it.
-	$tmp->Delete(1);
-    }
-    $logfile = Logfile->Create($project->GetProjectGroup(), $logfilename);
+
+    $logfile = $instance->NewLogFile("create_slivers", $logfilename);
     if (!defined($logfile)) {
 	fatal("Could not create a new logfile from $logfilename");
     }
-    $logfile->SetMetadata({"op"   => "create_slivers",
-			   "uuid" => $uuid}, 0);
-    $instance->SetLogFile($logfile);
-    # For web spew.
-    $logfile->Open();
 
     # This is for the logfile so we do not close it in the children of ParRun
     # when it hits the END block above.

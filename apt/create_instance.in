@@ -903,14 +903,6 @@ if (!$debug) {
 	# AddAuditInfo("cc", "mike\@flux.utah.edu");
     }
     AddAuditInfo("brand", $project->Brand());
-
-    $logfile = Logfile->Create($group, $logfilename);
-    if (!defined($logfile)) {
-	fatal("Could not create a new logfile from $logfilename");
-    }
-    $logfile->SetMetadata({"op" => "create_instance"});
-    # For web spew.
-    $logfile->Open();
 }
 
 # Check for expired certs and speaksfor.
@@ -1077,9 +1069,14 @@ if (!defined($instance)) {
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
+#
+# Now we can attach a logfile to the instance.
+#
 if (!$debug) {
-    $instance->SetLogFile($logfile);
-    $logfile->SetMetadata({"uuid" => $instance->uuid()}, 0);
+    $logfile = $instance->NewLogFile("create_instance", $logfilename);
+    if (!defined($logfile)) {
+	fatal("Could not create a new logfile from $logfilename");
+    }
 }
 #
 # Now set the rspec to avoid reparse later.
@@ -1261,9 +1258,11 @@ sub fatal($) {
     # Need to do this before we close the log since it gets moved.
     AuditEnd(-1);
     
+    #
+    # We do not save these logfiles, email is enough.
+    #
     if (defined($logfile)) {
-	$logfile->Close();
-	$logfile->Store();
+	$logfile->Delete(1);
 	$logfile = undef;
     }
     exit(-1);
