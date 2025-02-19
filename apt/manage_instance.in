@@ -8305,15 +8305,10 @@ sub DoModify()
 	AddAuditInfo("brand", $project->Brand());
 	AddAuditInfo("headers", "X-Portal: modify experiment");
 
-	$logfile = Logfile->Create($group, $logfilename);
+	$logfile = $instance->NewLogFile("modify_instance", $logfilename);
 	if (!defined($logfile)) {
 	    fatal("Could not create a new logfile from $logfilename");
 	}
-	$logfile->SetMetadata({"op" => "modify_instance"});
-	# For web spew.
-	$logfile->Open();
-	$instance->SetLogFile($logfile);
-	$logfile->SetMetadata({"uuid" => $instance->uuid()}, 0);
     }
     print "$rspecstr\n";
 
@@ -8416,6 +8411,11 @@ sub DoModify()
 	if (defined($webtask));
     exit(0);
   bad:
+    if ($logfile) {
+	$logfile->Close();
+	$logfile->Store();
+	$logfile = undef;
+    }
     $instance->SetStatus("ready") if (!$nostatus);
     $slice->UnLock() if (!$nolock && $gotlock);
     print STDERR $errmsg . "\n";

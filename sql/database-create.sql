@@ -697,6 +697,18 @@ CREATE TABLE `apt_instance_history` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_instance_logfile_history`
+--
+
+DROP TABLE IF EXISTS `apt_instance_logfile_history`;
+CREATE TABLE `apt_instance_logfile_history` (
+  `uuid` varchar(40) NOT NULL default '',
+  `logfileid` varchar(40) NOT NULL default '',
+  `created` datetime default NULL,
+  PRIMARY KEY (`uuid`,`logfileid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_instance_slice_status`
 --
 
