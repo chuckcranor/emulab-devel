@@ -461,7 +461,7 @@ CREATE TABLE `apt_deferred_instances` (
   `start_at` datetime default NULL,
   `last_retry` datetime default NULL,
   `retry_until` datetime default NULL,
-  `reason` tinytext,
+  `reason` text,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -1152,6 +1152,7 @@ DROP TABLE IF EXISTS `apt_instance_rfranges`;
 CREATE TABLE `apt_instance_rfranges` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) NOT NULL default '',
   `name` varchar(16) default NULL,
   `type` enum('global','node','iface','route') default NULL, 
   `target` tinytext,
@@ -1162,7 +1163,10 @@ CREATE TABLE `apt_instance_rfranges` (
   `rdz_grantid` varchar(40) DEFAULT NULL,
   `rdz_claimid` varchar(40) DEFAULT NULL,
   `rdz_status` varchar(40) DEFAULT NULL,
-  PRIMARY KEY (`uuid`,`idx`)
+  `rdz_freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `rdz_freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`uuid`,`idx`),
+  UNIQUE KEY `freq_uuid` (`freq_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1173,6 +1177,7 @@ DROP TABLE IF EXISTS `apt_instance_rfrange_history`;
 CREATE TABLE `apt_instance_rfrange_history` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) default NULL,
   `type` enum('global','node','iface','route') default NULL, 
   `target` tinytext,
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',

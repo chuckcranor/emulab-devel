@@ -178,6 +178,11 @@ function Do_GetInstanceStatus()
         $blob["logfile_url"] =
             "$APTBASE/spewlogfile.php?logfile=" . $instance->logfileid();
     }
+
+    if ($instance->status() == "pending") {
+        $blob["deferred_reason"] = $instance->deferred_reason();
+        $blob["last_retry"] = DateStringGMT($instance->last_retry());
+    }
     
     # Openstack experiment?
     $haveopenstack = $instance->isopenstack() ? 1 : 0;

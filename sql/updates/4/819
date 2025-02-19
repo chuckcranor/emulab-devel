@@ -1,0 +1,31 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_rfranges", "freq_uuid")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfranges ADD ".
+		     " `freq_uuid` varchar(40) NOT NULL default '' ".
+		     "    after uuid");
+	DBQueryFatal("update apt_instance_rfranges set freq_uuid=uuid()");
+    }
+    if (!DBKeyExists("apt_instance_rfranges", "freq_uuid")) {
+	DBQueryFatal("alter table apt_instance_rfranges ADD " .
+		     " UNIQUE KEY `freq_uuid` (`freq_uuid`)");
+    }
+    if (!DBSlotExists("apt_instance_rfrange_history", "freq_uuid")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfrange_history ADD ".
+		     " `freq_uuid` varchar(40) default NULL after uuid");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

@@ -1,0 +1,27 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_rfranges", "rdz_freq_low")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfranges ADD ".
+		     " `rdz_freq_low` float(8,2) NOT NULL DEFAULT '0.00' ".
+		     "    after rdz_status");
+    }
+    if (!DBSlotExists("apt_instance_rfranges", "rdz_freq_high")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfranges ADD ".
+		     " `rdz_freq_high` float(8,2) NOT NULL DEFAULT '0.00 ".
+		     "     after rdz_freq_low"):
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

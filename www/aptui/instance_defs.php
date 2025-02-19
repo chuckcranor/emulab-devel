@@ -87,8 +87,11 @@ class Instance
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
-	    DBQueryWarn("select * from apt_instances ".
-			"where uuid='$safe_uuid'");
+	    DBQueryWarn("select i.*,d.last_retry,d.reason as deferred_reason  ".
+                        "  from apt_instances as i ".
+                        "left join apt_deferred_instances as d on ".
+                        "  d.uuid=i.uuid ".
+			"where i.uuid='$safe_uuid'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->instance = null;
@@ -160,6 +163,8 @@ class Instance
     function paramdefs()    { return $this->field('paramdefs'); }
     function portal()       { return $this->field('portal'); }
     function powder_zones() { return $this->field('powder_zones'); }
+    function deferred_reason() { return $this->field('deferred_reason'); }
+    function last_retry()   { return $this->field('last_retry'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }

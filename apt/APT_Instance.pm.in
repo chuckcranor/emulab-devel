@@ -2617,11 +2617,12 @@ sub Schedule($$)
 # Defer instance setup while we wait (poll) for missing deferrable
 # aggregates to come online.
 #
-sub Defer($)
+sub Defer($;$)
 {
-    my ($self) = @_;
+    my ($self, $reason) = @_;
     my $uuid   = $self->uuid();
     my $name   = $self->name();
+    my $rset   = defined($reason) ? ",reason=" . DBQuoteSpecial($reason) : "";
 
     my $query_result =
 	DBQueryWarn("select uuid from apt_deferred_instances ".
@@ -2631,13 +2632,13 @@ sub Defer($)
 
     if ($query_result->numrows) {
 	DBQueryWarn("update apt_deferred_instances set ".
-		    "  last_retry=now() ".
+		    "  last_retry=now() $rset ".
 		    "where uuid='$uuid'")
 	    or return -1;
     }
     else {
 	DBQueryWarn("insert into apt_deferred_instances set ".
-		    " uuid='$uuid', name='$name', last_retry=now()")
+		    " uuid='$uuid', name='$name', last_retry=now() $rset")
 	    or return -1;
     }
     return 0;
@@ -2949,6 +2950,7 @@ sub CheckResources($$)
     #
     # Add the spectrum to this instance (we are starting it).
     #
+    my $modified = 0;
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
@@ -2956,17 +2958,24 @@ sub CheckResources($$)
 	my $bandwidth      = $request->{"bandwidth"};
 	my $type           = $request->{"type"};
 	my $target         = $request->{"target"};
+	my $element        = $request->{"element"};
 	
-	if (!APT_Instance::RFRanges->Lookup($self,
-					    $frequency_low, $frequency_high)) {
-	    if (!APT_Instance::RFRanges->Create($self,
-						$frequency_low, $frequency_high,
-						$power, $bandwidth,
-						$type, $target)) {
+	if (!APT_Instance::RFRanges->Lookup(
+		 $self, $frequency_low, $frequency_high)) {
+	    my $rfrange = APT_Instance::RFRanges->Create(
+		$self, $frequency_low, $frequency_high,
+		$power, $bandwidth, $type, $target);
+
+	    if (!$rfrange) {
 		$$perrmsg = "Could not create rfrange entry";
 		return -1;
 	    }
+	    GeniXML::SetText("frequency_uuid", $element, $rfrange->freq_uuid());
+	    $modified = 1;
 	}
+    }
+    if ($modified) {
+	$self->SetRSPEC($rspec);
     }
     if ($DORDZ && @{$spectrum} &&
 	APT_RDZ::CreateClaimsFromInstance($self, $perrmsg)) {
@@ -6974,17 +6983,30 @@ sub Lookup($$$;$)
     my $uuid = $instance->uuid();
     my $query_result;
 
-    if (!defined($freq_high) &&	$token =~ /^\d+$/ ) {
+    if (!defined($freq_high) && $token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$query_result = 
+	    DBQueryWarn("select * from apt_instance_rfranges ".
+			"where uuid='$uuid' and freq_uuid='$token'");
+    }
+    elsif (!defined($freq_high) && $token =~ /^\d+$/ ) {
 	$query_result = 
 	    DBQueryWarn("select * from apt_instance_rfranges ".
 			"where uuid='$uuid' and idx='$token'");
     }
-    elsif (defined($token) && defined($freq_high)) {
+    elsif (defined($token) && defined($freq_high) &&
+	   $token =~ /^[\d\.]+$/ && $freq_high =~ /^[\d\.]+$/) {
 	$query_result = 
 	    DBQueryWarn("select * from apt_instance_rfranges ".
 			"where uuid='$uuid' and ".
-			"      freq_low=$token and ".
-			"      freq_high=$freq_high");
+			"      freq_low='$token' and ".
+			"      freq_high='$freq_high'");
+	if ($query_result && !$query_result->numrows) {
+	    $query_result = 
+		DBQueryWarn("select * from apt_instance_rfranges ".
+			    "where uuid='$uuid' and ".
+			    "      rdz_freq_low='$token' and ".
+			    "      rdz_freq_high='$freq_high'");
+	}
     }
     else {
 	return undef;
@@ -7019,23 +7041,28 @@ sub Create($$$$$$$$)
     else {
 	$bandwidth = "";
     }
+    my $freq_uuid = NewUUID();
 
     DBQueryWarn("insert into apt_instance_rfranges set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
+		"  freq_uuid='$freq_uuid', ".
 		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high', ".
+		# Might as well do this here, mostly ignored
+		"  rdz_freq_low='$freq_low', rdz_freq_high='$freq_high', ".
 		"  power='$power' $bandwidth")
 	or return undef;
 
     # Add to the history table.
     DBQueryWarn("insert into apt_instance_rfrange_history set ".
 		"  uuid='$instance_uuid', ".
+		"  freq_uuid='$freq_uuid', ".
 		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high', ".
 		"  power='$power' $bandwidth")
 	or return undef;
 
-    my $range = Lookup($class, $instance, $freq_low, $freq_high);
+    my $range = Lookup($class, $instance, $freq_uuid);
     return undef
 	if (!defined($range));
     $instance->RangeHash()->{$range->idx()} = $range;
@@ -7090,7 +7117,18 @@ sub Stringify($)
     my $freq_high = $self->freq_high();
     my $power     = $self->power();
 
-    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high,$power]";
+    return "[RFRange: $freq_low,$freq_high,$power]";
+}
+sub Printable($)
+{
+    my ($self) = @_;
+
+    my $freq_low  = $self->freq_low();
+    my $freq_high = $self->freq_high();
+    my $power     = $self->power();
+    my $width     = $self->width();
+
+    return "$freq_low,$freq_high,$power,$width";
 }
 
 #
