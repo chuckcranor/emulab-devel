@@ -2066,6 +2066,7 @@ sub GetSpectrum($)
 	push(@result, {
 	    "frequency_low"  => GetText("frequency_low", $element),
 	    "frequency_high" => GetText("frequency_high", $element),
+	    "frequency_uuid" => GetText("frequency_uuid", $element),
 	    "power"          => GetText("power", $element),
 	    "bandwidth"      => GetText("bandwidth", $element),
 	    "element"        => $element});
