@@ -6998,8 +6998,15 @@ sub Lookup($$$;$)
 	$query_result = 
 	    DBQueryWarn("select * from apt_instance_rfranges ".
 			"where uuid='$uuid' and ".
-			"      freq_low=$token and ".
-			"      freq_high=$freq_high");
+			"      freq_low='$token' and ".
+			"      freq_high='$freq_high'");
+	if ($query_result && !$query_result->numrows) {
+	    $query_result = 
+		DBQueryWarn("select * from apt_instance_rfranges ".
+			    "where uuid='$uuid' and ".
+			    "      rdz_freq_low='$token' and ".
+			    "      rdz_freq_high='$freq_high'");
+	}
     }
     else {
 	return undef;
@@ -7041,6 +7048,8 @@ sub Create($$$$$$$$)
 		"  freq_uuid='$freq_uuid', ".
 		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high', ".
+		# Might as well do this here, mostly ignored
+		"  rdz_freq_low='$freq_low', rdz_freq_high='$freq_high', ".
 		"  power='$power' $bandwidth")
 	or return undef;
 
