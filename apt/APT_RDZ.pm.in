@@ -1945,6 +1945,7 @@ sub PowerControl($$$)
     my $action   = ($which eq "off" ? "stop" : "start");
     my $resources;
 
+    $instance->Refresh();
     if (APT_Profile::GetResources($instance->RSPEC(),
 				  $perrmsg, \$resources)) {
 	$$perrmsg = "Could not get resources for experiment: $$perrmsg";
@@ -1964,12 +1965,13 @@ sub PowerControl($$$)
 
     #
     # Options:
+    #   -b Do this in the background so we do not block the event loop.
     #   -N (no locking, just do it)
     #   -P (portal rpc fast path which skips all the geni checks)
     #   -M (do not start a monitor, we depend on the events).
     #
     my $command = "$SUDO -u $PROTOUSER $WAP $MANAGEINSTANCE ".
-	"$action $uuid -M -P -N @node_ids";
+	"$action $uuid -M -P -N -b @node_ids";
     logit("PowerControl($PID): Powering $which @node_ids");
     logit("$command");
     # Verbose flag to duplicate output to stdout as it happens

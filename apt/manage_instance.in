@@ -3427,18 +3427,23 @@ sub DoRebootOrReload($)
     my $errcode;
     my $exitcode = -1;
     my $locked   = 0;
+    my $logname;
 
-    my $optlist   = "XMPN";
+    my $optlist   = "XMPNb";
     my $doperms   = 0;
     my $nomonitor = 0;
     my $portalrpc = 0;
     my $nolock    = 0;
+    my $background= 0;
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
     }
     if (defined($options{"X"})) {
 	$doperms = 1;
+    }
+    if (defined($options{"b"})) {
+	$background = 1;
     }
     if (defined($options{"M"})) {
 	$nomonitor = 1;
@@ -3551,6 +3556,21 @@ sub DoRebootOrReload($)
     $locked = 1 if (!$nolock);
 
     #
+    # Let the web interface continue, we poll now.
+    #
+    if ($background) {
+	$logname = TBMakeLogname("manage_instance_${which}");
+	if (TBBackGround($logname)) {
+	    if (defined($webtask)) {
+		$webtask->Exited(0);
+	    }
+	    exit(0);
+	}	
+	# Kill the webtask, no longer allowed to change it.
+	$webtask = undef;
+    }
+
+    #
     # Helper callback to send the proper arguments.
     #
     my $coderef = sub {
@@ -3612,6 +3632,8 @@ sub DoRebootOrReload($)
     if ($action ne "stop" && !$nomonitor) {
 	StartMonitorInternal();
     }
+    unlink($logname)
+	if (defined($logname));
     exit(0);
   killit:
     $instance->RecordHistory($RECORDHISTORY_TERMINATED);
@@ -3623,6 +3645,14 @@ sub DoRebootOrReload($)
     if (defined($webtask)) {
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
+    }
+    if (defined($logname)) {
+	SENDMAIL($TBOPS,
+		 "Unable to $which " . $instance->Printable(),
+		 "$errmsg\n\n".
+		 $instance->webURL() . "\n",
+		 $TBOPS, undef, $logname);
+	unlink($logname);
     }
     exit($exitcode);
 }
