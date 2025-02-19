@@ -761,6 +761,7 @@ sub WriteToFile($)
     my ($tempfile, $filename) = tempfile(UNLINK => 1);
     print $tempfile $string;
     close($tempfile);
+    chmod(0777, $filename);
     return $filename;
 }
 
