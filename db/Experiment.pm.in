@@ -3869,6 +3869,11 @@ sub BackupPhysicalState($;$$)
 		    "  role='" . TBDB_IFACEROLE_EXPERIMENT() . "' ".
 		    "into outfile '$pstateDir/interfaces' ")
 	    or $errors++;
+
+	# RF interfaces
+	DBQueryWarn("select * from interfaces_rf_limit where ($clause) ".
+		    "into outfile '$pstateDir/interfaces_rf_limit' ")
+	    or $errors++;
     }
 
     # Reserved table is special; we do not want to bring it back in during
@@ -3933,6 +3938,11 @@ sub RestorePhysicalState($)
     if (-e "$pstateDir/interfaces") {
 	DBQueryWarn("load data infile '$pstateDir/interfaces' ".
 		    "replace into table interfaces")
+	    or $errors++;
+    }
+    if (-e "$pstateDir/interfaces_rf_limit") {
+	DBQueryWarn("load data infile '$pstateDir/interfaces_rf_limit' ".
+		    "replace into table interfaces_rf_limit")
 	    or $errors++;
     }
     return $errors
