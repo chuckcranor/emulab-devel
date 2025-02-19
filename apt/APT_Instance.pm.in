@@ -2617,11 +2617,12 @@ sub Schedule($$)
 # Defer instance setup while we wait (poll) for missing deferrable
 # aggregates to come online.
 #
-sub Defer($)
+sub Defer($;$)
 {
-    my ($self) = @_;
+    my ($self, $reason) = @_;
     my $uuid   = $self->uuid();
     my $name   = $self->name();
+    my $rset   = defined($reason) ? ",reason=" . DBQuoteSpecial($reason) : "";
 
     my $query_result =
 	DBQueryWarn("select uuid from apt_deferred_instances ".
@@ -2631,13 +2632,13 @@ sub Defer($)
 
     if ($query_result->numrows) {
 	DBQueryWarn("update apt_deferred_instances set ".
-		    "  last_retry=now() ".
+		    "  last_retry=now() $rset ".
 		    "where uuid='$uuid'")
 	    or return -1;
     }
     else {
 	DBQueryWarn("insert into apt_deferred_instances set ".
-		    " uuid='$uuid', name='$name', last_retry=now()")
+		    " uuid='$uuid', name='$name', last_retry=now() $rset")
 	    or return -1;
     }
     return 0;

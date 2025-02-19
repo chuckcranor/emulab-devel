@@ -461,7 +461,7 @@ CREATE TABLE `apt_deferred_instances` (
   `start_at` datetime default NULL,
   `last_retry` datetime default NULL,
   `retry_until` datetime default NULL,
-  `reason` tinytext,
+  `reason` text,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

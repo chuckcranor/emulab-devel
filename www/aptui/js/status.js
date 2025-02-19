@@ -624,6 +624,10 @@ $(function ()
 		ShowBindings();
 		status_message = "Your experiment cannot be instantiated " +
 		    "yet, trying again in a few minutes.";
+                
+                if (json.value["deferred_reason"]) {
+                    status_html += " (" + json.value["deferred_reason"] + ")";
+                }
 		ShowPendingInfo(json.value);
 	    }
 	    else if (instanceStatus == 'scheduled') {
