@@ -588,6 +588,11 @@ $(function ()
 	    expinfo.paniced = 1;
 	    instanceStatus = "quarantined";
 	}
+	// Ditto the logfile, which can change for many reason
+	if (_.has(json.value, "logfile_url")) {
+	    ShowLogfile(json.value.logfile_url);
+	}
+        
 	if (instanceStatus != lastStatus || instanceStatus == "created" ||
 	    json.value.canceled) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
@@ -598,10 +603,6 @@ $(function ()
 	    var bgtype = "panel-info card-info";
 	    status_message = "Please wait while we get your experiment ready";
 
-	    // Ditto the logfile, which can change.
-	    if (_.has(json.value, "logfile_url")) {
-		ShowLogfile(json.value.logfile_url);
-	    }
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
 	    }
