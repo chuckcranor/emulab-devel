@@ -18,6 +18,8 @@ smmsp:*:25:
 mailnull:*:26:
 guest:*:31:
 video:*:44:
+realtime:*:47:
+idletime:*:48:
 bind:*:53:
 unbound:*:59:
 proxy:*:62:
@@ -31,7 +33,9 @@ audit:*:77:
 www:*:80:
 ntpd:*:123:
 _ypldap:*:160:
+snmpd:*:344:
 hast:*:845:
+tests:*:977:
 nogroup:*:65533:
 nobody:*:65534:
 messagebus:*:556:
