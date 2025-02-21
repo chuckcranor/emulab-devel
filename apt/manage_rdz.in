@@ -53,9 +53,18 @@ sub usage()
     print STDERR "Usage: manage_rdz subscriptions create\n";
     print STDERR "Usage: manage_rdz claims list|create|delete|show\n";
     print STDERR "Usage: manage_rdz users list|create|delete|show\n";
+    print STDERR "Options:\n";
+    print STDERR "  -h       - Print this message\n";
+    print STDERR "  -d       - Turn on debugging\n";
+    print STDERR "  -n       - Impotent mode\n";
+    print STDERR "  -j       - With debugging, print out json structures\n";
+    print STDERR "  -T <tok> - RDZ token, only for Powder RDZ\n";
+    print STDERR "  -R <exp> - Use inner RDZ experiment, in pid,eid format\n";
+    print STDERR "For help on individual commands:\n";
+    print STDERR "  manage_rdz <command> -h\n";
     exit(-1);
 }
-my $optlist     = "dt:nT:jR:";
+my $optlist     = "hdt:nT:jR:";
 my $debug       = 0;
 my $impotent    = 0;
 my $asjson      = 0;
@@ -137,6 +146,9 @@ if (grep {$_ eq "--"} @ARGV &&
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"h"})) {
+    usage();
 }
 if (defined($options{"n"})) {
     $impotent = 1;
@@ -1002,11 +1014,13 @@ sub DoGrants()
 	    "[-H] [-w] <low> <high> [<bandwidth>]\n";
 	print STDERR "Usage: manage_rdz grants create ".
 	    "[-H] [-w] <low> <high> [<bandwidth>] <location> <radio>\n";
+	print STDERR "Usage: manage_rdz grants create <experiment>\n";
 	print STDERR "Usage: manage_rdz grants show <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants delete <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants beat <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants watch <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants extend <grant_id> <hours>\n";
+	print STDERR "Usage: manage_rdz grants realloc <experiment>\n";
 	exit(-1);
     };
     &$usage()
@@ -1014,12 +1028,12 @@ sub DoGrants()
     
     my $which = shift(@ARGV);
     &$usage()
-	if ($which !~ /^(list|create|delete|show|beat|watch|extend)$/);
+	if ($which !~ /^(list|create|delete|show|beat|watch|extend|realloc)$/);
 
     my %options = ();
     my $beats   = 0;
     my $watch   = 0;
-    if (! getopts("Hw", \%options)) {
+    if (! getopts("HwE:", \%options)) {
 	usage();
     }
     if (defined($options{"H"})) {
@@ -1095,7 +1109,16 @@ sub DoGrants()
 	
 	my $grant_id = shift(@ARGV);
 	if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
-	    fatal("Could not delete /grants/$grant_id");
+	    if ($debug) {
+		print Dumper($response);
+	    }
+	    # Ignore if already deleted.
+	    if ($response->{'error'} =~ /already deleted/i) {
+		print "Grant has already been deleted \n";
+	    }
+	    else {
+		fatal("Could not delete /grants/$grant_id");
+	    }
 	}
 	exit(0);
     }
@@ -1122,7 +1145,7 @@ sub DoGrants()
 	exit(0)
 	    if ($impotent);
 	
-	if ($ZMC->POST("/grants/$grant_id", $grant, \$response)) {
+	if ($ZMC->PUT("/grants/$grant_id", $grant, \$response)) {
 	    fatal("Could not post /grants/$grant_id");
 	}
 
@@ -1152,6 +1175,41 @@ sub DoGrants()
 	
 	my $grant_id = shift(@ARGV);
 	exit(WatchGrant($grant_id));
+    }
+    if ($which eq "realloc") {
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $target_instance = APT_Instance->Lookup($ARGV[0]);
+	if (!defined($target_instance)) {
+	    fatal("No such experiment.");
+	}
+	if (!$target_instance->rdz_status()) {
+	    fatal("Not using the RDZ");
+	}
+	if (APT_RDZ::GetNewSpectrum($target_instance, $debug)) {
+	    fatal("Error requesting new spectrum");
+	}
+	exit(0);
+    }
+    if (@ARGV == 1) {
+	my $error;
+	
+	#
+	# Watch for an experiment to create on behalf of. This might be an
+	# RDZinRDZ. Most likely, trying to fix up something after an error.
+	#
+	my $target_instance = APT_Instance->Lookup($ARGV[0]);
+	if (!defined($target_instance)) {
+	    fatal("No such experiment.");
+	}
+	if (!$target_instance->rdz_status()) {
+	    fatal("Not using the RDZ");
+	}
+	if (APT_RDZ::UpdateSpectrumRequest($target_instance, \$error)) {
+	    fatal($error);
+	}
+	exit(0);
     }
     &$usage()
 	if (@ARGV < 2 || @ARGV > 5);
@@ -1389,13 +1447,10 @@ sub WatchGrant($)
 	else {
 	    $grant->{'status_ack_by'} = $nextack;
 	}
-
-	
-
 	return 0;
     };
     while (1) {
-	if (APT_RDZ::WatchGrants($callback, [$grant_id], $ZMC, $debug) < 0) {
+	if (APT_RDZ::WatchGrants($callback, $ZMC, $debug) < 0) {
 	    exit(-1);
 	}
     	sleep(5);
@@ -1982,11 +2037,12 @@ sub DoSubscriptions()
     my $usage = sub {
 	print STDERR "Usage: manage_rdz subscriptions subscribe\n";
 	print STDERR "Usage: manage_rdz subscriptions delete [id]\n";
+	print STDERR "Usage: manage_rdz subscriptions list\n";
 	exit(-1);
     };
     my $which = shift(@ARGV);
     &$usage()
-	if ($which !~ /^(subscribe|delete)$/);
+	if ($which !~ /^(subscribe|delete|list)$/);
     
     if ($which eq "delete") {
 	&usage()
@@ -2001,6 +2057,16 @@ sub DoSubscriptions()
 	else {
 	    print "Would delete subscription $id\n";
 	}
+	exit(0);
+    }
+    if ($which eq "list") {
+	&usage()
+	    if (@ARGV);
+
+	if ($ZMC->GET("/subscriptions", \$response)) {
+	    fatal("Could not get /subscriptions/");
+	}
+	DebugDump($response);
 	exit(0);
     }
     
@@ -2157,7 +2223,7 @@ sub DoClaims()
     my $update  = 0;
     my %options = ();
     if (! getopts("g:ui:", \%options)) {
-	usage();
+	&$usage();
     }
     if (defined($options{"u"})) {
 	$update = 1;
@@ -2256,7 +2322,7 @@ sub DoClaims()
 	$freq_high  = shift(@ARGV);
 	$freq_high *= 1000000 if ($freq_high < 10000);
 	$start      = time();
-	$end        = time() + 3600;
+	$end        = time() + (3600 * 4);
 	$name       = "Test Grant Claim";
 	$desc       = "Test Grant Claim";
 	my $constraint = {

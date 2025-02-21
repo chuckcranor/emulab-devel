@@ -246,7 +246,9 @@ while (1) {
 		    "join apt_instance_rfranges as rf on rf.uuid=i.uuid ".
 		    "where i.canceled=0 and ".
 		    "      i.status!='failed' and ".
-		    "      rf.rdz_grantid is not null".
+		    "      rf.rdz_grantid is not null and ".
+		    #      Do not start wtaching until the request is complete
+		    "      rf.rdz_status!='new' and rf.rdz_status!='denied'".
 		    ($leebee ? " and i.creator='leebee' " :
 		     ($noleebee ? " and i.creator!='leebee' " : "")));
 
@@ -288,6 +290,9 @@ sub Watcher($)
     if ($mypid) {
 	return $mypid;
     }
+    $SIG{TERM} = 'DEFAULT';
+    $SIG{INT}  = 'IGNORE';
+    
     select(undef, undef, undef, 0.2);
     logit("Starting Watcher($PID) for $instance");
     APT_RDZ::WatchExperiment($instance, $debug, $impotent);

@@ -1630,7 +1630,7 @@ sub DoTerminate()
     #
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
     if (keys(%{$rfranges})) {
-	if ($DORDZ && APT_RDZ::DeleteGrants($instance)) {
+	if ($DORDZ && APT_RDZ::DeleteGrants($instance, \$errmsg)) {
 	    $exitcode = -1;
 	    $errcode  = GENIRESPONSE_ERROR;
 	    $errmsg   = "Could not delete RDZ grants";
@@ -1645,13 +1645,13 @@ sub DoTerminate()
     }
 
     #
-    # Special case for RDZ-in-RDZ
+    # Special case for RDZ
     #
-    if ($DORDZ && $instance->rdz_rdzinrdzinfo()) {
-	if (APT_RDZ::cleanupRDZinRDZ($instance)) {
+    if ($DORDZ && $instance->rdz_rdzinfo()) {
+	if (APT_RDZ::cleanupRDZ($instance)) {
 	    $exitcode = -1;
 	    $errcode  = GENIRESPONSE_ERROR;
-	    $errmsg   = "Could not cleanup RDZ-in-RDZ";
+	    $errmsg   = "Could not cleanup RDZ";
 	    goto bad;
 	}
     }
@@ -1856,6 +1856,7 @@ sub DoExtend()
     my $force    = 0;
     my $doperms  = 0;
     my $errcode  = 1;
+    my $errmsg   = "Not able to extend experiment";
     my $noemail  = 0;
     my $autoextend_maximum = GetSiteVar("aptui/autoextend_maximum");
     my $autoextend_maxage  = GetSiteVar("aptui/autoextend_maxage");
@@ -1879,7 +1880,6 @@ sub DoExtend()
     my $maxextension;
     my $message;
     my $reason;
-    my $errmsg;
     my $wantstring;
     my $grantstring;
     my $resources;
@@ -1952,7 +1952,7 @@ sub DoExtend()
     #
     if ($slice->Lock()) {
 	$errcode = GENIRESPONSE_BUSY;
-	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	$errmsg  = "Experiment is busy, cannot lock it. Try again later.";
 	if (defined($webtask)) {
 	    $webtask->output($errmsg);
 	    $webtask->Exited($errcode);
@@ -2572,8 +2572,12 @@ sub ExtendInternal($$$$$$)
     # If this fails, easy to unroll before the slices are done.
     #
     if ($DORDZ) {
-	if (APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg) ||
-	    APT_RDZ::ExtendGrantsFromInstance($instance, \$errmsg)) {
+	if (APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg)) {
+	    goto bad;
+	}
+	if (APT_RDZ::ExtendGrantsFromInstance($instance, \$errmsg)) {
+	    # We want the user to see these errors
+	    $errcode = 1;
 	    goto bad;
 	}
     }
@@ -8140,11 +8144,12 @@ sub DoModify()
     my $resources;
     my $gotlock = 0;
 
-    my $optlist    = "fNS";
+    my $optlist    = "fNSR";
     my $foreground = 0;
     my $nolock     = 0;	# Caller holds the lock.
     my $nostatus   = 0; # Caller handles instance status changes.
     my $docreate   = 1; # Fire off create_slivers.
+    my $redo       = 0; # Run with current rspec.
     my $nopending  = 0;
     my %options    = ();
     if (! getopts($optlist, \%options)) {
@@ -8159,8 +8164,11 @@ sub DoModify()
     if (defined($options{"S"})) {
 	$nostatus = 1;
     }
+    if (defined($options{"R"})) {
+	$redo = 1;
+    }
     usage()
-	if (!@ARGV);
+	if (!@ARGV && !$redo);
 
     my $creator = $instance->GetCreator();
     if (!defined($creator)) {
@@ -8180,10 +8188,16 @@ sub DoModify()
     my $group     = $instance->GetGroup();
     my $expires   = str2time($instance->Expires());
     my $noresokay = 1;
-    
-    my $rspecstr = emutil::ReadFile($ARGV[0]);
-    if (!$rspecstr) {
-	fatal("Could not read " . $ARGV[0] . ": $!");
+    my $rspecstr;
+
+    if ($redo) {
+	$rspecstr = $instance->rspec();
+    }
+    else {
+	$rspecstr = emutil::ReadFile($ARGV[0]);
+	if (!$rspecstr) {
+	    fatal("Could not read " . $ARGV[0] . ": $!");
+	}
     }
     # Trim()
     $rspecstr =~ s/^\s+|\s+$//g;
