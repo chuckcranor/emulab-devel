@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -234,7 +234,6 @@ my $curStatus   = $instance->status();
 my $uuid        = $instance->uuid();
 my $webtask     = $instance->webtask();
 my $webtask_id  = $webtask->task_id();
-my $sequence    = $instance->GetPortalSequence();
 my $update      = defined($instance->update_rspec()) ? 1 : 0;
 my $genislice   = $instance->GetGeniSlice();
 if (!defined($genislice)) {
@@ -543,24 +542,36 @@ if (defined($instance->rdz_status())) {
     my $spectrum = $instance->_spectrum();
     if ($spectrum && @{$spectrum}) {
 	my $error;
-	
-	$instance->SetStatus("rdzwait");
-	if (APT_RDZ::RequestSpectrum($instance, \$error)) {
-	    $instance->ResolveDefer();
-	    $instance->SetStatus("failed");
-	    $instance->RecordError(GENIRESPONSE_ERROR, "RDZ failure: $error");
-	    $webtask->output("RDZ failure: $error");
-	    $webtask->Exited(GENIRESPONSE_ERROR);
+
+	# This will change the instance status if there is something to do.
+	if (my $rval = APT_RDZ::RequestSpectrum($instance, \$error)) {
+	    #
+	    # Positive return value means defer till later. 
+	    #
+	    if ($rval < 0) {
+		$instance->ResolveDefer();
+		$instance->SetStatus("failed");
+		$instance->RecordError(GENIRESPONSE_ERROR, "RDZ failure: $error");
+		$webtask->output("RDZ failure: $error");
+		$webtask->Exited(GENIRESPONSE_ERROR);
+	    }
+	    else {
+		$instance->SetStatus("pending");
+		$instance->Defer("RDZ: $error");
+		$webtask->output("RDZ: $error");
+		$webtask->Exited(0);
+	    }
 	    if (defined($logfile)) {
 		$logfile->Close();
 		$logfile->Store();
 		$logfile = undef;
 	    }
 	    $genislice->UnLock();
-	    exit(1);
+	    exit($rval);
 	}
 	$instance->Update({'rdz_status' => "ready"});
-	$rspecstr = ($update ? $instance->update_rspec() : $instance->rspec());
+	# This changed in RequestSpectrum.
+	$rspecstr = $instance->rspec();
     }
 }
 
@@ -893,6 +904,7 @@ sub CreateSliver($)
     my $aptagg    = $aggobj->GetAptAggregate();
     my $cmurl     = $authority->url();
     my $urn       = $authority->urn();
+    my $sequence  = $instance->GetPortalSequence();
     my $manifest;
     $webtask->Refresh();
 

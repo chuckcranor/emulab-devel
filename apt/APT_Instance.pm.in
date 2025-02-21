@@ -2993,15 +2993,25 @@ sub CheckResources($$)
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
+	my $frequency_uuid = $request->{"frequency_uuid"};
 	my $power          = $request->{"power"};
 	my $bandwidth      = $request->{"bandwidth"};
 	my $type           = $request->{"type"};
 	my $target         = $request->{"target"};
 	my $element        = $request->{"element"};
-	
-	if (!APT_Instance::RFRanges->Lookup(
-		 $self, $frequency_low, $frequency_high)) {
-	    my $rfrange = APT_Instance::RFRanges->Create(
+	my $rfrange;
+
+	# New way of doing this. But need to fall back.
+	if (defined($frequency_uuid)) {
+	    $rfrange = APT_Instance::RFRanges->Lookup(
+		$self, $frequency_uuid);
+	}
+	else {
+	    $rfrange = APT_Instance::RFRanges->Lookup(
+		$self, $frequency_low, $frequency_high);
+	}
+	if (!defined($rfrange)) {
+	    $rfrange = APT_Instance::RFRanges->Create(
 		$self, $frequency_low, $frequency_high,
 		$power, $bandwidth, $type, $target);
 
@@ -3009,6 +3019,8 @@ sub CheckResources($$)
 		$$perrmsg = "Could not create rfrange entry";
 		return -1;
 	    }
+	}
+	if (!GeniXML::GetText("frequency_uuid", $element)) {
 	    GeniXML::SetText("frequency_uuid", $element, $rfrange->freq_uuid());
 	    $modified = 1;
 	}
@@ -3694,7 +3706,7 @@ sub RDZFLAGS($)
     }
     return $self->{'RDZFLAGS'};
 }
-# For experiments using an inner RDZ
+# For experiments using an RDZ
 sub RDZINFO($)
 {
     my ($self) = @_;

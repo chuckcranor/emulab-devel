@@ -2531,12 +2531,6 @@ sub CheckSpectrum($$;$$)
 		    return 1;
 		}
 	    }
-	    else {
-		# This will get written back to the RSPEC later
-		$frequency_uuid = NewUUID();
-		$request->{"frequency_uuid"} = $frequency_uuid;
-		GeniXML::SetText("frequency_uuid", $element, $frequency_uuid);		
-	    }
 	}
 	return 0;
     };
@@ -2830,7 +2824,7 @@ sub CheckSpectrumReservations($$$$$$$$;$$)
 	# The user does not provide this
 	$request->{"frequency_zones"} = $resources->{"zones"};
 
-	if (!$noresokay &&
+	if (!$noresokay && !$rdzenabled && 
 	    !APT_Reservation::Group::RFReservation->RangeReserved(
 		 $group, $user, $start, $end,
 		 $frequency_low, $frequency_high, $resources->{"zones"})) {
