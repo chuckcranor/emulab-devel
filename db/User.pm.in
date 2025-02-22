@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2024 University of Utah and the Flux Group.
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2032,9 +2032,10 @@ sub FlipTo($$)
 #
 # Execute a command as user and then return to original. 
 #
-sub ExecuteAs($$;$)
+sub ExecuteAs($$;$$)
 {
-    my ($self, $command, $default_gid) = @_;
+    my ($self, $command, $default_gid, $quiet) = @_;
+    $quiet = 1 if (!defined($quiet));
 
     my $current_uid  = $UID;
     my $current_euid = $EUID;
@@ -2044,7 +2045,13 @@ sub ExecuteAs($$;$)
     my $LOGNAME      = $ENV{'LOGNAME'};
 
     $self->FlipTo($default_gid);
-    my $output = emutil::ExecQuiet($command);
+    my $output;
+    if ($quiet) {
+	$output = emutil::ExecQuiet($command);
+    }
+    else {
+	$output = emutil::ExecVerbose($command);
+    }
     my $status = $?;
 
     $EUID   = 0;
