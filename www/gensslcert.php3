@@ -24,7 +24,7 @@
 include("defs.php3");
 
 if (!$CLASSICWEB_OVERRIDE) {
-    RedirectToPortal("getcreds.php", "node=$node");
+    RedirectToPortal("getcreds.php");
     return;
 }
 
