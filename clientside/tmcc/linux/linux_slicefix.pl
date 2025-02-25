@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #
-# Copyright (c) 2015-2024 University of Utah and the Flux Group.
+# Copyright (c) 2015-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1657,6 +1657,9 @@ sub main
 	#set_random_rootfs_uuid($root);
 	disable_time_dependent_fsck($root);
 	my $fstype = mount_image($root, $imageroot);
+	# XXX there seems to be an issue if we run blkid (in get_uuid)
+	# too soon after the mount.
+	sleep(2);
 	my $uuid = get_uuid($root);
 	my $label = get_label($root);
 	my $bootloader = guess_bootloader($root);
