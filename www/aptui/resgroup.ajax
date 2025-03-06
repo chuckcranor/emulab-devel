@@ -489,6 +489,10 @@ function Do_Reserve()
     if (isset($ajax_args["validate"]) && $ajax_args["validate"]) {
         $validate = 1;
     }
+    # Zone, in case it is a range-only
+    if (isset($formfields["powder-zones"]) && $formfields["powder-zones"] != "") {
+        $zone = $formfields["powder-zones"];
+    }
     
     # Next we check the validity of the reservation.
     $this_uid = $this_user->uid();
@@ -503,6 +507,7 @@ function Do_Reserve()
     $args = "-p $PORTAL_GENESIS " .
         (isset($uuid) ? "-u $uuid " : "") .
         (isset($start) ? "-s $start " : "") .
+        (isset($zone) ? "-Z " . escapeshellarg($zone) . " " : "") .
         ($override ? "-O " : "") .
         ($forclass ? "-C " : "") .
         " -e $end $pid/$gid ";

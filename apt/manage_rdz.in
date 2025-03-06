@@ -2248,9 +2248,7 @@ sub DoClaims()
 	if ($ZMC->GET("/claims/$claim_id", \$response)) {
 	    fatal("Could not get /claims/$claim_id");
 	}
-	if ($debug) {
-	    print Dumper($response);
-	}
+	DebugDump($response);
 	exit(0);
     }
     if ($which eq "delete") {
@@ -2328,7 +2326,7 @@ sub DoClaims()
 	my $constraint = {
 	    "min_freq"  => $freq_low + 0,
 	    "max_freq"  => $freq_high + 0,
-	    "max_eirp"  => 30,
+	    "max_eirp"  => 10,
 	    "exclusive" => JSON::true,
 	};
 	my $request = {
@@ -2341,7 +2339,7 @@ sub DoClaims()
 	    "priority"    => 1023,
 	    "grant"       => {
 		"element_id"  => $ELEMENTID,
-		"spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
+		"spectrum_id" => $ZMC->spectrumid(),
 		"starts_at"   => TBDateStringGMT($start),
 		"expires_at"  => TBDateStringGMT($end),
 		"name"        => $name,

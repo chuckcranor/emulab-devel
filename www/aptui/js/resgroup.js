@@ -1821,7 +1821,7 @@ $(function ()
 			       "Validate", checkonly_callback, args);
 	};
 
-	// Deal with OTA permissions and agreement.
+	// Deal with OTA permissions and agreement and Zones
 	if (window.ISPOWDER) {
 	    var needcheck = _.size(ranges) + _.size(routes) +
 		$('tbody.isradio').length;
@@ -1830,16 +1830,34 @@ $(function ()
 		otaStuff.RequestOtaPermission(pid);
 		return;
 	    }
-	    // User cannot proceed without OTA agreement.
+
+            // If ranges and no clusters or routes, we need to force the
+            // user to select a zone so we can do proper zone checks.
+            var powderSubmit = function () {
+                if (_.size(ranges) &&
+                    !(_.size(routes) + $('tbody.isradio').length)) {
+                    ForceZoneSelection(function (zone) {
+                        $('#powder-zones').val(zone);
+                        console.info("Selected powder zone: " + zone);
+                        submit();
+                    });
+                }
+                else {
+                    submit();
+                }
+            }
+
+            // User cannot proceed without OTA agreement.
 	    if (!window.OTA_AGREED) {
 		otaStuff.RequestOtaAgreement(function (agreed) {
 		    if (agreed) {
 			window.OTA_AGREED = true;
-			submit();
+			powderSubmit();
 		    }
 		});
 		return;
 	    }
+            return powderSubmit();
 	}
 	submit();
     }
@@ -4765,8 +4783,34 @@ $(function ()
 					 .removeClass("hidden");
 				     window.DrawResGroupList(
                                          "#current-reservations .card-body ", groups);
+                                     $("#current-reservations .expando")
+                                         .trigger("click");
 				 }
 			     });
+    }
+
+    /*
+     * Force a zone selection
+     */
+    function ForceZoneSelection(callback)
+    {
+        // Reset the modal
+        $('#zone-selection-modal select').val('');
+
+        sup.ShowConfirmModal('#zone-selection-modal',
+                             // Confirm
+                             function () {
+                                 callback($('#zone-selection-modal select').val())
+                             },
+                             // Cancel
+                             function () {
+                                 console.info("ForceZoneSelection Canceled");
+                             },
+                             // Check
+                             function () {
+                                 return $('#zone-selection-modal select').val() == "" ? 1 : 0;
+                             });
+
     }
     
     $(document).ready(initialize);

@@ -218,7 +218,7 @@ exit(0);
 #
 sub DoGroupReserve()
 {
-    my $optlist    = "s:e:nN:u:p:OC";
+    my $optlist    = "s:e:nN:u:p:OCZ:";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
     my $forclass   = 0;
@@ -231,6 +231,7 @@ sub DoGroupReserve()
     my ($project,$group);
     my $bisdaysonly = 1;
     my $checkonly;
+    my $zoneoverride;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -325,6 +326,25 @@ sub DoGroupReserve()
     if (defined($options{"n"})) {
 	$checkonly = 1;
 	@argvcopy = map { "$_" ne "-n" ? $_ : () } @argvcopy;
+    }
+    if (defined($options{"Z"})) {
+	$zoneoverride = $options{"Z"};
+
+	# XXX Needs to come from the DB.
+	if ($zoneoverride ne "Outdoor" && $zoneoverride ne "Indoor OTA Lab") {
+	    fatal("Invalid powder zone override");
+	}
+	# Ick
+	my @tmp = ();
+	for (my $i = 0; $i < scalar(@argvcopy); $i++) {
+	    my $opt = $argvcopy[$i];
+	    if ($opt eq "-Z") {
+		$i++;
+		next;
+	    }
+	    push(@tmp, $opt);
+	}
+	@argvcopy = @tmp;
     }
     if (! defined($end)) {
 	print STDERR "Missing end time\n";
@@ -498,6 +518,35 @@ sub DoGroupReserve()
 	    print "ZONES:$zones\n";
 	}
     }
+
+    if (exists($blob->{'routes'})) {
+	$routes = $blob->{'routes'};
+
+	foreach my $route_uuid (keys(%{$routes})) {
+	    my $route     = $routes->{$route_uuid};
+	    my $routename = $route->{"routename"};
+
+	    if (!TBcheck_dbslot($routename, "default", "tinytext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		fatal("routename: invalid name");
+	    }
+	    if (!ValidUUID($route_uuid)) {
+		fatal("Invalid route uuid: $route_uuid");
+	    }
+	    if (!ValidUUID($route->{"uuid"})) {
+		fatal("Invalid route uuid: " . $route->{"uuid"});
+	    }
+	}
+	# Routes (buses) are in the Outdoor zone
+	if (!exists($zones{"Outdoor"})) {
+	    $zones{"Outdoor"} = 1;
+	}
+	else {
+	    $zones{"Outdoor"}++;
+	}
+	$zones = join(",", sort(keys(%zones)));
+    }
+    
     if (exists($blob->{'ranges'})) {
 	$ranges = $blob->{'ranges'};
 
@@ -527,24 +576,16 @@ sub DoGroupReserve()
 		fatal("Invalid range uuid: " . $range->{"uuid"});
 	    }
 	}
-    }
-    if (exists($blob->{'routes'})) {
-	$routes = $blob->{'routes'};
-
-	foreach my $route_uuid (keys(%{$routes})) {
-	    my $route     = $routes->{$route_uuid};
-	    my $routename = $route->{"routename"};
-
-	    if (!TBcheck_dbslot($routename, "default", "tinytext",
-			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-		fatal("routename: invalid name");
+	#
+	# Watch for ranges but no zones (cause no radios). We must have
+	# a zone override on the command line (-Z).
+	#
+	if (!keys(%zones)) {
+	    if (!defined($zoneoverride)) {
+		fatal("Must provide a Zone (-Z) when there are no radios");
 	    }
-	    if (!ValidUUID($route_uuid)) {
-		fatal("Invalid route uuid: $route_uuid");
-	    }
-	    if (!ValidUUID($route->{"uuid"})) {
-		fatal("Invalid route uuid: " . $route->{"uuid"});
-	    }
+	    $zones{$zoneoverride} = 1;
+	    $zones = $zoneoverride;
 	}
     }
 
@@ -1274,25 +1315,23 @@ sub DoGroupReserve()
 		my $freq_low  = $res->{"freq_low"};
 		my $freq_high = $res->{"freq_high"};
 		my $ruuid     = $res->{"uuid"};
+		my $reservation;
 
 		if ($update) {
-		    my $reservation = $resgroup->Reservation($ruuid);
-		    if ($reservation) {
-			$reservation->MarkSubmitted($res->{'approved'});
-			next;
-		    }
+		    $reservation = $resgroup->Reservation($ruuid);
 		}
-		my $reservation =
-		    $resgroup->AddRFReservation($freq_low, $freq_high);
 		if (!$reservation) {
-		    #
-		    # Need to do something here.
-		    #
-		    fatal("Could not add RF reservation to group");
+		    $reservation =
+			$resgroup->AddRFReservation($freq_low, $freq_high);
+		    if (!$reservation) {
+			#
+			# Need to do something here.
+			#
+			fatal("Could not add RF reservation to group");
+		    }
+		    # We do not trust the uuid from client, we return the new one
+		    $res->{'freq_uuid'} = $reservation->freq_uuid();
 		}
-		# We do not trust the uuid from client, we return the new one
-		$res->{'freq_uuid'} = $reservation->freq_uuid();
-		
 		if ($res->{'approved'} && $DORDZ) {
 		    if (APT_RDZ::CreateClaimFromReservation(
 			    $reservation, \$errmsg, $debug)) {

@@ -111,6 +111,7 @@
 		     value=<%- offset %>>
 	      <input id="start" name="start" type="hidden">
 	      <input id="end" name="end" type="hidden">
+	      <input id="powder-zones" name="powder-zones" type="hidden">
 	      <% if (editing) { %>
 		<input id="uuid" name="uuid" type="hidden">
 	      <% } %>
@@ -1203,6 +1204,40 @@
 	  impact a fellow experimenter by using the wrong channel on accident
 	  when running experiments at the same time in the indoor OTA lab.
 	</p>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='zone-selection-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'> 
+      <div class='modal-body'>
+	<button type="button" class="close btn-close"
+		data-dismiss="modal" data-bs-dismiss="modal"
+	  <span aria-hidden="true"></span></button>
+	<div class="mt-4 mb-1 fs-5">
+	  <p>Since you are requesting to reserve a frequency range without
+	    specifying any radios, you need to tell us in what <em>zone</em>
+	    you will be using your reserved ranges,
+	  </p>
+	  <center>
+	    <div class="col-sm-4">
+	      <select class="form-control form-select" type="text">
+		<option value="">Please Select</option>
+		<option value="Outdoor">Outdoor</option>
+		<option value="Indoor OTA Lab">Indoor OTA Lab</option>
+	      </select>
+	    </div>
+	  </center>
+	</div>
+        <center>
+	  <br>
+          <button class='btn btn-success btn-sm confirm-button'
+		  id='confirm-uncancel'>Continue</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
+	</center>
       </div>
     </div>
   </div>
