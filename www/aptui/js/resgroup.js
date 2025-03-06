@@ -4780,6 +4780,8 @@ $(function ()
 					 .removeClass("hidden");
 				     window.DrawResGroupList(
                                          "#current-reservations .card-body ", groups);
+                                     $("#current-reservations .expando")
+                                         .trigger("click");
 				 }
 			     });
     }
