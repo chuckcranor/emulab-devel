@@ -291,10 +291,14 @@ sub setupUsingRDZ($$$)
 	    return -1;
 	}
 	
-	# Use an encrypted password to store the outer token
+	# Use an encrypted password to store the inner tokens
 	my $pswdref = AddElement("password", $rspec, $GeniXML::EMULAB_NS);
 	SetText("name", $pswdref, "element-token");
 	$pswdref->appendText($rdzinfo->{'element_token'});
+
+	$pswdref = AddElement("password", $rspec, $GeniXML::EMULAB_NS);
+	SetText("name", $pswdref, "admin-token");
+	$pswdref->appendText($rdzinfo->{'admin_token'});
     }
     else {
 	if (! exists($rdzinfo->{'usertoken'})) {
