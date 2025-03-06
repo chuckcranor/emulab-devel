@@ -154,11 +154,11 @@ $UID = 0;
 if (!$impotent && !$OPSVM_ENABLE) {
     my $optarg = ($verbose ? "-v" : "");
     
-    SSHwithTimeout($CONTROL, "$FIXARPINFO $optarg -u -t 5", 30, $verbose) == 0
+    SSHwithTimeout($CONTROL, "$FIXARPINFO $optarg -u -t 15", 30, $verbose) == 0
 	or fatal("Could not arplockdown on $CONTROL");
 
     if ($CONTROL ne $FSNODE) {
-	SSHwithTimeout($FSNODE, "$FIXARPINFO $optarg -u -t 5", 30, $verbose) == 0
+	SSHwithTimeout($FSNODE, "$FIXARPINFO $optarg -u -t 15", 30, $verbose) == 0
 	    or fatal("Could not arplockdown on $CONTROL");
     }
 }
