@@ -974,6 +974,7 @@ $(function ()
 
 	    case 'failed':
 	    case 'imaging-failed':
+	    case 'rdzerror':
 	        refresh = reloadtopo = terminate = destroy = 1;
 	        extend = snapshot = 0;
   	        break;
