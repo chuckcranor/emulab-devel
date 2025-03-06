@@ -997,7 +997,7 @@ sub NewLogFile($$;$)
     if ($oldlogfile) {
 	my $logid   = $oldlogfile->logid();
 	my $created = $oldlogfile->date_created();
-	DBQueryWarn("insert into apt_instance_logfile_history set ".
+	DBQueryWarn("replace into apt_instance_logfile_history set ".
 		    "  uuid='$uuid', logfileid='$logid', created='$created'");
     }
     return $logfile;
