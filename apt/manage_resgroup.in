@@ -1315,25 +1315,23 @@ sub DoGroupReserve()
 		my $freq_low  = $res->{"freq_low"};
 		my $freq_high = $res->{"freq_high"};
 		my $ruuid     = $res->{"uuid"};
+		my $reservation;
 
 		if ($update) {
-		    my $reservation = $resgroup->Reservation($ruuid);
-		    if ($reservation) {
-			$reservation->MarkSubmitted($res->{'approved'});
-			next;
-		    }
+		    $reservation = $resgroup->Reservation($ruuid);
 		}
-		my $reservation =
-		    $resgroup->AddRFReservation($freq_low, $freq_high);
 		if (!$reservation) {
-		    #
-		    # Need to do something here.
-		    #
-		    fatal("Could not add RF reservation to group");
+		    $reservation =
+			$resgroup->AddRFReservation($freq_low, $freq_high);
+		    if (!$reservation) {
+			#
+			# Need to do something here.
+			#
+			fatal("Could not add RF reservation to group");
+		    }
+		    # We do not trust the uuid from client, we return the new one
+		    $res->{'freq_uuid'} = $reservation->freq_uuid();
 		}
-		# We do not trust the uuid from client, we return the new one
-		$res->{'freq_uuid'} = $reservation->freq_uuid();
-		
 		if ($res->{'approved'} && $DORDZ) {
 		    if (APT_RDZ::CreateClaimFromReservation(
 			    $reservation, \$errmsg, $debug)) {
