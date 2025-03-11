@@ -1639,7 +1639,7 @@ AddCommand(
     "[-FX] [-e <end>] -m <reason> | -f <filename> <hours>\n".
     "Options:\n".
     "  -F       - Admin override to force overbook. Best not to use this\n".
-    "  -X       - Only the experiment creator can terminate (legacy RPC)\n".
+    "  -X       - Only the experiment creator can extend (legacy RPC)\n".
     "  -e end   - Extend out to maximum extension. WEB UI provides datetime\n".
     "  -m text  - Specify a reason on the command line\n".
     "  -f file  - Specify a reason in a file\n"
@@ -3274,7 +3274,7 @@ foreach my $c ("reboot", "reload", "start", "stop", "powercycle") {
 	"Do a $c on nodes in an experiment",
 	"[-XbMNP] client_id ...\n".
 	"Options:\n".
-	"  -X       - Only the experiment creator can terminate (legacy RPC)\n".
+	"  -X       - Only the experiment creator can $c (legacy RPC)\n".
 	"  -b       - Proceed in the background, exit immediately\n".
 	"  -M       - Do not monitor progress after action\n".
 	"  -N       - Do not lock the experiment, caller has the lock\n".
