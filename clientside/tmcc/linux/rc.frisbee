@@ -846,6 +846,24 @@ if [ -x $BINDIR/rc/rc.ipod ]; then
 	$BINDIR/rc/rc.ipod
 fi
 
+#
+# Reset NVMe devices to have a single namespace per controller.
+# XXX FIXNVME could be passed in via the loadinfo if needed.
+#
+FIXNVME=1
+if [ ! -x /usr/sbin/nvme -o ! -x $BINDIR/fixnvme ]; then
+    FIXNVME=0
+fi
+if [ $FIXNVME -eq 1 ]; then
+    nvmedevs=`/bin/ls /dev/nvme? /dev/nvme?? 2>/dev/null`
+    if [ -n "$nvmedevs" ]; then
+	echo "Checking format of NVMe devices ..."
+	for dev in $nvmedevs; do
+	    $BINDIR/fixnvme $dev doit
+	done
+    fi
+fi
+
 # Try to map disks to BIOS drive numbers via EDD
 # The map is created now before we touch any disks
 # since we may need to use the MBR to determine

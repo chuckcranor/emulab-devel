@@ -1848,6 +1848,14 @@ getaddrchild(struct childinfo *ci)
 					"server" : "uploader", p);
 				ci->loport = ci->hiport = p;
 				rv = 0;
+			} else {
+				FrisLog("Could not get port from %s\n", afile);
+			}
+		} else {
+			if (fd != NULL) {
+				FrisLog("Could not parse %s\n", afile);
+			} else {
+				FrisLog("Could not open %s\n", afile);
 			}
 		}
 		if (fd != NULL) {
