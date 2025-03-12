@@ -483,7 +483,8 @@ dofreebsd() {
 	elif [ $OS = Linux ]; then
 		echo "Reloading partition table for $disk..."
 		if [ -x /usr/sbin/partprobe ]; then
-			/usr/sbin/partprobe $disk > /dev/null 2>&1
+			/usr/sbin/partprobe /dev/$disk
+			sleep 1
 		else
 			echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
 		fi
@@ -519,7 +520,7 @@ dofreebsd() {
 
 	mount -t $fstype -o $fsopts $rootdev /mnt 2> /dev/null || {
 		fsopts=ro,ufstype=ufs2
-		mount -t $fstype -o $fsopts $rootdev /mnt 2> /dev/null || {
+		mount -t $fstype -o $fsopts $rootdev /mnt || {
 			echo "RO-mount of $rootdev failed"
 			return 1
 		}
