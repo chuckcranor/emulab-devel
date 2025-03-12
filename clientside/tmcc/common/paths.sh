@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2004, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -98,5 +98,4 @@ export DBDIR
 export LOCKDIR
 export STATICRUNDIR
 export DYNRUNDIR
-PATH=$BINDIR:$LBINDIR:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:\
-/usr/site/bin:/usr/site/sbin
+PATH=$BINDIR:$LBINDIR:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin

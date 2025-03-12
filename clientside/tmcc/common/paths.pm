@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2003, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -112,7 +112,7 @@ $DYNRUNDIR = "/var/run/emulab";
 # Untaint path
 #
 $ENV{'PATH'} = "$BINDIR:$LBINDIR:/bin:/sbin:/usr/bin:/usr/sbin:".
-    "/usr/local/bin:/usr/local/sbin:/usr/site/bin:/usr/site/sbin";
+    "/usr/local/bin:/usr/local/sbin";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 1;
