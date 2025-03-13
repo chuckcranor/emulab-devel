@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2023-2024 University of Utah and the Flux Group.
+# Copyright (c) 2023-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -175,11 +175,11 @@ my %WRNODES = (
     "10.11.13.242"	=> {
 	"enabled"	=> 1,
 	"type"		=> "len",
-	"name"		=> "wr-len-8",
-	"alias"		=> "wr-len-wasatch-dbs",
-	"location"	=> "Wasatch DBS LEN",
-	"pcenabled"	=> 0,
-	"pcname"	=> "wrlen-dbs1",
+	"name"		=> "wr-len-14",
+	"alias"		=> "wr-len-ustar-dbs",
+	"location"	=> "Ustar DBS LEN",
+	"pcenabled"	=> 1,
+	"pcname"	=> "wrlen-dbs8",
     },
     "10.11.13.243"	=> {
 	"enabled"	=> 0,
@@ -227,13 +227,13 @@ my %WRNODES = (
 	"pcname"	=> "wrlen-dbs6",
     },
     "10.11.13.248"	=> {
-	"enabled"	=> 1,
+	"enabled"	=> 0,
 	"type"		=> "len",
-	"name"		=> "wr-len-14",
-	"alias"		=> "wr-len-ustar-dbs",
-	"location"	=> "Ustar DBS LEN",
-	"pcenabled"	=> 1,
-	"pcname"	=> "wrlen-dbs8",
+	"name"		=> "wr-len-8",
+	"alias"		=> "wr-len-wasatch-dbs",
+	"location"	=> "Wasatch DBS LEN",
+	"pcenabled"	=> 0,
+	"pcname"	=> "wrlen-dbs1",
     },
 );
 
@@ -683,6 +683,9 @@ sub wrzen_getstatus()
     if ($? == 0) {
 	print ">>>>> SSH OUTPUT\n", @output, "\n<<<<< OUTPUT END\n"
 	    if ($debug > 1);
+
+	$status{'global'} = $status{'timing'} = $status{'system'} = 
+	    $status{'fpga-temp'} = "DNR";
 
 	foreach my $line (@output) {
 	    chomp($line);
