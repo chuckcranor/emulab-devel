@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2021 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -804,9 +804,14 @@ ServerRecvThread(void *arg)
 		keepalive = (int)(((unsigned long long)keepalive * 1000000) /
 				  PKTRCV_TIMEOUT);
 	while (1) {
+		int rv;
 		pthread_testcancel();
-		if (PacketReceive(p) != 0) {
-			if (keepalive && ++idles > keepalive) {
+		rv = PacketReceive(p);
+		if (rv != 0) {
+			if (rv > 0) {
+				DOSTAT(badpackets++);
+			}
+			else if (keepalive && ++idles > keepalive) {
 				if (NetMCKeepAlive()) {
 					FrisWarning("Multicast keepalive failed");
 					if (++kafails > 5) {
@@ -839,6 +844,39 @@ ServerRecvThread(void *arg)
 					FileInfo.chunks, p->msg.request.block);
 			continue;
 		}
+		/*
+		 * Server should only see certain TYPEs (request/reply)
+		 * for certain SUBTYPEs.
+		 */
+		if (p->hdr.type == PKTTYPE_REQUEST) {
+			switch (p->hdr.subtype) {
+			case PKTSUBTYPE_BLOCK:
+			case PKTSUBTYPE_PROGRESS:
+			{
+				struct in_addr ipaddr = { p->hdr.srcip };
+				DOSTAT(badpackets++);
+				FrisLog("REQUEST packet %d from %s, ignored",
+					p->hdr.subtype, inet_ntoa(ipaddr));
+				continue;
+			}
+			default:
+				break;
+			}
+		} else {
+			switch (p->hdr.subtype) {
+			case PKTSUBTYPE_PROGRESS:
+				break;
+			default:
+			{
+				struct in_addr ipaddr = { p->hdr.srcip };
+				DOSTAT(badpackets++);
+				FrisLog("REPLY packet %d from %s, ignored",
+					p->hdr.subtype, inet_ntoa(ipaddr));
+				continue;
+			}
+			}
+		}
+		
 		gettimeofday(&LastReq, 0);
 		if (!gotone) {
 			FirstReq = LastReq;
@@ -1803,6 +1841,7 @@ dumpstats(void)
 		ru.ru_stime.tv_sec, ru.ru_stime.tv_usec/1000);
 	FrisLog("  max/total clients: %d/%d",
 		maxclientnum, totalclients);
+	FrisLog("  bad msgs dropped:  %d", Stats.badpackets);
 	FrisLog("  msgs in/out:       %d/%d",
 		Stats.msgin, Stats.joinrep + Stats.blockssent);
 	FrisLog("  joins/leaves:      %d/%d", Stats.joins, Stats.leaves);
