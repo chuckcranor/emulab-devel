@@ -435,6 +435,7 @@
 		<th>Eid</th>
 		<th>User</th>
 		<th class="sorter-sugar" data-filter="false">Expires</th>
+		<th>Image</th>
 	      </tr>
 	    </thead>
 	    <tbody>
@@ -457,6 +458,13 @@
 		       target="_blank"><%- blob.uid %></a>
 		  </td>
 		  <td class="format-date"><%- blob.expires %></td>
+		  <td>
+		    <% if (blob.def_boot_image_url) { %>
+		      <a href="<%= blob.def_boot_image_url %>">
+			<%- blob.def_boot_image_name + ":" +
+			blob.def_boot_image_vers %></a>
+		    <% } %>
+		  </td>
 		</tr>
 	      <% }); %>
 	    </tbody>
