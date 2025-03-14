@@ -35,9 +35,15 @@ $isadmin   = ISADMIN();
 # Do this check first for the redirect.
 #
 if (!$CLASSICWEB_OVERRIDE) {
-    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN,
+                                     "showtype", PAGEARG_STRING);
     if (!$isadmin || !$classic) {
-        RedirectToPortal("cluster-status.php");
+        if (isset($showtype) && $showtype != "") {
+            RedirectToPortal("show-nodetype.php", "type=$showtype");
+        }
+        else {
+            RedirectToPortal("cluster-status.php");
+        }
         return;
     }
 }
