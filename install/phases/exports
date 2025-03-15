@@ -124,9 +124,12 @@ sub Install($$$)
 	# XXX Newhup
 	Phase "mountd", "HUPing mountd", sub {
 	    PhaseSkip("No new exports file") if PhaseWasSkipped("ex.head");
-	    PhaseSkip("mountd not running")
-		unless `ps -auxw | grep mountd | grep -v grep`;
-	    ExecQuietFatal("killall -HUP mountd");
+	    if (! `ps -auxw | grep mountd | grep -v grep`) {
+		ExecQuietFatal("/etc/rc.d/mountd start");
+	    }
+	    else {
+		ExecQuietFatal("killall -HUP mountd");		
+	    }
 	};
     };
     return 0;

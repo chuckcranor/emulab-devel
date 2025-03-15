@@ -27,6 +27,7 @@ $BOOTSTRAP5OK = true;
 chdir("..");
 include("defs.php3");
 include("node_defs.php");
+include_once("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
@@ -157,7 +158,8 @@ else {
     # List of nodes for a table.
     #
     $nodes_result = DBQueryFatal("select n.node_id,r.pid,r.eid, ".
-                                 "    e.expt_head_uid as uid,e.expt_expires ".
+                                 "    e.expt_head_uid as uid,e.expt_expires, ".
+                                 "    n.def_boot_osid,n.def_boot_osid_vers ".
                                  "  from nodes as n ".
                                  "left join reserved as r on ".
                                  "     r.node_id=n.node_id ".
@@ -176,6 +178,30 @@ else {
             $blob["eid"] = $row["eid"];
             $blob["uid"] = $row["uid"];
             $blob["expires"] = DateStringGMT($row["expt_expires"]);
+            $blob["def_boot_image_url"] = null;            
+
+            if ($row["def_boot_osid"]) {
+                $osid  = $row["def_boot_osid"];
+                $vers  = $row["def_boot_osid_vers"];
+                $image = Image::Lookup($osid,$vers);
+                
+                if ($image) {
+                    $name = $image->imagename();
+                    $url  = "show-image.php?imageid=${osid}&version=${vers}";
+                }
+                else {
+                    $osinfo = OSInfo::Lookup($osid,$vers);
+                    if ($osinfo) {
+                        $url  = "$TBBASE/showosinfo.php3?osid=${osid}";
+                        $name = $osinfo->osname();
+                    }
+                }
+                if (isset($url)) {
+                    $blob["def_boot_image_url"]  = $url;
+                    $blob["def_boot_image_name"] = $name;
+                    $blob["def_boot_image_vers"] = $vers;
+                }
+            }
         }
         $list[] = $blob;
     }
