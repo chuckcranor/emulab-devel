@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -891,7 +891,7 @@ sub createExtraFS($$$)
     system("touch $path/.mounted");
 
     if (system("egrep -q -s '^${lvpath}' /etc/fstab")) {
-	system("echo '$lvpath $path ext3 defaults 0 0' >> /etc/fstab")
+	system("echo '$lvpath $path ext4 defaults 0 0' >> /etc/fstab")
 	    == 0 or return -1;
     }
     return 0;
