@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1724,7 +1724,8 @@ okay:
 		    system("strings $kernel | grep -q -i ubuntu") == 0) {
 		    my $ramres = FixRamFs($vnode_id, $ramdisk,$kernelconfig);
 		    if ($ramres < 0) {
-			fatal("xen_vnodeCreate: Failed to fix ramdisk");
+			print STDERR "Warning: failed to fix ramdisk; cannot use pygrub\n";
+			$usebootloader = 0;
 		    }
 		    elsif ($ramres == 0) {
 			# Ramfs needed to be changed, so cannot use pygrub.
@@ -6065,9 +6066,13 @@ sub ExtractKernelFromLinuxImage($$$)
     my $lvmpath = lvmVolumePath($lvname);
     my $configfile = "$outdir/kernel-config";
     my $PYGRUB;
+    my $OURPYGRUB = 0;
 
-    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub") {
+    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub", "/bin/pygrub") {
 	if (-e $pgc) {
+	    if ($pgc eq "$BINDIR/pygrub") {
+		$OURPYGRUB = 1;
+	    }
 	    $PYGRUB = $pgc;
 	    last;
 	}
@@ -6095,12 +6100,35 @@ sub ExtractKernelFromLinuxImage($$$)
 	    print STDERR "pygrub returned $stat ... \n";
 	    return ();
 	}
-	my @ret = ("$outdir/kernel", "$outdir/ramdisk");
+	my $kernel;
+	my $ramdisk;
+	if (!opendir(GTDIR, "$outdir")) {
+	    print STDERR "pygrub did not create $outdir ... \n";
+	    return ();
+	}
+	while (my $fname = readdir(GTDIR)) {
+	    if ($fname =~ /kernel/) {
+		$kernel = "$outdir/$fname";
+	    } elsif ($fname =~ /ramdisk/) {
+		$ramdisk = "$outdir/$fname";
+	    }
+	}
+	closedir(GTDIR);
+	if (!defined($kernel)) {
+	    print STDERR "pygrub did not create $outdir/kernel ... \n";
+	    return ();
+	}
+	if (!defined($ramdisk)) {
+	    print STDERR "pygrub did not create $outdir/ramdisk ... \n";
+	    return ();
+	}
+	my @ret = ($kernel, $ramdisk);
+	print STDERR "ExtractKernelFromLinuxImage: found kernel ($kernel) and ramdisk ($ramdisk)\n";
 
 	#
 	# Since that worked, also extract the config file for the kernel.
 	#
-	my $kstring = `file $outdir/kernel`;
+	my $kstring = `file $kernel`;
 	if (!$? && $kstring ne "") {
 	    if ($kstring =~ /version ([-\.\w]+) /i) {
 		my $fname = "config-" . $1;
@@ -6117,8 +6145,12 @@ sub ExtractKernelFromLinuxImage($$$)
 			}
 		    }
 		    mysystem2("umount $vnoderoot");
+		} else {
+		    print STDERR "ExtractKernelFromLinuxImage: failed to mount rootfs $rootpartition\n";
 		}
 	    }
+	} else {
+	    print STDERR "ExtractKernelFromLinuxImage: could not find config file ($kstring)\n";
 	}
 	return @ret;
     }
@@ -6128,8 +6160,13 @@ sub ExtractKernelFromLinuxImage($$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
-	      "--output-directory=$outdir $lvmpath");
+	if ($OURPYGRUB) {
+	    exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
+		 "--output-directory=$outdir $lvmpath");
+	} else {
+	    exec("$PYGRUB --quiet --output-format=simple ".
+		 "--output-directory=$outdir $lvmpath");
+	}
 	exit(1);
     }
 }
