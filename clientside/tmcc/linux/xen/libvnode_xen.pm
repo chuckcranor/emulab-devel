@@ -2704,7 +2704,7 @@ sub vnodePreConfigExpNetwork($$$$)
         my $tag = 0;
 	my $ifname = "veth.${vmid}." . $interface->{'ID'};
 	if ($xeninfo{xen_major}	>= 4 && $xeninfo{xen_minor} >= 16) {
-            $ifname = "vif${vmid}." . $interface->{'ID'};
+            $ifname = "veth${vmid}." . $interface->{'ID'};
 	}
 
 	#
