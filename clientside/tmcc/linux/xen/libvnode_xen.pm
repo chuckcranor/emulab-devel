@@ -2694,7 +2694,10 @@ sub vnodePreConfigExpNetwork($$$$)
 	my $physical_dev;
         my $tag = 0;
 	my $ifname = "veth.${vmid}." . $interface->{'ID'};
-	
+	if ($xeninfo{xen_major}	>= 4 && $xeninfo{xen_minor} >= 16) {
+            $ifname = "vif${vmid}." . $interface->{'ID'};
+	}
+
 	#
 	# In the era of shared nodes, we cannot name the bridges
 	# using experiment local names (e.g., the link name).
