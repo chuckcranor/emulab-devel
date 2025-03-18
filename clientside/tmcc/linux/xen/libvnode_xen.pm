@@ -5098,6 +5098,27 @@ sub createExpBridges($$$)
 		print STDERR "createExpBridges: could not ifconfig $brname\n";
 		goto bad;
 	    }
+
+	    #
+	    # NB: something changed at Xen 4.16/Linux 5.15, where if the
+	    # net.bridge.bridge-nf-call-iptables sysctl is enabled (which we
+	    # do so that we can firewall/nat the control net bridge ifaces),
+	    # iptables rules apply to the expt net bridges as well.  This
+	    # seems to be new behavior, because although we set the default
+	    # global FORWARD chain policy to DROP, and do not create
+	    # iptables rules for expt net bridges, in Xen 4.11/Linux 5.4,
+	    # the bridge forwarded ip packets just fine.  In Xen 4.16/Linux
+	    # 5.15, this behavior has changed, and ip traffic is not
+	    # forwarded unless we add the basic allow-all forwarding rule
+	    # below.
+	    #
+	    my @rules = ("-I FORWARD -i $brname -o $brname -j ACCEPT");
+	    TBDebugTimeStamp("createExpBridges: installing iptables expt forward-all rule");
+	    if (DoIPtables(@rules)) {
+		TBDebugTimeStamp("  failed to install iptables rules");
+		goto bad;
+	    }
+	    TBDebugTimeStamp("  installed iptables expt forward-all rule");
 	}
 	# record bridge in use.
 	$private->{'physbridges'}->{$brname} = $brname;
@@ -5175,6 +5196,19 @@ sub destroyExpBridges($$)
 		delbr($brname);
 		delete($private->{'physbridges'}->{$brname})
 		    if (! $?);
+	    }
+	    
+
+	    #
+	    # NB: remove expt bridge forward-all rule; see createExpBridges
+	    # above.
+	    #
+	    my @rules = ("-D FORWARD -i $brname -o $brname -j ACCEPT");
+	    TBDebugTimeStamp("createExpBridges: removing iptables expt forward-all rule");
+	    if (DoIPtablesNoFail(@rules)) {
+		TBDebugTimeStamp("  failed to remove iptables expt forward-all rule");
+	    } else {
+		TBDebugTimeStamp("  removed iptables expt forward-all rule");
 	    }
 	}
     }
