@@ -699,7 +699,12 @@ sub rootPreConfig($;$)
     }
 
     # For bandwidth contraints.
-    mysystem("$MODPROBE ifb numifbs=$MAXIFB");
+    # NB: if >= Xen 4.16, shift to dynamic IFB allocation.
+    if ($xeninfo{xen_major} >= 4 && $xeninfo{xen_minor} >= 16) {
+        mysystem("$MODPROBE ifb");
+    } else {
+	mysystem("$MODPROBE ifb numifbs=$MAXIFB");
+    }
 
     # Create a DB to manage them. 
     my %MDB;
@@ -2680,7 +2685,11 @@ sub vnodePreConfigExpNetwork($$$$)
     # Grab all of the IFBs we need. 
     #
     if (@$ldconfigs) {
-	$ifbs = AllocateIFBs($vmid, $ldconfigs, $private);
+	if ($xeninfo{xen_major} >= 4 && $xeninfo{xen_minor} >= 16) {
+	    $ifbs = AllocateIFBsDynamic($vmid, $ldconfigs, $private);
+	} else {
+	    $ifbs = AllocateIFBs($vmid, $ldconfigs, $private);
+	}
 	if (! defined($ifbs)) {
 	    return -1;
 	}
@@ -2760,10 +2769,10 @@ sub vnodePreConfigExpNetwork($$$$)
 		my $sh  = "${script}.sh";
 		my $log = "${script}.log";
 		my $tag = "$vnode_id:" . $ldinfo->{'LINKNAME'};
-		my $ifb = pop(@$ifbs);
+		my $ifbname = pop(@$ifbs);
 
 		createExpNetworkScript($vmid, $interface, $brname,
-				       $ldinfo, "ifb$ifb", $script, $sh, $log);
+				       $ldinfo, $ifbname, $script, $sh, $log);
 	    }
 	}
 	#
@@ -3335,8 +3344,13 @@ sub vnodeDestroy($$$$)
     # restart it cause there are no more resources available (as might
     # happen on a shared node).
     #
-    ReleaseIFBs($vmid, $private)
-	if (exists($private->{'ifbs'}));
+    if (exists($private->{'ifbs'})) {
+	if ($xeninfo{xen_major} >= 4 && $xeninfo{xen_minor} >= 16) {
+	    ReleaseIFBsDynamic($vmid, $private);
+	} else {
+	    ReleaseIFBs($vmid, $private);
+	}
+    }
 
     #
     # XXX before we destroy disks, we need to tear down any LVM VG/PVs
@@ -5845,9 +5859,94 @@ sub lvmGC($$$)
 #
 # Deal with IFBs.
 #
-#
-# Deal with IFBs.
-#
+sub AllocateIFBsDynamic($$$)
+{
+    my ($vmid, $node_lds, $private) = @_;
+    my @ifbs = ();
+
+    #
+    # It is unclear if we need to grab the global lock to allocate IFBs, but
+    # let's be cautious.
+    #
+    TBDebugTimeStamp("AllocateIFBsDynamic: grabbing global lock $GLOBAL_CONF_LOCK")
+	if ($lockdebug);
+    if (TBScriptLock($GLOBAL_CONF_LOCK, TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     1800) != TBSCRIPTLOCK_OKAY()) {
+	print STDERR "Could not get the global lock after a long time!\n";
+	return undef;
+    }
+    TBDebugTimeStamp("  got global lock")
+	if ($lockdebug);
+
+    #
+    # We need an IFB for every ld.
+    #
+    my $needed = scalar(@$node_lds);
+    for (my $i = 0; $i < $needed; $i++) {
+	my $ifbname = "ifb${vmid}.${i}";
+	# Check if ifb device already exists; this happens on halt/boot
+	# where device is allowed to persist.
+	if (-e "/sys/class/net/$ifbname") {
+	    TBDebugTimeStamp("AllocateIFBsDynamic: $ifbname for $vmid exists, reusing");
+	} else {
+	    # Create ifb.
+	    mysystem2("ip link add $ifbname type ifb");
+	    if ($?) {
+		print STDERR "AllocateIFBsDynamic: failed to add $ifbname, aborting\n";
+		goto bad;
+	    }
+	}
+	# Record ifb in use
+	$private->{'ifbs'}->{$i} = $ifbname;
+	push(@ifbs, $ifbname);
+    }
+
+    TBDebugTimeStamp("  releasing global lock")
+	if ($lockdebug);
+    TBScriptUnlock();
+    return \@ifbs;
+
+  bad:
+    foreach my $ifbname (@ifbs) {
+	mysystem2("ip link del $ifbname");
+	if ($?) {
+	    print STDERR "AllocateIFBsDynamic: failed to remove $ifbname in post-failure cleanup pass!\n";
+	}
+    }
+    TBScriptUnlock();
+    return undef;
+}
+
+sub ReleaseIFBsDynamic($$)
+{
+    my ($vmid, $private) = @_;
+    
+    TBDebugTimeStamp("ReleaseIFBsDynamic: grabbing global lock $GLOBAL_CONF_LOCK")
+	if ($lockdebug);
+    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1800) != TBSCRIPTLOCK_OKAY()) {
+	print STDERR "Could not get the global lock after a long time!\n";
+	return undef;
+    }
+    TBDebugTimeStamp("  got global lock")
+	if ($lockdebug);
+
+    #
+    # For each ifbname we allocated to this vmid, delete.
+    #
+    foreach my $ifbidx (keys(%{$private->{'ifbs'}})) {
+	my $ifbname = $private->{'ifbs'}->{$ifbidx};
+	mysystem2("ip link del $ifbname");
+	if ($?) {
+	    print STDERR "ReleaseIFBsDynamic: failed to delete $ifbname for $vmid!\n";
+	}
+    }
+    TBDebugTimeStamp("  releasing global lock")
+	if ($lockdebug);
+    TBScriptUnlock();
+    delete($private->{'ifbs'});
+    return 0;
+}
+
 sub AllocateIFBs($$$)
 {
     my ($vmid, $node_lds, $private) = @_;
@@ -5858,7 +5957,7 @@ sub AllocateIFBs($$$)
     if (TBScriptLock($GLOBAL_CONF_LOCK, TBSCRIPTLOCK_INTERRUPTIBLE(),
 		     1800) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the global lock after a long time!\n";
-	return -1;
+	return undef;
     }
     TBDebugTimeStamp("  got global lock")
 	if ($lockdebug);
@@ -5901,10 +6000,11 @@ sub AllocateIFBs($$$)
     
     while ($n && $i < $MAXIFB) {
 	if (!defined($MDB{"$i"}) || $MDB{"$i"} eq "" || $MDB{"$i"} eq "$vmid") {
+	    my $ifbname = "ifb$i";
 	    $MDB{"$i"} = $vmid;
 	    # Record ifb in use
-	    $private->{'ifbs'}->{$i} = $i;
-	    push(@ifbs, $i);
+	    $private->{'ifbs'}->{$i} = $ifbname;
+	    push(@ifbs, $ifbname);
 	    $n--;
 	}
 	$i++;
@@ -5924,7 +6024,7 @@ sub ReleaseIFBs($$)
 	if ($lockdebug);
     if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1800) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the global lock after a long time!\n";
-	return -1;
+	return undef;
     }
     TBDebugTimeStamp("  got global lock")
 	if ($lockdebug);
