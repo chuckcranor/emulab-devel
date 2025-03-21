@@ -24,14 +24,14 @@ BATCH=		yes
 RUN_DEPENDS+=	\
 	ansible:${PORTSDIR}/sysutils/ansible \
 	gnuplot:${PORTSDIR}/math/gnuplot-emulab \
-	racket:${PORTSDIR}/lang/racket \
 	syncthing:${PORTSDIR}/net/syncthing \
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \
 	bareos-fd:${PORTSDIR}/sysutils/bareos-client
 
-# For Powder
+# Powder things
 RUN_DEPENDS+=	\
-	uhd:${PORTSDIR}/comms/uhd
+	uhd_find_devices:${PORTSDIR}/comms/uhd \
+	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi
 
 # Things we like
 RUN_DEPENDS+=	\
@@ -58,10 +58,6 @@ RUN_DEPENDS+=	\
 	xset:${PORTSDIR}/x11/xset \
 	xsetroot:${PORTSDIR}/x11/xsetroot
 
-# Powder things
-RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi
-
 # Unknown, but sound useful or important
 RUN_DEPENDS+=	\
 	p5-Devel-Leak-Object>=1.01:${PORTSDIR}/devel/p5-Devel-Leak-Object \
@@ -79,7 +75,8 @@ RUN_DEPENDS+=	\
 # XXX for old binaries
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/ldconfig/compat10x-amd64:${PORTSDIR}/misc/compat10x \
-	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x
+	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x \
+	${LOCALBASE}/libdata/ldconfig/compat12x-amd64:${PORTSDIR}/misc/compat12x
 
 USES=		perl5 python:$(PY_VER) php
 

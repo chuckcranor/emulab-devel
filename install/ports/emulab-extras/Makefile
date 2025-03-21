@@ -40,26 +40,20 @@ RUN_DEPENDS=	\
 # XXX do vim-console (aka "lite") to avoid dragging in gtk
 RUN_DEPENDS+=	\
 	bash:${PORTSDIR}/shells/bash \
-	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/sysutils/e2fsprogs \
+	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/filesystems/e2fsprogs \
 	emacs:${PORTSDIR}/editors/emacs \
 	jove:${PORTSDIR}/editors/jove \
+	gdb:${PORTSDIR}/devel/gdb \
 	git:${PORTSDIR}/devel/git \
 	lsof:${PORTSDIR}/sysutils/lsof \
+        netcat:${PORTSDIR}/net/netcat \
 	rcs:${PORTSDIR}/devel/rcs \
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
+	vim:${PORTSDIR}/editors/vim \
 	xauth:${PORTSDIR}/x11/xauth \
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
-
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
-RUN_DEPENDS+=	\
-	gdb:${PORTSDIR}/devel/gdb \
-	vim:${PORTSDIR}/editors/vim
-.else
-RUN_DEPENDS+=	\
-	vim:${PORTSDIR}/editors/vim-console
-.endif
 
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}subversion>0:${PORTSDIR}/devel/py-subversion

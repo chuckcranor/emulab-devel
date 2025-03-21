@@ -33,7 +33,7 @@ RUN_DEPENDS+=	\
 	procmail:${PORTSDIR}/mail/procmail \
 	syncthing:${PORTSDIR}/net/syncthing \
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \
-	zfs-stats:${PORTSDIR}/sysutils/zfs-stats \
+	zfs-stats:${PORTSDIR}/filesystems/zfs-stats \
 	bareos-fd:${PORTSDIR}/sysutils/bareos-client \
 	znapzend:${PORTSDIR}/sysutils/znapzend
 
@@ -57,19 +57,11 @@ RUN_DEPENDS+=	\
 	openvpn:${PORTSDIR}/security/openvpn
 
 # Still run mysqld on mothership ops (errorlog)
-.if (${EMULAB_PORTVERSION} == "9.3")
 LIB_DEPENDS=	\
 	libmariadb.so:${PORTSDIR}/databases/mariadb${MYSQL_VER}-client
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/mariadbd:${PORTSDIR}/databases/mariadb${MYSQL_VER}-server \
 	p5-DBD-MariaDB>0:${PORTSDIR}/databases/p5-DBD-MariaDB
-.else
-LIB_DEPENDS=	\
-	libmysqlclient.so:${PORTSDIR}/databases/mysql${MYSQL_VER}-client
-RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
-	p5-DBD-mysql>=4.025:${PORTSDIR}/databases/p5-DBD-mysql
-.endif
 
 # XXX compatibility
 RUN_DEPENDS+=	\

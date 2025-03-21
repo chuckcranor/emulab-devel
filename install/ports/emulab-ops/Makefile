@@ -21,19 +21,19 @@ WANT_PHP_MOD=	yes
 
 #
 # PHP modules to build.
+# XXX based on what is done for boss
 #
-USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt \
-		openssl pdo phar posix session simplexml sockets tokenizer \
-		xml xmlreader xmlrpc xmlwriter
+USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
+		opcache openssl pdo phar posix session simplexml sockets \
+		tokenizer xml xmlreader xmlrpc xmlwriter
 
 #
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
+.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
 www_apache24_SET=	SUEXEC
 .else
-.MAKEFLAGS+=	WITH_SUEXEC=yes
 .endif
 
 #
@@ -93,8 +93,14 @@ RUN_DEPENDS+=	\
 	p5-Digest-HMAC>=1.03:${PORTSDIR}/security/p5-Digest-HMAC
 
 # python packages
+.if (${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
+	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil
+.else
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}python-dateutil>0:${PORTSDIR}/devel/py-python-dateutil
+.endif
+RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
@@ -103,22 +109,9 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}paramiko>0:${PORTSDIR}/security/py-paramiko
 
 # apache related ports
-.if (${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
-	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER)
-.else
-RUN_DEPENDS+=	\
-	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER)
-.endif
-RUN_DEPENDS+=	\
-	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-
-.if (${EMULAB_PORTVERSION} != "8.3" && ${EMULAB_PORTVERSION} != "9.3")
-# PHP packages
-# XXX I don't think this has been used in forever and the port is gone
-RUN_DEPENDS+= \
-        ${LOCALBASE}/share/adodb/adodb.inc.php:${PORTSDIR}/databases/adodb
-.endif
+	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER) \
+	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT}
 
 # Alternative shells that we allow users to select
 RUN_DEPENDS+= \
