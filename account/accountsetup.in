@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2022 University of Utah and the Flux Group.
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -381,7 +381,7 @@ sub SetGroups()
     }
     my $user  = shift(@ARGV);
     my $pgroup  = shift(@ARGV);
-    my $grouplist = "''";
+    my $grouplist = "";
     if (@ARGV > 0) {
 	$grouplist = "-G '" . join(',', @ARGV) . "'";
     }

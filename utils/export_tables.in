@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -107,6 +107,9 @@ open(FH, "$mysqldump " .
 # existing databases.
 #
 while (<FH>) {
+    # XXX newer versions of maria DB have a backward-incompatible dump line
+    if (/enable the sandbox mode/) { next; }
+
     s/^INSERT/REPLACE/g;
     #
     # Kinda hackish, but gets the job done...

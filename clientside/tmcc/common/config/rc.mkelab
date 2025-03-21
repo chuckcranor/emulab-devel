@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2024 University of Utah and the Flux Group.
+# Copyright (c) 2004-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -733,8 +733,8 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.2";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.2-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.2";
-    } elsif ($FBSD_VERSION > 12.2) {
-	# XXX newer 12.2 package set, but same rev right now
+    } elsif ($FBSD_VERSION == 12.3) {
+	# XXX newer 12.3 package set, but same rev right now
 	my $suf = "-64";
 	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/12.3/packages${suf}";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
@@ -746,6 +746,30 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.3";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.3-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.3";
+    } elsif ($FBSD_VERSION == 13.3) {
+	my $suf = "-64";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/13.3/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-9.3";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-9.3";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-9.3";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-9.3";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-13.3-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-9.3";
+    } elsif ($FBSD_VERSION > 13.3) {
+	my $suf = "-64";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/13.5/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-9.5";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-9.5";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-9.5";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-9.5";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-13.5-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-9.5";
     }
     #
     # If there is a package tarball, prefer that and grab it now.
@@ -1336,23 +1360,10 @@ sub SetupFsNode()
     # (it requires mounting our filesystems).
     #
     if ($FBSD_VERSION >= 5) {
-	mysystem("/etc/rc.d/rpcbind start");
-	mysystem("/etc/rc.d/nfsd start");
-	#
-	# XXX lovely: we normally start mountd bound to port 900, but
-	# quite often during an elabinelab setup, that port is already
-	# in use causing mountd to silently fail and we don't notice til
-	# boss-install when it tries to mount the filesystems.
-	#
-	# So we don't bind to a specific port here (by directly starting
-	# mounted rather than using the rc.d startup script) to avoid this
-	# issue.  Note that when elabinelab setup finishes, boss and ops
-	# will be rebooted and we will again be bound to port 900.
-	#
-	# XXX: nfsd start above may have already started mountd, so don't
-	# fail if this mountd restart fails!
-	#
-	system("mountd -r");
+	mysystem("/etc/rc.d/rpcbind restart");
+	sleep(1);
+	mysystem("/etc/rc.d/mountd restart");
+	mysystem("/etc/rc.d/nfsd restart");
     } else {
 	# XXX FBSD4 is such a pain...
 	mysystem("nfsd -u -t -n 8");
@@ -2043,23 +2054,10 @@ sub SetupOpsNode($)
     # We restart sendmail because boss-install also wants to send email.
     #
     if ($FBSD_VERSION >= 5) {
-	mysystem("/etc/rc.d/rpcbind start");
-	mysystem("/etc/rc.d/nfsd start");
-	#
-	# XXX lovely: we normally start mountd bound to port 900, but
-	# quite often during an elabinelab setup, that port is already
-	# in use causing mountd to silently fail and we don't notice til
-	# boss-install when it tries to mount the filesystems.
-	#
-	# So we don't bind to a specific port here (by directly starting
-	# mounted rather than using the rc.d startup script) to avoid this
-	# issue.  Note that when elabinelab setup finishes, boss and ops
-	# will be rebooted and we will again be bound to port 900.
-	#
-	# XXX: nfsd start above may have already started mountd, so don't
-	# fail if this mountd restart fails!
-	#
-	system("mountd -r");
+	mysystem("/etc/rc.d/rpcbind restart");
+	sleep(1);
+	mysystem("/etc/rc.d/mountd restart");
+	mysystem("/etc/rc.d/nfsd restart");
 	#
 	# XXX force regeneration of a key and cert for sendmail
 	#
@@ -3007,11 +3005,24 @@ sub SetupBossNode($)
     # the inner boss is up.  We can't have the inner boss reporting in before
     # it has even started sshd!
     #
+    # XXX the glorious naming hack hasn't worked since BSD starting using
+    # explicit dependencies. So we add a dependency on "apache24" (if it
+    # exists) and "sshd".
+    #
     my $rcfile;
     if (-d "/usr/local/etc/rc.d") {
 	$rcfile = "/usr/local/etc/rc.d/zzz-inelab.sh";
-	mysystem("echo '#!/bin/sh' > $rcfile");
-	mysystem("echo '# Auto generated by rc.mkelab' >> $rcfile");
+	if (open(FD, ">$rcfile")) {
+	    print FD "#!/bin/sh\n";
+	    print FD "# Auto generated by rc.mkelab\n";
+	    my $depstr = "# REQUIRE:";
+	    if (-e "/usr/local/etc/rc.d/apache24") {
+		$depstr .= " apache24";
+	    }
+	    $depstr .= " sshd";
+	    print FD "$depstr\n";
+	    close(FD);
+	}
 	chmod(0755, $rcfile);
     } else {
 	$rcfile = "/etc/rc.local";

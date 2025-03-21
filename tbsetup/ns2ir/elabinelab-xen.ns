@@ -24,15 +24,17 @@
 #
 # This file is intended to be included into another NS file. It is not
 # a stand alone file.
-# 
+#
+set vhost [$ns node]
 set myboss [$ns node]
 set myops  [$ns node]
+
+tb-set-node-inner-elab-role $myboss boss+router
+tb-set-node-inner-elab-role $myops  ops+fs
 
 set srvtype  pcvm
 set nodetype pcslow
 
-tb-set-node-inner-elab-role $myboss boss+router
-tb-set-node-inner-elab-role $myops  ops+fs
 tb-set-colocate-factor 2
 
 tb-set-node-failure-action $myboss "nonfatal"
@@ -48,6 +50,8 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
 } else {
     tb-set-hardware $myboss $srvtype
 }
+tb-fix-node $myboss $vhost
+
 if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myops $elabinelab_hardware("ops")
@@ -57,6 +61,18 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     }
 } else {
     tb-set-hardware $myops $srvtype
+}
+tb-fix-node $myops $vhost
+
+if {[info exists ::TBCOMPAT::elabinelab_hardware("xenhost")]} {
+    namespace eval TBCOMPAT {
+        tb-set-hardware $vhost $elabinelab_hardware("xenhost")
+    }
+}
+if {[info exists ::TBCOMPAT::elabinelab_fixnodes("xenhost")]} {
+    namespace eval TBCOMPAT {
+        tb-fix-node $vhost $elabinelab_fixnodes("xenhost")
+    }
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("boss")]} {
@@ -159,21 +175,26 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("xenhost")]} {
 	set xenos $elabinelab_nodeos("xenhost")
     }
 }
+tb-set-node-os $vhost $xenos
 
+set bossos FBSD111-64-STD
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("boss")]} {
     namespace eval TBCOMPAT {
-        tb-set-node-os $myboss $elabinelab_nodeos("boss") $xenos
+	set bossos $elabinelab_nodeos("boss")
+        tb-set-node-os $myboss $bossos $xenos
     }
 } else {
-    tb-set-node-os $myboss FBSD102-64-STD $xenos
+    tb-set-node-os $myboss $bossos $xenos
 }
 
+set opsos FBSD111-64-STD
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
     namespace eval TBCOMPAT {
-        tb-set-node-os $myops $elabinelab_nodeos("ops") $xenos
+	set opsos $elabinelab_nodeos("ops")
+        tb-set-node-os $myops $opsos $xenos
     }
 } else {
-    tb-set-node-os $myops FBSD102-64-STD $xenos
+    tb-set-node-os $myops $opsos $xenos
 }
 
 #

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,6 +47,7 @@ my $master_schema = "$testbed_srcdir/sql/database-create.sql";
 my $schemadiff = "$testbed_srcdir/utils/schemadiff";
 my $extraopts  = "";
 my $ignorecwidth = 0;
+my $mariadb = 0;
 
 my $mysqlvers = `mysql -V`;
 if ($mysqlvers =~ /Distrib (\d\.\d).\d+, for/) {
@@ -71,6 +72,7 @@ elsif ($mysqlvers =~ /Distrib (\d+\.\d+).\d+-MariaDB, for/) {
     if ($vers < 10.0) {
 	fatal("Unexpected mariadb version '$vers'");
     }
+    $mariadb = 1;
     $extraopts .= "--skip-quote-names ";
     $ignorecwidth = 1;
 }
@@ -94,8 +96,13 @@ close(SCHEMAFILE);
 
 #
 # Stick the output of mysqldump into a file
+# XXX newer versions of maria DB have a backward-incompatible dump line
 #
-system "$mysqldump 2> /dev/null > $db_schema";
+if ($mariadb) {
+    system "$mysqldump 2> /dev/null | grep -v 'sandbox mode' > $db_schema";
+} else {
+    system "$mysqldump 2> /dev/null > $db_schema";
+}
 
 #
 # ... and compare it to the schema from the source
