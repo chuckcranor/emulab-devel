@@ -253,7 +253,7 @@ sub findSpareDisks($;$) {
 		my $dev = $1;
 		if (($dev =~ /^\/dev\/(nvme\S+)p\d+$/ ||
 		     $dev =~ /^\/dev\/(\D+)\d+$/) &&
-		    !$skipssds || !isSSD($1)) {
+		    (!$skipssds || !isSSD($1))) {
 		    $bootdisk = $1;
 		}
 	    }
