@@ -27,7 +27,11 @@ sub Install($$$)
     my @images = ("UBUNTU16-64-STD", "UBUNTU18-64-STD", "CENTOS7-64-STD",
 		  "FBSD103-64-STD", "FBSD113-64-STD", "FBSD121-64-STD");
 
-    if ($FBSD_MAJOR <= 10) {
+    if ($FBSD_MAJOR >= 13) {
+	$XENIMAGE = "XEN416-64-STD";
+	@images = ("CENTOS9S-64-STD", "FBSD135-64-STD", "FBSD142-64-STD",
+		   "ROCKY9-64-STD", "UBUNTU22-64-STD", "UBUNTU24-64-STD");
+    } elsif ($FBSD_MAJOR <= 10) {
 	$XENIMAGE = "XEN46-64-STD";
 	push(@images, "UBUNTU14-64-STD");
     }

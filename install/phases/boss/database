@@ -11,6 +11,7 @@ sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
     my $newmysql = 0;
+    my $mariadb = 0;
 
     # Replace if this script does an update for ip/domain.
     return 0
@@ -24,7 +25,9 @@ sub Install($$$)
 	    my $v = `$MYSQLADMIN -V`;
 	    if ($v =~ /Distrib (\d+)\.(\d+)\.(\d+)/) {
 		($vmaj,$vmin,$vrel) = ($1,$2,$3);
-		if ($vmaj > 5 ||
+		if ($vmaj >= 10) {
+		    $mariadb = 1;
+		} elsif ($vmaj > 5 ||
 		    ($vmaj == 5 && $vmin > 7) ||
 		    ($vmaj == 5 && $vmin == 7 && $vrel >= 6)) {
 		    $newmysql = 1;
@@ -43,7 +46,10 @@ sub Install($$$)
 	#
 	Phase "config", "Tweak my.cnf", sub {
 	    PhaseSkip("unneeded")
-		if (!$newmysql);
+		if (!$newmysql && !$mariadb);
+	    if ($mariadb && ! -e $MYSQL_CNF && -e "$MYSQL_CNF.sample") {
+		system("cp $MYSQL_CNF.sample $MYSQL_CNF");
+	    }
 	    DoneIfDoesntExist($MYSQL_CNF);
 	    AppendToFileFatal($MYSQL_CNF,
 		        "[mysql]",
@@ -53,7 +59,8 @@ sub Install($$$)
 			"innodb_buffer_pool_size    = 128M",
 			"innodb_data_file_path      = ibdata1:16M:autoextend",
 			"innodb_temp_data_file_path = ibtmp1:48M:autoextend",
-			"performance_schema         = OFF"
+			"performance_schema         = OFF",
+			"log-error                  = $LOGDIR/mysqld-error.log"
 	    );
 	};
 	Phase "initialize", "Initializing mysql", sub {

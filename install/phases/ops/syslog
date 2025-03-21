@@ -172,6 +172,11 @@ sub Install($$$)
 		"$LOGDIR/frisuploadd.log\t\t640  7    1000 *    Z",
 		);
 	};
+
+	# Let's go ahead and restart syslog with the new config
+	Phase "syslog-start", "(Re)Starting syslogd", sub {
+	    ExecQuietFatal("/etc/rc.d/syslogd restart");
+	}
     };
 
     return 0;

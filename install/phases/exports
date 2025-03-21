@@ -124,11 +124,19 @@ sub Install($$$)
 	# XXX Newhup
 	Phase "mountd", "HUPing mountd", sub {
 	    PhaseSkip("No new exports file") if PhaseWasSkipped("ex.head");
-	    if (! `ps -auxw | grep mountd | grep -v grep`) {
-		ExecQuietFatal("/etc/rc.d/mountd start");
-	    }
-	    else {
-		ExecQuietFatal("killall -HUP mountd");		
+	    if ($FBSD_MAJOR > 12) {
+		# just use the start scripts in order: rpcbind, mountd, nfsd
+		ExecQuiet("/etc/rc.d/rpcbind restart");
+		sleep(1);
+		ExecQuiet("/etc/rc.d/mountd restart");
+		ExecQuiet("/etc/rc.d/nfsd restart");
+	    } else {
+		if (! `ps -auxw | grep mountd | grep -v grep`) {
+		    ExecQuietFatal("/etc/rc.d/mountd start");
+		}
+		else {
+		    ExecQuietFatal("killall -HUP mountd");		
+		}
 	    }
 	};
     };

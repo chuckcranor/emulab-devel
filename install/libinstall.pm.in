@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2021 University of Utah and the Flux Group.
+# Copyright (c) 2003-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -393,7 +393,7 @@ sub DoneIfExists($) {
 #
 sub DoneIfDoesntExist($) {
     my ($filename) = @_;
-    if (!$filename) { PhaseFail("Bad filename passed to DoneIfExists"); }
+    if (!$filename) { PhaseFail("Bad filename passed to DoneIfDoesntExist"); }
     if (!-e $filename) {
 	PhaseSkip("File does not exist");
     }

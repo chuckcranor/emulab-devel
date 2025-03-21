@@ -21,13 +21,31 @@ my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 #
 # We now use image import.
 #
+# Note that the db/elabinelab_bossinit script will use the "lowest number"
+# UBUNTU* image as the default osid/imageid for all node types and the
+# lowest number FBSD* image as the default delay image. As the distance
+# between oldest (2005) and newest (2025) hardware becomes greater, it is
+# increasingly unlikely that we can find UBUNTU or FBSD images that run on
+# the entire range.
+#
+my %SHINYIMAGES   = (
+    "UBUNTU22-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=6735609b-dd51-11ed-9f39-e4434b2381fc",
+    "UBUNTU24-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=6c07a447-ea48-11ef-af1a-e4434b2381fc",
+    "ROCKY9-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=9a992cd4-ddaa-11ed-9f39-e4434b2381fc",
+    "CENTOS9S-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=6d18b1ab-ddaa-11ed-9f39-e4434b2381fc",
+    "FBSD135-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=61246eb5-0406-11f0-af1a-e4434b2381fc",
+    "FBSD142-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=aec6aab8-eb03-11ef-af1a-e4434b2381fc",
+    "XEN416-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=5e6c984f-01d4-11f0-af1a-e4434b2381fc",
+    "XEN411-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=cc93e8fa-a5f0-11ea-b1eb-e4434b2381fc",
+);
+
 my %STDIMAGES     = (
     "UBUNTU18-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=24543775-7e30-11e8-b228-90e2ba22fee4",
     # XXX leave this for now
     "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
     "CENTOS7-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=6fa68fd6-9163-11e6-ac8c-90e2ba22fee4",
     "FBSD113-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=28b07ebd-8957-11e9-8677-e4434b2381fc",
-    # XXX needed right now for delay nodes (see elabinelab_bossinit)
+    # XXX needed right now for delay nodes (see comment above)
     "FBSD103-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=f3866e90-2464-11e6-bdf0-d1afad303f71",
     # be sure to change the xen phase file if you change this
     "XEN49-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=a0c25a23-7edf-11e8-b228-90e2ba22fee4",
@@ -42,6 +60,13 @@ my %NEWIMAGES     = (
     "UBUNTU20-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=bb5bfa77-a5a7-11ea-b1eb-e4434b2381fc",
     "FBSD123-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=b01bd90f-5abd-11ec-b318-e4434b2381fc",
 );
+
+if ($FBSD_MAJOR >= 13) {
+    $LINUXSTDIMAGE = "UBUNTU22-64-STD";
+    $FBSDSTDIMAGE  = "FBSD135-64-STD";
+    %NEWIMAGES = ();
+    %STDIMAGES = %SHINYIMAGES;
+}
 
 #
 # XXX for compat, we keep around some old images.

@@ -19,11 +19,15 @@ sub Install($$$)
 
 	# Bind9 was a port prior to FreeBSD6 and again after FreeBSD9!
 	if (! -x $RNDC_CONFGEN) {
-	    $RNDC_KEY     = "/usr/local/etc/rndc.key";
+	    $RNDC_KEY     = "/usr/local/etc/namedb/rndc.key";
 	    $RNDC_CONFGEN = "/usr/local/sbin/rndc-confgen";
 	}
 	DoneIfExists($RNDC_KEY);
-	ExecQuietFatal("$RNDC_CONFGEN -a -r /dev/urandom");
+	my $arg = "-a";
+	if ($FBSD_MAJOR < 13) {
+	    $arg .= " -r /dev/urandom";
+	}
+	ExecQuietFatal("$RNDC_CONFGEN $arg");
     };
 
     return 0;
