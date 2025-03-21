@@ -5585,7 +5585,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate --chunksize 128k -Zy -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate --chunksize 128k -Zy -y -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";
@@ -5652,6 +5652,17 @@ sub lvmCreateVolume($$$)
     my ($name,$size,$flag) = @_;
 
     #
+    # If there is no thinpool, do not even try
+    #
+    if (($flag == ALLOC_INPOOL() || $flag == ALLOC_PREFERINPOOL) &&
+	!doingThinLVM()) {
+	if ($flag == ALLOC_INPOOL()) {
+	    goto fail;
+	}
+	$flag = ALLOC_NOPOOL();
+    }
+    
+    #
     # XXX not everything benefits from being created in our thinpool.
     # In particular, volumes that won't be cloned will suffer a
     # first-access penalty as blocks are allocated on demand rather
@@ -5677,7 +5688,7 @@ again:
 	$flag = ALLOC_NOPOOL();
     }
     if ($flag == ALLOC_NOPOOL() || $flag == ALLOC_PREFERNOPOOL) {
-	if (!mysystem2("lvcreate -Zy -L $size -n $name -i${STRIPE_COUNT} ".
+	if (!mysystem2("lvcreate -Zy -y -L $size -n $name -i${STRIPE_COUNT} ".
 		       "$VGNAME")) {
 	    return 0;
 	}
