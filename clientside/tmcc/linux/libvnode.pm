@@ -53,6 +53,8 @@ my $VIFROUTING      = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 # Other local constants
 my $IPTABLES   = "/sbin/iptables";
+my $SGDISK     = "/sbin/sgdisk";
+my $PPROBE     = "/sbin/partprobe";
 
 my $debug = 0;
 my $lockdebug = 0;
@@ -224,6 +226,7 @@ sub findSpareDisks($;$) {
     my %mounts = ();
     my %ftents = ();
     my %pvs = ();
+    my $bootdisk = "";
 
     # /proc/partitions prints sizes in 1K phys blocks
     my $BLKSIZE = 1024;
@@ -246,6 +249,14 @@ sub findSpareDisks($;$) {
 	chomp($line);
 	if ($line =~ /^([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+/) {
 	    $mounts{$1} = $2;
+	    if ($2 eq "/") {
+		my $dev = $1;
+		if (($dev =~ /^\/dev\/(nvme\S+)p\d+$/ ||
+		     $dev =~ /^\/dev\/(\D+)\d+$/) &&
+		    !$skipssds || !isSSD($1)) {
+		    $bootdisk = $1;
+		}
+	    }
 	}
     }
     close(MFD);
@@ -254,6 +265,7 @@ sub findSpareDisks($;$) {
 	or die "open(/etc/fstab): $!";
     while (my $line = <FFD>) {
 	chomp($line);
+	next if ($line =~ /^#/);
 	if ($line =~ /^([^\s]+)\s+([^\s]+)/) {
 	    $ftents{$1} = $2;
 	}
@@ -268,6 +280,48 @@ sub findSpareDisks($;$) {
 	    }
 	}
 	close(PFD);
+    }
+
+    #
+    # In GPT world, we do not create a 4th partition on the bootdisk with
+    # all remaining free space in slicefix. We do that here since it might
+    # be the only available space (single disk systems).
+    #
+    if ($bootdisk) {
+	my $isgpt =
+	    `sfdisk -l /dev/$bootdisk 2>&1 | grep -i 'disklabel type: gpt'`;
+	my $pdev;
+	if ($bootdisk =~ /^nvme/) {
+	    $pdev = "${bootdisk}p4";
+	} else {
+	    $pdev = "${bootdisk}4";
+	}
+	if (!$isgpt || -e "/dev/$pdev") {
+	    $bootdisk = "";
+	    goto skip4;
+	}
+
+	TBDebugTimeStamp("Creating bootdev part4 ($bootdisk)");
+	if (!mysystem2("$SGDISK -n 4:0:0 -t 4:8300 /dev/$bootdisk")) {
+	    mysystem2("$PPROBE /dev/$bootdisk");
+	    sleep(1);
+
+	    # Make sure it is big enough to be useful
+	    my $line = `grep -w $pdev /proc/partitions`;
+	    chomp($line);
+	    my $size = 0;
+	    if ($line && $line =~ /^\s*\d+\s+\d+\s+(\d+)\s+(\S+)$/) {
+		$size = $1;
+	    }
+	    if ($size < $minsize) {
+		TBDebugTimeStamp("$bootdisk part4 too small to use ($size)");
+		mysystem2("$SGDISK -d 4 /dev/$bootdisk");
+		mysystem2("$PPROBE /dev/$bootdisk");
+		sleep(1);
+	    }
+	}
+
+      skip4:
     }
 
     open (PFD,"/proc/partitions") 
@@ -348,6 +402,16 @@ sub findSpareDisks($;$) {
 	    # If asked to, ignore SSDs
 	    next
 		if ($skipssds && isSSD($dev));
+
+	    #
+	    # If this is partition 4 of the boot disk that we just created,
+	    # we can use it.
+	    #
+	    if ($dev eq $bootdisk && $part == 4) {
+		$retval{$dev}{$part}{"size"} = $BLKSIZE * $size;
+		$retval{$dev}{$part}{"path"} = "/dev/$devpart";
+		next;
+	    }
 
 	    if (!defined($mounts{"/dev/$devpart"}) 
 		&& !defined($ftents{"/dev/$devpart"})) {
