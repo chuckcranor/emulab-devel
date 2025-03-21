@@ -5548,7 +5548,7 @@ sub createThinPool($)
     my $smallest;
     my $num = 0;
     my $tsize = 0;
-    foreach my $dsize (`pvs --noheadings -o pv_free $devs`) {
+    foreach my $dsize (`pvs --noheadings -o pv_free --units g $devs`) {
 	if ($dsize =~ /(\d+\.\d+)([mgt])/i) {
 	    $dsize = $1;
 	    my $u = lc($2);
