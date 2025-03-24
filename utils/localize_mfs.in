@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2019 University of Utah and the Flux Group.
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,7 @@ sub usage()
     print("              'vga', 'sio', 'sio2', 'sio3', 'sio4', 'null'\n");
     print("              NOTE: not needed with newer MFS setups\n");
     print("  -F version  Set kernel version used in a FreeBSD MFS:\n");
-    print("              One of: '8', '9', '10', or '11'\n");
+    print("              One of: '8' through '13'\n");
     print("              Only applies to FreeBSD MFSes (duh!)\n");
     print("  -I msg      Identification msg to put in /etc/issue\n");
     exit(-1);
@@ -132,7 +132,7 @@ if (defined($options{"c"})) {
 }
 if (defined($options{"F"})) {
     $FBSDKERNEL = $options{"F"};
-    if ($FBSDKERNEL !~ /^(8|9|10|11)$/) {
+    if ($FBSDKERNEL !~ /^(8|9|10|11|12|13)$/) {
 	fatal("Invalid FreeBSD kernel version '$FBSDKERNEL'");
     }
 }

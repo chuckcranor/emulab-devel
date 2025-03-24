@@ -62,12 +62,14 @@ sub Install($$$)
 			"performance_schema         = OFF",
 			"log-error                  = $LOGDIR/mysqld-error.log"
 	    );
+	    ExecQuietFatal("touch $LOGDIR/mysqld-error.log");
+	    ExecQuietFatal("$CHOWN mysql:mysql $LOGDIR/mysqld-error.log");
 	};
 	Phase "initialize", "Initializing mysql", sub {
 	    PhaseSkip("mysqld already initialzed")
 		if (-d "$MYSQLDBDIR/mysql");
 
-	    if ($newmysql) {
+	    if ($newmysql || $mariadb) {
 		ExecQuietFatal("$MYSQLD --initialize-insecure --user=mysql --datadir=${MYSQLDBDIR} --basedir=/usr/local");
 	    } else {
 		ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR} --basedir=/usr/local");

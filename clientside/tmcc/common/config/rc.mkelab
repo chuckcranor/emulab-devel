@@ -152,6 +152,7 @@ my $TBDIR = "/usr/testbed";
 # ZFS support
 my $ZPOOLCMD = "/sbin/zpool";
 my $ZFSCMD =   "/sbin/zfs";
+my $GPARTCMD = "/sbin/gpart";
 my $ZFSPOOL =  "emulab";
 
 #
@@ -343,13 +344,13 @@ sub GetEmulabSource($);
 sub MungeMfsRoot($);
 sub SetupTBDir($);
 sub RecreateDir($$);
-sub CreateOpsJail($);
+sub CreateOpsJail($$);
 sub SetupOpsJail();
 sub FindExtraFSConfig($);
 sub PythonVersion();
 sub AddPackage($$$);
 sub DelPackage($@);
-sub WriteOPSImage($$);
+sub WriteOPSImage($$$);
 
 #
 # Boot Action.
@@ -398,6 +399,13 @@ sub doboot()
 	$emulabconfig{"MFSVERSION"} = "10-64";
     }
 
+    #
+    # AMD is gone in FreeBSD 13 onward, must use autofs
+    #
+    if ($FBSD_VERSION >= 13.3) {
+	$emulabconfig{"CONFIG_AUTOFS"} = 1;
+    }
+    
     # Determine if a XEN VM.
     if (!$opsjail &&
 	system("sysctl -n kern.vm_guest >/dev/null 2>&1") == 0) {
@@ -2115,6 +2123,7 @@ sub SetupBossNode($)
     my $FSDIR = "";
     my $opsvm = $emulabconfig{"CONFIG_OPSVM"};
     my $usezfs = $emulabconfig{"CONFIG_ZFS"};
+    my $opsdev = "";
     my $shareslice;
 
     my $fromscratch =
@@ -2129,20 +2138,53 @@ sub SetupBossNode($)
     # for the boss node.
     #
     if ($opsvm) {
+	#
+	# In OPSVM land, the pre-FreeBSD 13 layout is:
+	#    xbd0s1 -> /	    (16GB)
+	#    xbd0s2 -> /ops	    (16GB)
+	#    xbd1s1 -> /usr/testbed (from XEN_EXTRADISKS disk1, ~100GB)
+	#    xbd2   -> ZFS zpool    (from XEN_EXTRADISKS disk2, ~740GB)
+	# For FreeBSD 13+:
+	#    xbd0p3 -> /	    (~64.25GB)
+	#    xbd1p3 -> /ops	    (from XEN_EXTRADISKS disk1, ~64.25GB)
+	#    xbd2p1 -> /usr/testbed (from XEN_EXTRADISKS disk2, ~100GB)
+	#    xbd3p1 -> ZFS zpool    (from XEN_EXTRADISKS disk3, ~700GB)
+	#
 	RecreateDir($TBDIR, 1);
 	if ($isfs && $usezfs) {
-	    $FSDIR = $FSMOUNTDIR;
-	    my $tbdev = FindExtraFSConfig($TBDIR);
-	    my $fsdev = FindExtraFSConfig($FSDIR);
+	    if ($FBSD_VERSION >= 13) {
+		$FSDIR = $FSMOUNTDIR;
+		$opsdev = FindExtraFSConfig($OPSMOUNTDIR);
+		my $tbdev = FindExtraFSConfig($TBDIR);
+		my $fsdev = FindExtraFSConfig($FSDIR);
 
-	    if (! ($tbdev && $fsdev)) {
-		SetupFatal("Must defined EXTRADISKS for $TBDIR and $FSDIR");
-	    }
-	    mysystem("$BINDIR/mkextrafs.pl -s 0 -r $tbdev -f $TBDIR");
+		if (! ($opsdev && $tbdev && $fsdev)) {
+		    SetupFatal("Must define EXTRADISKS for ".
+			       "$OPSMOUNTDIR, $TBDIR and $FSDIR");
+		}
 
-	    RecreateDir($FSDIR, 0);
-	    if (system("$ZPOOLCMD create -f -m none $ZFSPOOL /dev/$fsdev")) {
-		SetupFatal("Could not create ZFS zpool on /dev/$fsdev.");
+		# opsdev gets loaded with a full-disk image so no prep needed
+		# tbdev and fsdev need their partitions created
+		mysystem("$GPARTCMD create -s GPT /dev/$tbdev");
+		mysystem("$BINDIR/mkextrafs.pl -s 1 -r $tbdev -f $TBDIR");
+
+		mysystem("$GPARTCMD create -s GPT /dev/$fsdev");
+		mysystem("$GPARTCMD add -t freebsd-zfs -i 1 /dev/$fsdev");
+		mysystem("$ZPOOLCMD create -f -m none $ZFSPOOL /dev/${fsdev}p1");
+	    } else {
+		$FSDIR = $FSMOUNTDIR;
+		my $tbdev = FindExtraFSConfig($TBDIR);
+		my $fsdev = FindExtraFSConfig($FSDIR);
+
+		if (! ($tbdev && $fsdev)) {
+		    SetupFatal("Must defined EXTRADISKS for $TBDIR and $FSDIR");
+		}
+		mysystem("$BINDIR/mkextrafs.pl -s 0 -r $tbdev -f $TBDIR");
+
+		RecreateDir($FSDIR, 0);
+		if (system("$ZPOOLCMD create -f -m none $ZFSPOOL /dev/$fsdev")) {
+		    SetupFatal("Could not create ZFS zpool on /dev/$fsdev.");
+		}
 	    }
 	}
 	elsif ($isfs) {
@@ -2702,6 +2744,9 @@ sub SetupBossNode($)
     }
     print RC "accounting_enable=\"YES\"\n";
     print RC "nfs_client_enable=\"YES\"\n";
+    if ($isfs && $usezfs) {
+	print RC "zfs_enable=\"YES\"\n";
+    }
 
     #
     # Disable TSO.  It causes horrific xmit throughput with divert sockets.
@@ -2866,7 +2911,7 @@ sub SetupBossNode($)
     # Time to set up the ops VM (Jail). 
     #
     if ($opsvm) {
-	CreateOpsJail($isfs);
+	CreateOpsJail($isfs, $opsdev);
     }
 
     goto skipsetup
@@ -3033,31 +3078,38 @@ sub SetupBossNode($)
 #
 # Create the VM (Jail) for ops. This happens on boss.
 #
-sub CreateOpsJail($)
+sub CreateOpsJail($$)
 {
-    my ($isfs) = @_;
+    my ($isfs,$opsdev) = @_;
     my $usezfs = $emulabconfig{"CONFIG_ZFS"};
+    my $disk;
 
-    #
-    # We need to frisbee over the image into slice 2.
-    # Figure out the disk. 
-    #
-    my $disk = `mount | grep '0s1a on /'`;
-    if ($disk =~ /(\/dev\/\S+)s1a on/) {
-	$disk = "$1" . "s2";
-    }
-    else {
-	SetupFatal("Could not determine disk for $OPSMOUNTDIR");
+    if ($opsdev) {
+	$disk = "/dev/$opsdev";
+	$part = "p3";
+    } else {
+	#
+	# We need to frisbee over the image into slice 2.
+	# Figure out the disk. 
+	#
+	$disk = `mount | grep '0s1a on /'`;
+	if ($disk =~ /(\/dev\/\S+)s1a on/) {
+	    $disk = "$1";
+	    $part = "s2a";
+	}
+	else {
+	    SetupFatal("Could not determine disk for $OPSMOUNTDIR");
+	}
     }
     if (!exists($emulabconfig{"OPSVM_IMAGE"})) {
 	SetupFatal("Need to define OPSVM_IMAGE");
     }
-    WriteOPSImage($emulabconfig{"OPSVM_IMAGE"}, $disk) == 0
+    WriteOPSImage($emulabconfig{"OPSVM_IMAGE"}, $disk, ($opsdev ne "")) == 0
 	or SetupFatal("Could write OPS image to $disk");
     
     mysystem("mkdir $OPSMOUNTDIR") if (! -e $OPSMOUNTDIR);
-    mysystem("mount ${disk}a $OPSMOUNTDIR");
-    mysystem("echo \"${disk}a\t${OPSMOUNTDIR}\tufs\trw\t0\t2\" >> /etc/fstab");
+    mysystem("mount ${disk}${part} $OPSMOUNTDIR");
+    mysystem("echo \"${disk}${part}\t${OPSMOUNTDIR}\tufs\trw\t0\t2\" >> /etc/fstab");
 
     # These need to be available from inside the jail when the FSNODE
     # is boss and not another physical node.
@@ -3066,7 +3118,7 @@ sub CreateOpsJail($)
 	
 	if ($usezfs) {
 	    foreach my $dir (@dirs) {
-		mysystem("ln -s /ops/$dir /$dir");
+		mysystem("ln -s $OPSMOUNTDIR/$dir /$dir");
 	    }
 	}
 	else {
@@ -3110,7 +3162,7 @@ sub CreateOpsJail($)
     open(CONF, ">/etc/jail.conf") or
 	SetupFatal("Could not open /etc/jail.conf for writing: $!");
     print CONF "ops {\n";
-    print CONF "       path = \"/ops\";\n";
+    print CONF "       path = \"$OPSMOUNTDIR\";\n";
     print CONF "       interface = \"${outer_controlif}\";\n";
     print CONF "       allow.chflags = 1;\n";
     print CONF "       allow.mount.procfs = 1;\n";
@@ -3558,7 +3610,7 @@ sub CreateDefsFile($)
     my $opsvm = $emulabconfig{"CONFIG_OPSVM"};
     my $usezfs = $emulabconfig{"CONFIG_ZFS"};
     my $useautofs = $emulabconfig{"CONFIG_AUTOFS"};
-    my $mntprefix = ($usezfs ? ($opsvm ? "/ops" :  "") : $FSMOUNTDIR);
+    my $mntprefix = ($usezfs ? ($opsvm ? $OPSMOUNTDIR :  "") : $FSMOUNTDIR);
     
     print "Creating defs file from stub defs file\n";
     
@@ -4459,30 +4511,40 @@ sub DelAllPackages($)
 }
 
 #
-# For the OPSVM; frisbee over the image to put down in slice 2.
+# For the OPSVM; frisbee over the image to put down on the disk.
 #
-sub WriteOPSImage($$)
+# The image pretty much has to be the same image as loaded on boss (see
+# tbsetup/ns2ir/elabinelab-xenopsvm.ns). Thus on FreeBSD13 and above, it
+# is a GPT-based whole disk image.
+#
+sub WriteOPSImage($$$)
 {
-    my ($imageid, $dev) = @_;
+    my ($imageid, $disk, $isgufi) = @_;
     my $FRISBEE = "/usr/local/bin/frisbee";
-    my $GPART   = "/sbin/gpart";
-    my $disk    = $dev;
 
-    if ($disk =~ /^\/dev\/([a-z]+\d+)s[1-4]/) {
-	$disk = $1;
+    if (!$isgufi) {
+	# XXX This is MBR writing into partition 2 with BSD disklabel.
+	mysystem("$GPARTCMD add -t freebsd -i 2 $disk");
+	return -1
+	    if ($?);
+	$disk .= "s2";
     }
-    mysystem("$GPART add -t freebsd -i 2 $disk");
-    return -1
-	if ($?);
 
     # Allow the server to enable heartbeat reports in the client
     my $heartbeat = "-H 0";
 
     # Using unicast for now, since we are not allowed to talk to subboss.
     my $command = "$FRISBEE -X ucast -f -M 64 $heartbeat -B 30 ".
-	"-S $bossname -F $imageid $dev";
+	"-S $bossname -F $imageid $disk";
 
     mysystem($command);
+    if ($isgufi && $? == 0) {
+	# XXX we need to fix up the GPT
+	mysystem("$GPARTCMD recover $disk");
+	# XXX take out the boot-related partitions to avoid confusion
+	mysystem("$GPARTCMD delete -i 1 $disk");
+	mysystem("$GPARTCMD delete -i 2 $disk");
+    }
     return $? >> 8;
 }
 		  

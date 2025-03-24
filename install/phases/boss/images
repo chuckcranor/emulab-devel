@@ -26,7 +26,7 @@ my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 # lowest number FBSD* image as the default delay image. As the distance
 # between oldest (2005) and newest (2025) hardware becomes greater, it is
 # increasingly unlikely that we can find UBUNTU or FBSD images that run on
-# the entire range.
+# the entire range. For now, Ubuntu 22 and FreeBSD 13 still do.
 #
 my %SHINYIMAGES   = (
     "UBUNTU22-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=6735609b-dd51-11ed-9f39-e4434b2381fc",
@@ -36,7 +36,6 @@ my %SHINYIMAGES   = (
     "FBSD135-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=61246eb5-0406-11f0-af1a-e4434b2381fc",
     "FBSD142-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=aec6aab8-eb03-11ef-af1a-e4434b2381fc",
     "XEN416-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=5e6c984f-01d4-11f0-af1a-e4434b2381fc",
-    "XEN411-64-STD" => "https://www.emulab.net/image_metadata.php?uuid=cc93e8fa-a5f0-11ea-b1eb-e4434b2381fc",
 );
 
 my %STDIMAGES     = (
@@ -61,13 +60,6 @@ my %NEWIMAGES     = (
     "FBSD123-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=b01bd90f-5abd-11ec-b318-e4434b2381fc",
 );
 
-if ($FBSD_MAJOR >= 13) {
-    $LINUXSTDIMAGE = "UBUNTU22-64-STD";
-    $FBSDSTDIMAGE  = "FBSD135-64-STD";
-    %NEWIMAGES = ();
-    %STDIMAGES = %SHINYIMAGES;
-}
-
 #
 # XXX for compat, we keep around some old images.
 #
@@ -79,14 +71,18 @@ if ($FBSD_MAJOR <= 10) {
     }
 }
 
-if ($TARGETSYS_TARGET eq "POWDER-BUS") {
-    $STDIMAGES{"UBUNTU18-64-GR38-PACK"} =
-	"https://www.emulab.net/image_metadata.php?uuid=1f67cefc-c375-11e9-b1eb-e4434b2381fc";
+if ($FBSD_MAJOR >= 13) {
+    $LINUXSTDIMAGE = "UBUNTU22-64-STD";
+    $FBSDSTDIMAGE  = "FBSD135-64-STD";
+    %NEWIMAGES = ();
+    %STDIMAGES = %SHINYIMAGES;
 }
+
 if ($TARGETSYS_TARGET eq "POWDER-BUS" || $TARGETSYS_TARGET eq "POWDER-FIXED") {
-    $STDIMAGES{"UBUNTU18-64-UHD-STD"} =
-	"https://www.emulab.net/image_metadata.php?uuid=b57f72bf-f7a0-11ea-b1eb-e4434b2381fc";
+    $STDIMAGES{"UBUNTU22-64-GR310-PACK"} =
+	"https://www.emulab.net/image_metadata.php?uuid=689ac858-eea4-11ed-9f39-e4434b2381fc";
 }
+
 #
 # Old style mappings, but probably still in use someplace.
 #

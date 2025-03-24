@@ -93,14 +93,13 @@ sub Install($$$)
 	my $fv = $MFSVERSION;
 
 	#
-	# XXX hack, hack. Right now there is no FreeBSD 11 MFS,
-	# just a FreeBSD 11 kernel to use with FreeBSD 10 MFS.
+	# XXX hack, hack. Right now there is no FreeBSD MFS > 10,
+	# just newer FreeBSD kernels to use with FreeBSD 10 MFS.
 	#
-	if ($fv eq "11-64") {
+	if ($fv =~ /^(1[123])-64$/) {
 	    $fv = "10-64";
-	    if (-x "$TFTP_DIR/freebsd/boot/kernel11" ||
-		-x "$TFTP_DIR/freebsd10-64/boot/kernel11") {
-		$kernelvers = 11;
+	    if (-f "$TFTP_DIR/freebsd10-64/boot/kernel$1") {
+		$kernelvers = $1;
 	    }
 	}
 
