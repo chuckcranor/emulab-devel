@@ -69,7 +69,9 @@ sub Install($$$)
 	    PhaseSkip("mysqld already initialzed")
 		if (-d "$MYSQLDBDIR/mysql");
 
-	    if ($newmysql || $mariadb) {
+	    if ($mariadb) {
+		ExecQuietFatal("$MYSQLINSTALL --user=mysql --datadir=${MYSQLDBDIR} --basedir=/usr/local");
+	    } elsif ($newmysql) {
 		ExecQuietFatal("$MYSQLD --initialize-insecure --user=mysql --datadir=${MYSQLDBDIR} --basedir=/usr/local");
 	    } else {
 		ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR} --basedir=/usr/local");
