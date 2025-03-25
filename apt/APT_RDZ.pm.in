@@ -1654,6 +1654,10 @@ sub DeleteTemporaryUser($)
     print "DeleteTemporaryUser: Deleting user ID $user_id\n";
     my $response;
     if ($IDENT->DELETE("/users/$user_id", \$response)) {
+	# Already deleted
+	if ($response->{"errorCode"} == 409) {
+	    return 0;
+	}
 	print STDERR "DeleteTemporaryUser: could not delete user: $user_id\n";
 	return -1;
     }
