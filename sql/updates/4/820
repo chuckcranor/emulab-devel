@@ -15,7 +15,7 @@ sub DoUpdate($$$)
     }
     if (!DBSlotExists("apt_instance_rfranges", "rdz_freq_high")) {
 	DBQueryFatal("ALTER TABLE apt_instance_rfranges ADD ".
-		     " `rdz_freq_high` float(8,2) NOT NULL DEFAULT '0.00 ".
+		     " `rdz_freq_high` float(8,2) NOT NULL DEFAULT '0.00' ".
 		     "     after rdz_freq_low");
     }
     return 0;
