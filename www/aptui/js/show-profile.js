@@ -150,6 +150,8 @@ $(function ()
 		    $('#copy-repobased-profile-modal .gitrepo-url').select();
 		    document.execCommand("copy");
 		});
+	    // Bind the copy to clipboard button in URL
+	    window.APT_OPTIONS.SetupCopyToClipboard("#repourl-copy-to-clipboard");
 	}
 	
 	// This activates the popover subsystem.

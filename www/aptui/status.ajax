@@ -759,7 +759,9 @@ function Do_DenyOrMoreinfo($action)
     SPITAJAX_RESPONSE("Success");
     return;
 bad:
-    $webtask->Delete();
+    if (isset($webtask)) {
+        $webtask->Delete();
+    }
     sleep(1);
 }
 

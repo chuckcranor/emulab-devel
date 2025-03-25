@@ -8639,7 +8639,7 @@ if (@ARGV < 2) {
 }
 $action = shift(@ARGV);
 my $token = shift(@ARGV);
-if ($token eq "-h") {
+if ($token eq "-h" || $token eq "--help") {
     exit(DoHelp($action));
 }
 $instance = APT_Instance->Lookup($token);

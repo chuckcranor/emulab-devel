@@ -4052,6 +4052,9 @@ $(function ()
 	    return;
 	}
 	_.each(details.clusters, function (res) {
+            if (!_.has(amlist, res.cluster_urn)) {
+                return;
+            }
 	    var type   = res.type;
 	    var name   = amlist[res.cluster_urn].name;
 	    var using  = res.using;
@@ -4071,8 +4074,10 @@ $(function ()
 		' <td>' + util + '%</td>' +
 		'</tr>';
 	});
-	$('#utilization-table tbody').html(html);
-	$('#utilization-div').removeClass("hidden");
+        if (html != "") {
+	    $('#utilization-table tbody').html(html);
+	    $('#utilization-div').removeClass("hidden");
+        }
     }
 
     // Draw the history bar graph.

@@ -152,7 +152,7 @@ function Do_ClassicDatasetList()
 function Do_MemberList()
 {
     global $this_user, $target_project;
-    global $newTrustMap, $TB_PROJECT_ADDUSER;
+    global $newTrustMap, $TB_PROJECT_ADDUSER, $TBDB_TRUST_NONE;
 
     if (CheckPageArgs()) {
         return;
@@ -177,7 +177,7 @@ function Do_MemberList()
         $blob["joined"]   = DateStringGMT($membership["date_applied"]);
         $blob["trust"]    = $newTrustMap[$membership["trust"]];
         $blob["approved"] = ($target_project->UserTrust($user) ==
-                             TBDB_TRUSTSTRING_NONE ? 0 : 1);
+                             $TBDB_TRUST_NONE ? 0 : 1);
         # Can the current user delete this user from the project.
         $blob["candelete"]=
             (ISADMIN() ||
