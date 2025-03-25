@@ -324,11 +324,22 @@
 	    </div>
 	    <% if (fromrepo) { %>
 	      <div class="form-group">
-		<div class='form-control format-me'
-		     style="height: auto;"
+		<div class='format-me'
 		     id="profile_repourl"
-		     data-key='profile_repourl' data-label='Repository'>
-		  <%- fields.profile_repourl %>
+		     data-colsize="6"
+		     data-key='profile_repourl'
+		     data-label='Repository'>
+		  <span id="repourl-copy-to-clipboard">
+		    <div class="input-group copy-to-clipboard">
+		      <input readonly
+			     class="form-control"
+			     value='<%- fields.profile_repourl %>'>
+		      <span class="input-group-text px-0 py-1">
+			<a href='#' class='btn'>
+			  <span class='glyphicon glyphicon-copy'></span></a>
+		      </span>
+		    </div>
+		  </span>
 		</div>
 	      </div>
 	    <% } %>

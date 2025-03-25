@@ -226,6 +226,10 @@ $(function ()
 	    // Bind the copy to clipboard button for the push URL.
 	    window.APT_OPTIONS.
 		SetupCopyToClipboard("#copy-push-url");
+
+	    // Bind the copy to clipboard button for the push URL.
+	    window.APT_OPTIONS.
+		SetupCopyToClipboard("#repourl-copy-to-clipboard");
 	}
 	else {
 	    CopyProfile.InitCopyProfile('#copy-profile-button',

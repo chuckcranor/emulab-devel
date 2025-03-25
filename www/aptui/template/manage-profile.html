@@ -500,33 +500,38 @@
 	    <% if (viewing && fromrepo) { %>
 	      <div class="form-group">
 		<div class="format-me"
+		     data-colsize="6"
 		     data-key='profile_repourl'
 		     data-label='Repository'>
-		  <span>
-		    <input type="text"
-			   class="form-control" readonly
-			   style="width: 75%; display: inline;"
-			   value='<%- formfields.profile_repourl %>'>
-		    <button class='btn btn-primary btn-xs'
-			    id="git-repo-update-button"
-			    type='button'
-			    style='margin-left: 10px;'>
-		      Update</button>
-		    <a href='#' class='btn btn-xs'
-		       data-toggle='popover' data-bs-toggle='popover'
-		       data-html='true' data-bs-html='true'
-		       data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
-		       data-content='Fetch from your repository, updating
-				     your profile to reflect the current HEAD
-				     of your master branch. Branches and tags
-				     are updated as well (see below). You
-				     can also set up a <em>push webhook</em>
-				     to automate updates, see the <b>Push
-				     URL</b> help info in the Repository panel  card 
-				     on your left.'>
-		      <span class='glyphicon glyphicon-question-sign'
-			    style='margin-bottom: 4px;'></span>
-		    </a>
+		  <span id="repourl-copy-to-clipboard">
+		    <div class="input-group copy-to-clipboard">
+			<input readonly
+			       class="form-control"
+			       value='<%- formfields.profile_repourl %>'>
+			<span class="input-group-text px-0 py-1">
+			  <a href='#' class='btn'>
+			    <span class='glyphicon glyphicon-copy'></span></a>
+			</span>
+		      <span class="input-group-text px-0 py-1">
+			<button class="btn" id="git-repo-update-button" type="button">Update</button>
+		      </span>
+		      <span class="input-group-text px-1 py-1">
+			<a href='#' class='btn'
+			   data-placement="bottom"
+			   data-toggle='popover' data-bs-toggle='popover'
+			   data-html='true' data-bs-html='true'
+			   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
+			   data-content='Use the <em>Update</em> button to fetch from your repository, updating
+					 your profile to reflect the current HEAD
+					 of your master branch. Branches and tags
+					 are updated as well (see below). You
+					 can also set up a <em>push webhook</em>
+					 to automate updates, see the <b>Push
+					 URL</b> help info in the Repository panel  card 
+					 on your left.'>			   
+			  <span class='glyphicon glyphicon-question-sign'></span></a>
+		      </span>
+		    </div>
 		  </span>
 		</div>
 	      </div>
