@@ -646,6 +646,15 @@ $(function ()
 		    "Your experiment is delayed while we request spectrum " +
 		    "from the RDZ";
 	    }
+	    else if (instanceStatus == 'rdznotready') {
+		status_html = "RDZ Wait (<span class='text-info'>" +
+		    "Waiting for the RDZ to answer the phone</span>" + ")";
+		ProgressBarUpdate();
+		ShowRspec();
+		ShowBindings();
+		status_message =
+		    "Your experiment is delayed until we can contact the RDZ";
+	    }
 	    else if (instanceStatus == 'prestaging') {
 		status_html = "prestaging";
 		status_message = "Copying images to target clusters";
@@ -5221,10 +5230,13 @@ $(function ()
 	var spinwidth = null;
 	
 	if (instanceStatus == "created") {
-	    spinwidth = "25";
+	    spinwidth = "10";
+	}
+	else if (instanceStatus == "rdznotready") {
+	    spinwidth = "15";
 	}
 	else if (instanceStatus == "rdzwait") {
-	    spinwidth = "15";
+	    spinwidth = "20";
 	}
 	else if (instanceStatus == "provisioning" ||
 		 instanceStatus == "stitching") {

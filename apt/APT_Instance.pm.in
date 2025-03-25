@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -3782,6 +3782,32 @@ sub SetRDZINRDZINFO($$)
 	or return undef;
     
     return $self->RDZINRDZINFO();
+}
+
+#
+# Check for all execute services finished. 
+#
+sub ExecuteServicesFinished($)
+{
+    my ($self) = @_;
+    my @aggregates = $self->ActiveAggregateList();
+    my $done = 0;
+    my $total= 0;
+
+    foreach my $aggobj (@aggregates) {
+	my $sliverstatus = $aggobj->SliverStatus();
+
+	foreach my $status (values(%{ $sliverstatus })) {
+	    $total++;
+	    if (!exists($status->{"sliver_data"}->{'execute_state'})) {
+		$done++;
+	    }
+	    elsif ($status->{"sliver_data"}->{'execute_state'} eq "exited") {
+		$done++;
+	    }
+	}
+    }
+    return $done == $total;
 }
 
 ###################################################################

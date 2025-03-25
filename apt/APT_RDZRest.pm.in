@@ -159,6 +159,7 @@ sub REST($$$$)
 	    print STDERR $client->responseContent() . "\n";
 	}
 	if ($client->responseCode() ne "200") {
+	    $rval->{"errorCode"} = $client->responseCode();
 	    print Dumper($rval);
 	}
 	$$prval = $rval;

@@ -1084,14 +1084,20 @@ if (!$debug) {
 if ($instance->SetRSPEC($rspec)) {
     fatal("Could not set the rspec");
 }
-# Finalize the rspec (lots of little things we do to it).
-$retval = $instance->FinalizeRSpec(\$errmsg);
-if ($retval) {
-    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
-}
+
 if ($rdzenabled) {
-    if (APT_RDZ::initRDZstate($instance, \$errmsg)) {
-	UserError($errmsg);
+    $retval = APT_RDZ::initRDZstate($instance, \$errmsg);
+    if ($retval) {
+	($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    # Hold off finalizing the rspec, since later RDZ stuff will
+    # change the rspec.
+}
+else {
+    # Finalize the rspec (lots of little things we do to it).
+    $retval = $instance->FinalizeRSpec(\$errmsg);
+    if ($retval) {
+	($retval < 0 ? fatal($errmsg) : UserError($errmsg));
     }
 }
 

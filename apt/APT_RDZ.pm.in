@@ -190,28 +190,30 @@ sub initRDZstate($$)
 		$$perrmsg = "RDZ instance is not an RDZ in RDZ";
 		return -1;
 	    }
-	    my $parent_rspec = $parent_instance->RSPEC();
-
-	    #
-	    # Tokens are in the overrides of the rspec
-	    #
-	    foreach my $el (GeniXML::FindNodesNS(
-				"n:override", $parent_rspec,
-				$GeniXML::ANSIBLE_NS)->get_nodelist()) {
-		my $name = GeniXML::GetText("name", $el);
-	
-		if ($name eq "openzms_bootstrap_token") {
-		    $rdzinfo->{"admin_token"} = $el->textContent()
-		}
-		elsif ($name eq "openzms_element_token") {
-		    $rdzinfo->{"element_token"} = $el->textContent()
-		}
+	    if ($parent_instance->status() ne "ready") {
+		$$perrmsg = "RDZ instance is not yet ready to accept ".
+		    "your request. Please try again in a few minutes.";
+		return 1;
 	    }
+	    my $rdzinrdzinfo = $parent_instance->RDZINRDZINFO();
+	    if (!exists($rdzinrdzinfo->{"element_token"})) {
+		$$perrmsg = "RDZ instance is missing inner element_token";
+		return -1;
+	    }
+	    $rdzinfo->{"element_token"} = $rdzinrdzinfo->{"element_token"};
+
+	    if (!exists($rdzinrdzinfo->{"admin_token"})) {
+		$$perrmsg = "RDZ instance is missing inner admin_token";
+		return -1;
+	    }
+	    $rdzinfo->{"admin_token"} = $rdzinrdzinfo->{"admin_token"};
+	    
 	    my $url = URLforRDZ($parent_instance, $perrmsg);
 	    return -1
 		if (!defined($url));
 	    
 	    $rdzinfo->{"url"} = $url;
+	    $rdzinfo->{"rdzinrdz_instance"} = $parent_instance->Printable();
 	}
 	else {
 	    my $url   = GeniXML::GetText("url", $element);
@@ -235,14 +237,6 @@ sub initRDZstate($$)
 		"url"   => $url,
 		"element_token" => $token,
 	    };
-	}
-	#
-	# Initial test to see if it is still on the air.
-	#
-	if (!APT_RDZRest::ZMC->New($rdzinfo->{'element_token'},
-				   $rdzinfo->{'url'})) {
-	    $$perrmsg = "Could not contact RDZ at " . $rdzinfo->{'url'};
-	    return -1;
 	}
 	$instance->SetRDZINFO($rdzinfo);
     }
@@ -388,32 +382,53 @@ sub setupRDZinRDZ($$$)
     $override->appendText($instance->webURL());
 
     #
-    # We need to supply the admin/element tokens so we can later talk to the
-    # inner RDZ
+    # We need the admin/element tokens so we can later talk to the
+    # inner RDZ.  If we can find pre-supplied values as passwords, use them;
+    # if not, generate them. 
     #
-    my $admin_token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
-    if ($? || !defined($admin_token) || $admin_token eq "") {
-	$$perrmsg = "setupRDZinRDZ: Could not generate an admin token";
-	return -1;
-    }
-    chomp($admin_token);
+    my ($admin_token, $element_token);
 
-    my $element_token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
-    if ($? || !defined($element_token) || $element_token eq "") {
-	$$perrmsg = "setupRDZinRDZ: Could not generate an element token";
-	return -1;
-    }
-    chomp($element_token);
-
+    # Find the ansible overrides, they have the password "name".
     foreach my $el (GeniXML::FindNodesNS("n:override", $rspec,
 					 $GeniXML::ANSIBLE_NS)->get_nodelist()) {
-	my $name = GeniXML::GetText("name", $el);
-	if ($name eq "openzms_bootstrap_token" || $name eq "openzms_element_token") {
-	    SetText("source", $el, "");
-	    SetText("source_name", $el, "");
-	    SetText("on_empty", $el, "");
-	    $el->appendText(($name eq "openzms_element_token" ?
-			     $element_token : $admin_token));
+	my $override_name = GeniXML::GetText("name", $el);
+
+	next
+	    if ($override_name ne "openzms_bootstrap_token" &&
+		$override_name ne "openzms_element_token");
+
+	my $password_name = GeniXML::GetText("source_name", $el);
+	my $plaintext;
+
+	# Find the matching password element
+	foreach my $encref (GeniXML::FindNodesNS("n:password", $rspec,
+					 $GeniXML::EMULAB_NS)->get_nodelist()) {
+	    my $name      = GeniXML::GetText("name", $encref);
+	    my $encrypted = GeniXML::GetText("encrypted", $encref);
+
+	    next
+		if ($name ne $password_name);
+
+	    if ($encrypted) {
+		$$perrmsg = "setupRDZinRDZ: RDZ $password_name already encrypted";
+		return -1;
+	    }
+	    my $token = $encref->textContent();
+	    if (!$token) {
+		$token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
+		if ($? || !defined($token) || $token eq "") {
+		    $$perrmsg = "setupRDZinRDZ: Could not generate a token";
+		    return -1;
+		}
+		chomp($token);
+		$encref->appendText($token);
+	    }
+	    if ($override_name eq "openzms_bootstrap_token") {
+		$admin_token = $token;
+	    }
+	    else {
+		$element_token = $token;
+	    }
 	}
     }
     # Update
@@ -648,10 +663,43 @@ sub RequestSpectrum($$;$)
 	# Must do this now in case of errors below.
 	$instance->SetRDZINFO($rdzinfo);
     }
-    my $ZMC = GetZMC($instance);
-    print $ZMC . "\n";
     
     if ($use_rdzinrdz) {
+	#
+	# The RDZinRDZ exists, but might not be "ready" yet. Lets hold here,
+	# the user can cancel the experiment if they are unhappy with being
+	# in a holding pattern
+	#
+	print "Checking to see if the inner RDZ is ready\n";
+	
+	my $rdz_instance = APT_Instance->Lookup($rdzinfo->{"rdzinrdz_instance"});
+	if (!defined($rdz_instance)) {
+	    $$perrmsg = "Cannot lookup rdz_instance";
+	    return -1;
+	}
+	print "RDZ status is " . $rdz_instance->status() . "\n";
+	print "RDZ execute is " . $rdz_instance->ExecuteServicesFinished() . "\n";
+	
+	while ($rdz_instance->status() ne "ready" ||
+	       !$rdz_instance->ExecuteServicesFinished()) {
+	    $instance->SetStatus("rdznotready");
+	    print "Waiting for rdzinrdz experiment to become ready\n";
+	    for (my $i = 0; $i < 10; $i++) {
+		sleep(6);
+		if ($rdz_instance->Refresh()) {
+		    $$perrmsg = "rdz_instance has disappeared";
+		    return -1;
+		}
+		if ($instance->IsCanceled()) {
+		    $$perrmsg = "experiment has been canceled";
+		    return -1;
+		}
+		last
+		    if ($rdz_instance->status() eq "ready" &&
+			$rdz_instance->ExecuteServicesFinished());
+	    }
+	}
+	$instance->SetStatus("rdzwait");
 	if (MapOuterToInnerRadios($instance, \%radios, $perrmsg)){
 	    return -1;
 	}
@@ -660,6 +708,8 @@ sub RequestSpectrum($$;$)
 	    push(@radio_ports, {"radio_port_id" => $id});
 	}
     }
+    my $ZMC = GetZMC($instance);
+    print $ZMC . "\n";
 
     foreach my $rfrange (values(%{$rfranges})) {
 	my $frequency_low  = $rfrange->freq_low();
@@ -1631,6 +1681,10 @@ sub DeleteTemporaryUser($)
     print "DeleteTemporaryUser: Deleting user ID $user_id\n";
     my $response;
     if ($IDENT->DELETE("/users/$user_id", \$response)) {
+	# Already deleted
+	if ($response->{"errorCode"} == 409) {
+	    return 0;
+	}
 	print STDERR "DeleteTemporaryUser: could not delete user: $user_id\n";
 	return -1;
     }
