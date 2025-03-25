@@ -190,28 +190,30 @@ sub initRDZstate($$)
 		$$perrmsg = "RDZ instance is not an RDZ in RDZ";
 		return -1;
 	    }
-	    my $parent_rspec = $parent_instance->RSPEC();
-
-	    #
-	    # Tokens are in the overrides of the rspec
-	    #
-	    foreach my $el (GeniXML::FindNodesNS(
-				"n:override", $parent_rspec,
-				$GeniXML::ANSIBLE_NS)->get_nodelist()) {
-		my $name = GeniXML::GetText("name", $el);
-	
-		if ($name eq "openzms_bootstrap_token") {
-		    $rdzinfo->{"admin_token"} = $el->textContent()
-		}
-		elsif ($name eq "openzms_element_token") {
-		    $rdzinfo->{"element_token"} = $el->textContent()
-		}
+	    if ($parent_instance->status() ne "ready") {
+		$$perrmsg = "RDZ instance is not yet ready to accept ".
+		    "your request. Please try again in a few minutes.";
+		return 1;
 	    }
+	    my $rdzinrdzinfo = $parent_instance->RDZINRDZINFO();
+	    if (!exists($rdzinrdzinfo->{"element_token"})) {
+		$$perrmsg = "RDZ instance is missing inner element_token";
+		return -1;
+	    }
+	    $rdzinfo->{"element_token"} = $rdzinrdzinfo->{"element_token"};
+
+	    if (!exists($rdzinrdzinfo->{"admin_token"})) {
+		$$perrmsg = "RDZ instance is missing inner admin_token";
+		return -1;
+	    }
+	    $rdzinfo->{"admin_token"} = $rdzinrdzinfo->{"admin_token"};
+	    
 	    my $url = URLforRDZ($parent_instance, $perrmsg);
 	    return -1
 		if (!defined($url));
 	    
 	    $rdzinfo->{"url"} = $url;
+	    $rdzinfo->{"rdzinrdz_instance"} = $parent_instance->Printable();
 	}
 	else {
 	    my $url   = GeniXML::GetText("url", $element);
@@ -388,32 +390,53 @@ sub setupRDZinRDZ($$$)
     $override->appendText($instance->webURL());
 
     #
-    # We need to supply the admin/element tokens so we can later talk to the
-    # inner RDZ
+    # We need the admin/element tokens so we can later talk to the
+    # inner RDZ.  If we can find pre-supplied values as passwords, use them;
+    # if not, generate them. 
     #
-    my $admin_token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
-    if ($? || !defined($admin_token) || $admin_token eq "") {
-	$$perrmsg = "setupRDZinRDZ: Could not generate an admin token";
-	return -1;
-    }
-    chomp($admin_token);
+    my ($admin_token, $element_token);
 
-    my $element_token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
-    if ($? || !defined($element_token) || $element_token eq "") {
-	$$perrmsg = "setupRDZinRDZ: Could not generate an element token";
-	return -1;
-    }
-    chomp($element_token);
-
+    # Find the ansible overrides, they have the password "name".
     foreach my $el (GeniXML::FindNodesNS("n:override", $rspec,
 					 $GeniXML::ANSIBLE_NS)->get_nodelist()) {
-	my $name = GeniXML::GetText("name", $el);
-	if ($name eq "openzms_bootstrap_token" || $name eq "openzms_element_token") {
-	    SetText("source", $el, "");
-	    SetText("source_name", $el, "");
-	    SetText("on_empty", $el, "");
-	    $el->appendText(($name eq "openzms_element_token" ?
-			     $element_token : $admin_token));
+	my $override_name = GeniXML::GetText("name", $el);
+
+	next
+	    if ($override_name ne "openzms_bootstrap_token" &&
+		$override_name ne "openzms_element_token");
+
+	my $password_name = GeniXML::GetText("source_name", $el);
+	my $plaintext;
+
+	# Find the matching password element
+	foreach my $encref (GeniXML::FindNodesNS("n:password", $rspec,
+					 $GeniXML::EMULAB_NS)->get_nodelist()) {
+	    my $name      = GeniXML::GetText("name", $encref);
+	    my $encrypted = GeniXML::GetText("encrypted", $encref);
+
+	    next
+		if ($name ne $password_name);
+
+	    if ($encrypted) {
+		$$perrmsg = "setupRDZinRDZ: RDZ $password_name already encrypted";
+		return -1;
+	    }
+	    my $token = $encref->textContent();
+	    if (!$token) {
+		$token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
+		if ($? || !defined($token) || $token eq "") {
+		    $$perrmsg = "setupRDZinRDZ: Could not generate a token";
+		    return -1;
+		}
+		chomp($token);
+		$encref->appendText($token);
+	    }
+	    if ($override_name eq "openzms_bootstrap_token") {
+		$admin_token = $token;
+	    }
+	    else {
+		$element_token = $token;
+	    }
 	}
     }
     # Update
