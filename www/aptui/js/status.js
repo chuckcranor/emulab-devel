@@ -3549,9 +3549,9 @@ $(function ()
 	var passwords = xml[0].getElementsByTagNameNS(EMULAB_NS, 'password');
 
 	// Search the instructions for the pattern.
-	var regex   = /\{password-.*\}/gi;
+	var regex   = /\{password-[^\}]+\}/gmi;
 	var needed  = itext.match(regex);
-	//console.log(needed);
+	//console.log("FindEncryptionBlocks needed", needed);
 
 	// Look for all the encryption blocks in the manifest ...
 	_.each(passwords, function (password) {
