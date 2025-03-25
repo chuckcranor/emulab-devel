@@ -45,6 +45,7 @@ RUN_DEPENDS+=	\
 	jove:${PORTSDIR}/editors/jove \
 	gdb:${PORTSDIR}/devel/gdb \
 	git:${PORTSDIR}/devel/git \
+	gtar:${PORTSDIR}/archivers/gtar \
 	lsof:${PORTSDIR}/sysutils/lsof \
         netcat:${PORTSDIR}/net/netcat \
 	rcs:${PORTSDIR}/devel/rcs \
