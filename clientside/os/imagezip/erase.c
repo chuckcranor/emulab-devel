@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2016-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -35,6 +35,7 @@
 #include <sys/disk.h>
 #endif
 #ifdef __linux__
+#include <sys/ioctl.h>
 #include <linux/fs.h>
 #endif
 
@@ -54,14 +55,22 @@ typedef uint64_t blk_t;
 unsigned cmd = BLKDISCARD;
 #endif
 
-static blk_t ebsize = -1;
+static blk_t ebsize = (blk_t)~0;
 
 static int zeroit(int fd, blk_t offset, blk_t count);
 
 blk_t
-erasebsize(void)
+erasebsize(int fd)
 {
-	if (ebsize < 0) {
+	if (ebsize == ~0) {
+#ifdef BLKSSZGET
+		int secsize;
+
+		if (ioctl(fd, BLKSSZGET, &secsize) == 0) {
+			ebsize = (blk_t)secsize;
+			return ebsize;
+		}
+#endif
 		ebsize = 0;
 #if defined(DIOCGDELETE) || defined(BLKDISCARD)
 		/* XXX this seems to be the minimum for DIOCGDELETE */
@@ -79,7 +88,7 @@ erasedata(int fd, blk_t offset, blk_t ecount, int zeroonfail)
 {
 	blk_t args[2];
 	blk_t toff, tend, tcnt;
-	blk_t bsize = erasebsize();
+	blk_t bsize = erasebsize(fd);
 
 	if (bsize == 0) {
 		if (zeroonfail)
