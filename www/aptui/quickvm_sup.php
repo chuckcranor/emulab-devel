@@ -376,6 +376,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     if ($login_user) {
         $addHeaderVariable("isadministrator", ISADMINISTRATOR() ? 1 : 0);
         $addHeaderVariable("isadmin", ISADMIN() ? 1 : 0);
+        $addHeaderVariable("isstud", STUDLY() ? 1 : 0);
         $addHeaderVariable("isforeign_admin", ISFOREIGN_ADMIN() ? 1 : 0);
         $addHeaderVariable("WEBONLY", $login_status & CHECKLOGIN_WEBONLY ? 1 : 0);
         $addHeaderVariable("isactive", $login_user->IsActive() ? 1 : 0);
