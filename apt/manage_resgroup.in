@@ -277,7 +277,7 @@ sub DoGroupReserve()
 	}
     }
     else {
-	$brand = Brand->Create("emulab");
+	$brand = $project->Brand();
     }
     if (defined($options{"s"})) {
 	$start = $options{"s"};
