@@ -1,0 +1,153 @@
+# -*- python -*-
+#
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+import sys
+sys.path.append("@prefix@/lib")
+
+import uuid
+import json
+import time
+
+# Testbed DB access lib
+from libdb import *
+
+class WebTask:
+    def __init__(self, task_id):
+        self.autostore = False
+        self.task_id = task_id
+
+        qres = \
+            DBQueryWarn("select * from web_tasks where task_id=%s",
+                        (task_id,), asDict=True);
+        
+        if not len(qres):
+            raise RuntimeError("WebTask %s unknown!" % (task_id))
+
+        self.dbrow = qres[0]
+        self.data  = {}
+        if self.dbrow["task_data"] and self.dbrow["task_data"] != "":
+            try:
+                self.data = json.loads(self.dbrow["task_data"])
+            except Exception as exc:
+                print(str(exc))
+                return -1
+            pass
+        pass
+
+    #
+    # Access the json data by key name
+    #
+    def __getitem__(self, name):
+        if name not in self.data:
+            raise AttributeError("unknown property '%s'" % (name))
+        return self.data[name]
+
+    def __setitem__(self, name, value):
+        self.data[name] = value
+        if self.autostore:
+            self.Store()
+            pass
+        return value
+
+    #
+    # Access DB row data.
+    #
+    def __getattr__(self, name):
+        if name not in self.dbrow:
+            raise AttributeError("unknown method '%s'" % (name))
+        return self.dbrow[name]
+
+    def __repr__(self):
+        return "<WebTask: " + self.task_id + ">"
+
+    @classmethod
+    def Lookup(cls, task_id):
+        return cls(task_id)
+
+    @classmethod
+    def CreateAnonymous(cls):
+        task_id = uuid.uuid4().hex
+
+        DBQueryWarn("insert into web_tasks set " +
+		    "  task_id=%s, created=now(), object_uuid=%s",
+                    (task_id, task_id))
+        return cls(task_id)
+
+    def Delete(self):
+        DBQueryWarn("delete from web_tasks where task_id=%s", (self.task_id,))
+        return 0
+
+    def Reset(self):
+        DBQueryWarn("update web_tasks set " +
+	            "  exited=null,process_id=0,exitcode=0,task_data='' " +
+                    "where task_id=%s", (self.task_id,))
+        return self.Refresh()
+
+    def Store(self):
+        try: 
+            jsonstr = json.dumps(self.data)
+        except Exception as exc:
+            print(str(exc))
+            return -1
+
+        DBQueryWarn("update web_tasks set modified=now(),task_data=%s " +
+		    "where task_id=%s", (jsonstr, self.task_id))
+        
+        return 0
+
+    def Refresh(self):
+        qres = \
+            DBQueryWarn("select * from web_tasks where task_id=%s",
+                        (self.task_id,), asDict=True);
+        
+        if not len(qres):
+            raise RuntimeError("WebTask %s unknown!" % (self.task_id))
+
+        self.dbrow = qres[0]
+        print(str(self.dbrow))
+        self.data  = {}
+        if self.dbrow["task_data"]:
+            self.data = json.loads(self.dbrow["task_data"])
+            pass
+        return 0
+
+    def Exited(self, exitcode):
+        DBQueryWarn("update web_tasks set exited=now(),exitcode=%s " +
+		    "where task_id=%s", (exitcode, self.task_id))
+        
+        self.dbrow["exitcode"] = exitcode
+        self.dbrow["exited"]   = time.time()
+        return 0
+
+    def HasExited(self):
+        if self.exited:
+            return 1
+        return 0
+
+    def AutoStore(self, flag):
+        self.autostore = flag
+        pass
+        
+    pass
+

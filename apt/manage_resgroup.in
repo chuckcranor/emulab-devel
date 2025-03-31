@@ -277,7 +277,7 @@ sub DoGroupReserve()
 	}
     }
     else {
-	$brand = Brand->Create("emulab");
+	$brand = $project->Brand();
     }
     if (defined($options{"s"})) {
 	$start = $options{"s"};
@@ -298,6 +298,9 @@ sub DoGroupReserve()
 	}
     }
     if (defined($options{"N"})) {
+	if (! -r $options{"N"}) {
+	    fatal("Cannot read the reason file: " . $options{"N"})
+	}
 	$reason = emutil::ReadFile($options{"N"});
 	chomp($reason);
 
