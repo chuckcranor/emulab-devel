@@ -106,11 +106,12 @@ class SSHWrapper(object):
         return self.get_sftp().open(remote_path, mode)
 
     def read_remote_file(self, remote_path):
-        rfile = self.open_remote_file(remote_path, "r")
-        rfile.prefetch()
-        res = rfile.readlines()
-        rfile.close()
-        return res
+        # XXX: Reworked to use self.exec() due to compat issues.
+        #rfile = self.open_remote_file(remote_path, "r")
+        #rfile.prefetch()
+        #res = rfile.readlines()
+        #rfile.close()
+        return self.exec(f"cat {remote_path}")[0]
 
     def write_remote_file(self, remote_path, lines, overwrite = False):
         exists = False
@@ -128,13 +129,15 @@ class SSHWrapper(object):
     def grep_remote_file(self, remote_path, rexp, timeout = 0):
         res = []
         stoptime = time.time() + timeout
-        rfile = self.open_remote_file(remote_path, "r")
-        rfile.prefetch()
+        # XXX: Reworked to use self.read_remote_file() due to incompat.
+        #rfile = self.open_remote_file(remote_path, "r")
+        #rfile.prefetch()
         while not res:
-            if rfile.tell() < rfile.stat().st_size:
-                for ln in rfile.readlines():
-                    if re.search(rexp, ln):
-                        res.append(ln)
+            #if rfile.tell() < rfile.stat().st_size:
+            #    for ln in rfile.readlines():
+            for ln in self.read_remote_file(remote_path):
+                if re.search(rexp, ln):
+                    res.append(ln)
             if timeout >= 0 and time.time() >= stoptime:
                 break
             elif not res:
