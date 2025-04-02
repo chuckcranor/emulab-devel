@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019-2024 University of Utah and the Flux Group.
+# Copyright (c) 2019-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -2599,7 +2599,7 @@ sub enablePortTrunking2($$$$) {
 
 	# If the access vlan was vlan1, we need to enable the port
 	if (!$self->{PORTS}{$iface}->{"enabled"} &&
-	    $self->enablePort(1, $iface)) {
+	    !$self->enablePort(1, $iface)) {
 	    warn "$id: ERROR: failed to enable $iface.\n";
 	    return 0;
 	}
