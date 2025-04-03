@@ -232,6 +232,7 @@ class BenetelConfig(object):
                     if not val in av:
                         raise ValueError(f"BenetelConfig: value '{val}' provided for setting '{k}' is not in the allowed set: {av}")
 
+
 class BenetelWrapper(object):
     DEF_SSH_USER = "root"
     DEF_RADIO_ONLINE_TIMEOUT = 300
@@ -250,35 +251,28 @@ class BenetelWrapper(object):
 
     SETTINGS_HANDLERS = {}
 
-    @classmethod
-    def init_settings_handlers(cls):
-        for setting, fname in cls.SINGLE_FILE_SETTINGS.items():
-            cls.SETTINGS_HANDLERS[setting] = {
-                'get': lambda x: cls.get_single_file_setting(x, fname),
-                'set': lambda x,y: cls.set_single_file_setting(x, fname, y)
-            }
-
-        for setting in cls.RADIO_SETUP_SCRIPT_SETTINGS:
-            cls.SETTINGS_HANDLERS[setting] = {
-                'get': lambda x: cls.get_radio_setup_script_setting(x, setting),
-                'set': lambda x,y: cls.set_radio_setup_script_setting(x, setting, y)
-            }
-
-        for setting in cls.RADIO_CONFIG_FILE_SETTINGS:
-            cls.SETTINGS_HANDLERS[setting] = {
-                'get': lambda x: cls.get_radio_config_file_setting(x, setting),
-                'set': lambda x,y: cls.set_radio_config_file_setting(x, setting, y)
-            }
-    
     def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None):
-        if not BenetelWrapper.SETTINGS_HANDLERS:
-            BenetelWrapper.init_settings_handlers()
         self.mgmt_addr = mgmt_addr
         self.username = username
         self.keyfile = keyfile
         self.radio_script_settings = {}
         self.radio_config_settings = {}
+        self.init_settings_handlers()
         self.ssh = SSHWrapper(mgmt_addr, default_user=self.username, default_keyfile=self.keyfile)
+
+    def init_settings_handlers(self):
+        for stg in SINGLE_FILE_SETTINGS.keys():
+            self.SETTINGS_HANDLERS[stg] = {}
+            self.SETTINGS_HANDLERS[stg]['get'] = self.get_single_file_setting
+            # self.SETTINGS_HANDLERS[stg]['set'] = self.set_single_file_setting
+        for stg in RADIO_SETUP_SCRIPT_SETTINGS:
+            self.SETTINGS_HANDLERS[stg] = {}
+            self.SETTINGS_HANDLERS[stg]['get'] = self.get_radio_setup_script_setting
+            # self.SETTINGS_HANDLERS[stg]['set'] = self.set_radio_setup_script_setting
+        for stg in RADIO_CONFIG_FILE_SETTINGS:
+            self.SETTINGS_HANDLERS[stg] = {}
+            self.SETTINGS_HANDLERS[stg]['get'] = self.get_radio_config_file_setting
+            # self.SETTINGS_HANDLERS[stg]['set'] = self.set_radio_config_file_setting
 
     def get_ssh_session(self, password = None):
         if not self.ssh.is_connected():
@@ -293,7 +287,8 @@ class BenetelWrapper(object):
     def get_firmware_version(self):
         return self.get_ssh_session().read_remote_file(self.FW_VERSION_FILE)[0].strip()
 
-    def get_single_file_setting(self, rfile):
+    def get_single_file_setting(self, setting):
+        rfile = self.SINGLE_FILE_SETTINGS[setting]
         return self.get_ssh_session().read_remote_file(rfile)[0].strip()
 
     def get_radio_setup_script_setting(self, setting, force_read = False):
@@ -303,10 +298,10 @@ class BenetelWrapper(object):
                 m = re.search(r'-w C([0-9A-Fa-f]+) -x 0x([0-9A-Fa-f]+)', ln)
                 if m:
                     settings[m[1]] = m[2]
-            self.radio_script_settings['fh_cplane_vlan'] = settings['331']
-            self.radio_script_settings['fh_uplane_vlan'] = settings['318']
-            self.radio_script_settings['du_cplane_mac'] = settings['31A'] + settings['319']
-            self.radio_script_settings['du_uplane_mac'] = settings['316'] + settings['315']
+            self.radio_script_settings['fh_cplane_vlan'] = settings['0331']
+            self.radio_script_settings['fh_uplane_vlan'] = settings['0318']
+            self.radio_script_settings['du_cplane_mac'] = settings['031A'] + settings['0319']
+            self.radio_script_settings['du_uplane_mac'] = settings['0316'] + settings['0315']
         return self.radio_script_settings[setting]
 
     def get_radio_config_file_setting(self, setting, force_read = False):
@@ -316,10 +311,13 @@ class BenetelWrapper(object):
                     m = re.search(r'^\s*' + stg + r'\s*=\s*(\w+)', ln)
                     if m:
                         self.radio_config_settings[stg] = m[1]
-        return self.radio_config_setting[setting]
+        return self.radio_config_settings[setting]
+
+    def get_device_setting(self, setting):
+        return self.SETTINGS_HANDLERS[setting]['get'](setting)
     
     def get_all_device_settings(self):
-        return BenetelConfig({setting: handlers['get'](self) for setting, handlers in self.SETTINGS_HANDLERS.items()})
+        return BenetelConfig({setting: handlers['get'](setting) for setting, handlers in self.SETTINGS_HANDLERS.items()})
 
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
         self.get_ssh_session().grep_remote_file(self.RADIO_BOOT_LOG, self.RADIO_ONLINE_STATUS_PATTERN, timeout = timeout)
