@@ -178,7 +178,7 @@ class BenetelConfig(object):
             'def': '000000000000',
             'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
         },
-        'MIMO_mode': {
+        'mimo_mode': {
             'def': '2_4',
             'allowed_values': ('1_3','2_4','1_2_3_4_4x2','1_2_3_4_4x4')
         },
@@ -249,6 +249,7 @@ class BenetelConfig(object):
 
 class BenetelWrapper(object):
     DEF_SSH_USER = "root"
+    DEF_SSH_PASSWD = ""
     DEF_RADIO_ONLINE_TIMEOUT = 300
     FW_VERSION_FILE = "/etc/benetel-rootfs-version"
     RADIO_BOOT_LOG = "/tmp/logs/radio_status"
@@ -264,7 +265,7 @@ class BenetelWrapper(object):
         ('fh_cplane_vlan', 'fh_uplane_vlan', 'du_cplane_mac',
          'du_uplane_mac')
     RADIO_CONFIG_FILE_SETTINGS = \
-        ('mmimo_mode', 'downlink_scaling', 'prach_format',
+        ('mimo_mode', 'downlink_scaling', 'prach_format',
          'compression', 'lf_prach_compression_enable')
 
     SETTINGS_HANDLERS = {}
@@ -299,7 +300,7 @@ class BenetelWrapper(object):
             # self.SETTINGS_HANDLERS[stg]['set'] = \
             #    self.set_radio_config_file_setting
 
-    def get_ssh_session(self, password = None):
+    def get_ssh_session(self, password = DEF_SSH_PASSWD):
         if not self.ssh.is_connected():
             res = self.ssh.connect(password = password)
             if not res:
@@ -325,8 +326,10 @@ class BenetelWrapper(object):
                 m = re.search(r'-w C([0-9A-Fa-f]+) -x 0x([0-9A-Fa-f]+)', ln)
                 if m:
                     settings[m[1]] = m[2]
-            self.radio_script_settings['fh_cplane_vlan'] = settings['0331']
-            self.radio_script_settings['fh_uplane_vlan'] = settings['0318']
+            self.radio_script_settings['fh_cplane_vlan'] = \
+                int(settings['0331'], base=16)
+            self.radio_script_settings['fh_uplane_vlan'] = \
+                int(settings['0318'], base=16)
             self.radio_script_settings['du_cplane_mac'] = \
                 settings['031A'] + settings['0319']
             self.radio_script_settings['du_uplane_mac'] = \
@@ -357,3 +360,7 @@ class BenetelWrapper(object):
                 self.RADIO_BOOT_LOG,
                 self.RADIO_ONLINE_STATUS_PATTERN,
                 timeout = timeout)
+
+if __name__ == "__main__":
+    bw = BenetelWrapper("10.10.0.100")
+    ssh = bw.get_ssh_session()
