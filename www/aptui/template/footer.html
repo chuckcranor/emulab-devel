@@ -8,8 +8,11 @@
              id='elabpower'></a>
     </div>
     <span>Question or comment? Join the
-      <a href='<%- window.HELPFORUM %>'
-         target='_blank'>Help Forum</a></span>
+      <a data-toggle='modal' data-bs-toggle='modal'
+         style='cursor: pointer; '
+	 data-target='#helpforum-modal'
+	 data-bs-target='#helpforum-modal'>
+	Help Forum</a></span>
     <div class='pull-right'>
       <% if (window.PORTAL_NSFNUMBER) { %>
 	<a data-toggle='modal' data-bs-toggle='modal'
@@ -36,6 +39,30 @@
         material are those of the author(s) and do not
         necessarily reflect the views of the National Science
         Foundation.
+        <br><br>
+        <center>
+          <button type='button'
+                  class='btn btn-default btn-sm' 
+                  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'>
+            Close</button>
+        </center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="helpforum-modal" class="modal fade">
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	The <%- window.APTTILE %> help forum is a Google group at
+	<a href='<%- window.HELPFORUM %>'
+           target='_blank'><%- window.HELPFORUM %></a>
+	<br>
+	<br>
+	<b>Please be sure to include your <%- window.APTTILE %> login ID
+	  or project membership so that we can verify that you are a
+	  registered user.</b>
         <br><br>
         <center>
           <button type='button'
