@@ -3402,6 +3402,19 @@ sub EncryptBlocks($$$;$)
 	}
 	if (!$encref->textContent()) {
 	    my $plaintext = substr(TBGenSecretKey(), 0, 12);
+	    my $type = GeniXML::GetText("type", $encref) || "password";
+	    
+	    if ($type eq "password") {
+		$plaintext = substr(TBGenSecretKey(), 0, 12);
+	    }
+	    elsif ($type eq "openzms-token") {
+		$plaintext = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
+		if ($? || !defined($plaintext) || $plaintext eq "") {
+		    $$pmsg = "Could not generate an openzms token";
+		    return -1;
+		}
+		chomp($plaintext);
+	    }
 	    $encref->appendText($plaintext);
 	}
 	push(@encrypt, $encref);
