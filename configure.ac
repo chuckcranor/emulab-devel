@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1576,7 +1576,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
         protogeni/rspec-emulab/0.1/GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
-        apt/GNUmakefile apt/fabric/GNUmakefile \
+        apt/GNUmakefile apt/fabric/GNUmakefile apt/portal-rest/GNUmakefile \
         powder/GNUmakefile powder/sasproxy/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
