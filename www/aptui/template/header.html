@@ -288,6 +288,10 @@
 			 class='dropdown-item'>Download Credentials</a></li>
          	  <li><a href='ssh-keys.php'
 			 class='dropdown-item'>Manage SSH Keys</a></li>
+		  <% if (vars.isadmin || vars.isstud) { %>
+         	    <li><a href='gettoken.php'
+			   class='dropdown-item'>Portal API Token</a></li>
+		  <% } %>
                   <li class='divider'></li>
                 <% } %>
 	      <% } %>

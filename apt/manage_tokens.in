@@ -1,0 +1,318 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use File::Temp qw(tempfile tempdir);
+use Date::Parse;
+use File::Basename;
+use MIME::Base64;
+use JSON;
+use Crypt::JWT qw(decode_jwt encode_jwt);
+use Crypt::PK::RSA;
+use Crypt::OpenSSL::X509;
+
+#
+# Manage JWT tokens for users.
+#
+sub usage()
+{
+    print STDERR "Usage: manage_tokens create [-a] [-s] <user>\n";
+    print STDERR "Usage: manage_tokens decode ...\n";
+    print STDERR "  -a       - Create an admin token\n";
+    print STDERR "  -s       - Short lived token (one week) for debugging\n";
+    exit(-1);
+}
+my $optlist     = "dt:n";
+my $debug       = 0;
+my $impotent    = 0;
+my $role        = "user";
+my $webtask_id;
+my $webtask;
+my $logfile;
+my $JSON;
+
+#
+# The default JWT  payload
+#
+my $JWT_payload = {
+    "sub"   => undef,
+    "name"  => undef,
+    "role"  => undef,
+    "exp"   => undef,
+};
+my $JWT_ALG	= "RS256";
+my $JWT_TYP     = "JWT";
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $EMULAB_CERT = "$TB/etc/emulab.pem";
+my $EMULAB_KEY  = "$TB/etc/emulab.key";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use User;
+use WebTask;
+
+# Protos
+sub DoCreateToken();
+sub DoDecodeToken();
+sub CreateJWTHeader();
+sub CreateJWTPayload(%);
+sub fatal($);
+sub logit($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
+}
+if (@ARGV < 1) {
+    usage();
+}
+
+#
+# We will need this.
+#
+my $emulab_cert = Crypt::OpenSSL::X509->new_from_file($EMULAB_CERT);
+if (!$emulab_cert) {
+    fatal("Could not load $EMULAB_CERT");
+}
+my $emulab_key  = Crypt::PK::RSA->new($EMULAB_KEY);
+if (!$emulab_key) {
+    fatal("Could not load $EMULAB_KEY");
+}
+
+my $action = shift(@ARGV);
+
+if ($action eq "create") {
+    exit(DoCreateToken());
+}
+elsif ($action eq "decode") {
+    exit(DoDecodeToken());
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Create a token for a user. 
+#
+sub DoCreateToken()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_token create [-a] [-s] <user>\n";
+	exit(-1);
+    };
+    my $role = "user";
+    my $shortlived = 0;
+    
+    my %options = ();
+    if (! getopts("as", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"a"})) {
+	$role = "admin";
+    }
+    if (defined($options{"s"})) {
+	$shortlived = 1;
+    }
+    &$usage()
+	if (!@ARGV);
+
+    my $target_uid  = shift(@ARGV);
+    my $target_user = User->Lookup($target_uid);
+    if (!defined($target_user)) {
+	fatal("No such user");
+    }
+    my $payload = CreateJWTPayload("sub"  => $target_user->uuid(),
+				   "name" => $target_user->uid(),
+				   "role" => $role,
+				   "exp"  => ($shortlived ?
+					      time() + (7 * 24 * 3600) :
+					      time() + (60 * 24 * 3600)));
+    if ($debug) {
+	print Dumper($payload);
+    }
+    my $token = eval { encode_jwt('payload' => $payload,
+				  'alg'     => $JWT_ALG,
+				  'key'     => $emulab_key); };
+    if ($@) {
+	fatal("CreateToken: $@");
+    }
+    
+    if (defined($webtask)) {
+	$webtask->result($token);
+	$webtask->Exited(0);
+    }
+    print $token . "\n";    
+    return 0;
+}
+
+#
+# Decode a token. Signature is verified.
+#
+sub DoDecodeToken()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_token decode [-f filename]\n";
+	print STDERR "  Pipe token to stdin when not using the -f option\n";
+	exit(-1);
+    };
+    my $token   = "";
+    my %options = ();
+    if (! getopts("f:", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"f"})) {
+	my $file = $options{"f"};
+	
+	fatal("No such file or file cannot be read")
+	    if (! -e $file);
+	$token = emutil::ReadFile($file);
+	fatal("Not a token")
+	    if (!$token || $token eq "");
+    }
+    else {
+	while (<STDIN>) {
+	    $token .= $_;
+	}
+    }
+    chomp($token);
+    fatal("Not a token")
+	if ($token eq "");
+
+    my ($head, $data) = eval { decode_jwt("token"         => $token,
+					  'accepted_alg'  => $JWT_ALG,
+					  'decode_header' => 1,
+					  'verify_exp'    => 1,
+					  'key'           => $emulab_cert); };
+    if ($@) {
+	fatal("DecodeToken: $@");
+    }
+    if ($debug) {
+	print Dumper($head);
+	print Dumper($data);
+    }
+    if (defined($webtask)) {
+	$webtask->payload($data);
+	$webtask->Exited(0);
+    }
+    print "subject: " . $data->{'sub'} . "\n";
+    print "expires: " . $data->{'exp'} . "\n";
+    print "name: "    . $data->{'name'} . "\n";
+    print "role: "    . $data->{'role'} . "\n" if (exists($data->{'role'}));
+    exit(0)
+}
+
+#
+# Utilities.
+#
+sub CreateJWTPayload(%)
+{
+    my (%args) = @_;
+    my %payload = map { $_ => $JWT_payload->{$_} } keys(%{$JWT_payload});
+
+    foreach my $key (keys(%args)) {
+	$payload{$key} = $args{$key};
+    }
+    return \%payload;
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $now = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print "$now: $msg\n";
+}
