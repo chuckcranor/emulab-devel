@@ -510,6 +510,7 @@ function GET_ANNOUNCEMENTS($user, $update = true)
   $uid = $user->uid();
   $uid_idx = $user->uid_idx();
   $result = array();
+  #error_log("GET_ANNOUNCEMENTS" . ($update ? "(true)" : "(false)"));
 
   #
   # Add an apt_announcement_info entry for any announcements this

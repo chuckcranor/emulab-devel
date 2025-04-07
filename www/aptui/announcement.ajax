@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,7 +63,11 @@ function Do_Announcements()
     global $this_user, $ajax_args;
     $results = array();
 
-    $announcements = GET_ANNOUNCEMENTS($this_user, false);
+    $initial = false;
+    if (array_key_exists("initial", $ajax_args)) {
+        $initial = $ajax_args["initial"];
+    }
+    $announcements = GET_ANNOUNCEMENTS($this_user, $initial);
     if (!count($announcements)) {
         SPITAJAX_RESPONSE($results);
         return;
