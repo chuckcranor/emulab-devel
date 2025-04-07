@@ -3401,7 +3401,7 @@ sub EncryptBlocks($$$;$)
 		if (defined($previous));
 	}
 	if (!$encref->textContent()) {
-	    my $plaintext = substr(TBGenSecretKey(), 0, 12);
+	    my $plaintext;
 	    my $type = GeniXML::GetText("type", $encref) || "password";
 	    
 	    if ($type eq "password") {
