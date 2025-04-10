@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -5228,6 +5228,7 @@ sub SliverWorkAux($)
     if ($isupdate) {
 	$experiment->PreSwap($realuser->emulab_user(),
 			     $Experiment::EXPT_SWAPMOD, EXPTSTATE_ACTIVE());
+	$experiment->SetState(EXPTSTATE_MODIFY_RESWAP);
     }
     else {
 	$experiment->PreSwap($realuser->emulab_user(),
@@ -6191,11 +6192,12 @@ sub SliverWorkAux($)
     if ($isupdate) {
 	$experiment->PostSwap($realuser->emulab_user(),
 			      $Experiment::EXPT_SWAPMOD);
+	$experiment->SetState(EXPTSTATE_ACTIVE());
     }
     else {
-	$experiment->SetState(EXPTSTATE_ACTIVE());
 	$experiment->PostSwap($realuser->emulab_user(),
 			      $Experiment::EXPT_SWAPIN);
+	$experiment->SetState(EXPTSTATE_ACTIVE());
 	
 	$ticket->Redeem()
 	    if (defined($ticket));
@@ -6293,6 +6295,7 @@ sub SliverWorkAux($)
 		print STDERR "Could not restore backup state for $pid,$eid\n";
 	    }
 	}
+	$experiment->SetState(EXPTSTATE_ACTIVE());
 	if (!$v2) {
 	    system("$SNMPIT -t $pid $eid");
 	    if ($?) {

@@ -455,6 +455,15 @@ sub HandleChild($)
 	}
 	#print "$nodeid:$iface: $frequency,$power\n";
 
+	# If the node experiment is in a swapmod, ignore this round.
+	my $experiment = $node->Reservation();
+	if ($experiment) {
+	    if ($experiment->state() eq EXPTSTATE_MODIFY_RESWAP()) {
+		print STDERR "$node experiment is in a swapmod; skipping;\n";
+		next;
+	    }
+	}
+
 	#
 	# Raw data is going to go into a csv file for graphing.
 	# We assume already sorted (by frequency) data.
@@ -548,9 +557,6 @@ sub HandleChild($)
 	# If no RF limit for the interface, its a violation.
 	#
 	if (!defined($limits)) {
-	    # Mark immediately in the CSV file.
-	    $measurement->{"violation"} = 1;
-	    
 	    # Ignore sample first time we see it. 	    
 	    if (exists($prevdata->{$key})) {
 		my $previous = $prevdata->{$key};
@@ -566,6 +572,9 @@ sub HandleChild($)
 
 		# Bump repeat count.
 		$measurement->{'repeatcount'} = $previous->{'repeatcount'} + 1;
+
+		# Mark in the CSV file.
+		$measurement->{"violation"} = 1;
 	    }
 	    # Remember for next time
 	    $nextdata->{$key} = $measurement;
@@ -600,9 +609,6 @@ sub HandleChild($)
 	    }
 	}
 	if (!$inrange) {
-	    # Mark immediately in the CSV file.
-	    $measurement->{"violation"} = 1;
-
 	    # Ignore sample first time we see it.
 	    if (exists($prevdata->{$key})) {
 		my $previous = $prevdata->{$key};
@@ -618,6 +624,9 @@ sub HandleChild($)
 
 		# Bump repeat count.
 		$measurement->{'repeatcount'} = $previous->{'repeatcount'} + 1;
+
+		# Mark in the CSV file.
+		$measurement->{"violation"} = 1;
 	    }
 	    # Remember for next time
 	    $nextdata->{$key} = $measurement;		    
