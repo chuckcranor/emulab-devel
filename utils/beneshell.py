@@ -31,10 +31,20 @@
 import sys
 #import argparse
 import time
+import logging
 import re
 
 import paramiko.client as parcli
 import paramiko.ssh_exception as parexc
+
+def _mk_logger(name, def_lvl = logging.INFO):
+    lgr = logging.getLogger(name)
+    lgr.setLevel(def_lvl)
+    ch = logging.StreamHandler()
+    fmt = logging.Formatter('{asctime}: {name}.{funcName}: [{levelname}]: {message}', style='{')
+    ch.setFormatter(fmt)
+    lgr.addHandler(ch)
+    return lgr
 
 class SSHWrapper(object):
     DEF_USER = "root"
@@ -45,6 +55,8 @@ class SSHWrapper(object):
         self.daddr = device_addr
         self.default_username = default_user
         self.default_keyfile = default_keyfile
+        self._me = self.__class__.__name__
+        self.lgr = _mk_logger(self._me)
         self.pcli = parcli.SSHClient()
         self.pcli.load_system_host_keys()
         self.pcli.set_missing_host_key_policy(parcli.AutoAddPolicy)
@@ -64,16 +76,9 @@ class SSHWrapper(object):
             self.pcli.connect(
                 self.daddr, username=username, password=password,
                 key_filename=keyfile, timeout=timeout, allow_agent=False)
-        except parexc.NoValidConnectionsError as e:
-            print(f"Unable to connect to device: {e}", file=sys.stderr)
-        except parexc.BadHostKeyException as e:
-            print(f"Host key problem encountered: {e}", file=sys.stderr)
-        except parexc.AuthenticationException as e:
-            print(f"Failed to authenticate to device: {e}",
-                  file=sys.stderr)
         except Exception as e:
-            print(f"Error occured when trying to connect: {e}",
-                  file=sys.stderr)
+            self.lgr.info(f"Error occured when trying to connect to {self.daddr}: {e}")
+            raise
         else:
             self.connected = True
         return self.connected
@@ -130,7 +135,7 @@ class SSHWrapper(object):
         except FileNotFoundError:
             exists = False
         if not overwrite and exists:
-            raise RuntimeError("write_remote_file(): file exists, but "
+            raise RuntimeError(f"{self._me}: file exists, but "
                                "`overwrite` was not set to True!")
         #rfile = self.open_remote_file(remote_path, "w")
         #rfile.writelines(lines)
@@ -138,7 +143,7 @@ class SSHWrapper(object):
         res = self.exec(f"cat - > {remote_path}", '\n'.join(lines))
         if res[1]:
             err = res[1][0].strip()
-            raise RuntimeError(f"write_remote_file(): {err}")
+            raise RuntimeError(f"{__name__}: {err}")
 
     def stat_remote_file(self, remote_path):
         """
@@ -148,8 +153,8 @@ class SSHWrapper(object):
         if not res[0] and res[1]:
             err = res[1][0].strip()
             if re.search("No such file", err):
-                raise FileNotFoundError(f"stat_remote_file(): {err}")
-            raise RuntimeError(f"stat_remote_file(): {remote_path}: {err}")
+                raise FileNotFoundError(f"{self._me}: {err}")
+            raise RuntimeError(f"{self._me}: {remote_path}: {err}")
         st = res[0][0].strip().split()
         stat_dict = {
             "fname": st[0],
@@ -251,6 +256,7 @@ class BenetelConfig(object):
     
     def __init__(self, settings = {}):
         self._settings = {}
+        self._me = self.__class__.__name__
         self._check_and_set(settings)
 
     def _check_and_set(self, settings):
@@ -285,9 +291,12 @@ class BenetelConfig(object):
     def __getitem__(self, key):
         return self._settings[key]
 
+    def __repr__(self):
+        return repr(self._settings)
+
     def __setitem__(self, key, value):
         if not key in self.DEFAULT_SETTINGS:
-            raise KeyError(f"key '{key}' is invalid.")
+            raise KeyError(f"{self._me}: key '{key}' is invalid.")
         vchk = self.DEFAULT_SETTINGS[key]
         if 'allowed_ranges' in vchk:
             rfound = False
@@ -298,7 +307,7 @@ class BenetelConfig(object):
                     break
                 if not rfound:
                     raise ValueError(
-                        f"BenetelConfig: value '{value}' provided for "
+                        f"{self._me}: value '{value}' provided for "
                         f"setting '{key}' is outside of allowed range(s)")
         if 'allowed_patterns' in vchk:
             pfound = False
@@ -308,14 +317,14 @@ class BenetelConfig(object):
                     break
                 if not pfound:
                     raise ValueError(
-                        f"BenetelConfig: value '{value}' provided for "
+                        f"{self._me}: value '{value}' provided for "
                         f"setting '{key}' does not match allowed pattern(s)")
         if 'allowed_values' in vchk:
             av = vchk['allowed_values']
             value = type(av[0])(value)
             if not value in av:
                 raise ValueError(
-                    f"BenetelConfig: value '{value}' provided for "
+                    f"{self._me}: value '{value}' provided for "
                     f"setting '{key}' is not in the allowed set: {av}")
         self._settings[key] = value
 
@@ -343,13 +352,15 @@ class BenetelWrapper(object):
          'compression', 'lf_prach_compression_enable')
 
     def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None):
+        self._me = self.__class__.__name__
+        self.lgr = _mk_logger(self._me)
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile)
 
     def get_ssh_session(self, password = DEF_SSH_PASSWD):
         if not self._ssh.is_connected():
             if not self._ssh.connect(password = password):
-                raise RuntimeError("Could not connect to Benetel device!")
+                raise RuntimeError(f"{self._me}: Could not connect to Benetel device!")
         return self._ssh
 
     def is_ssh_connected(self):
@@ -373,7 +384,7 @@ class BenetelWrapper(object):
     def _push_single_file_setting(self, setting, value):
         rfile = self.SINGLE_FILE_SETTINGS_MAP[setting]
         outlines = (str(value),)
-        self.get_ssh_session().write_remote_file(rfile, outlines)
+        self.get_ssh_session().write_remote_file(rfile, outlines, overwrite=True)
 
     def _fetch_radio_setup_script_settings(self):
         settings = {}
@@ -391,32 +402,33 @@ class BenetelWrapper(object):
 
     def _push_radio_setup_script_settings(self, settings):
         outlines = []
-        prepat = r'-w \1 -x '
+        prepat = r'-w \1 -x 0x'
         subst = {
-            'C0331': prepat + '0x' +
+            'C0331': prepat +
             format(settings['fh_cplane_vlan'], 'X'),
-            'C0318': prepat + '0x' +
+            'C0318': prepat +
             format(settings['fh_uplane_vlan'], 'X'),
             'C031A': prepat +
-            settings['du_cplane_mac'][0:2].upper(),
+            settings['du_cplane_mac'][0:4].upper(),
             'C0319': prepat +
-            settings['du_cplane_mac'][2:].upper(),
+            settings['du_cplane_mac'][4:].upper(),
             'C0316': prepat +
-            settings['du_uplane_mac'][0:2].upper(),
+            settings['du_uplane_mac'][0:4].upper(),
             'C0315': prepat +
-            settings['du_uplane_mac'][2:].upper(),
+            settings['du_uplane_mac'][4:].upper(),
         }
         for ln in self.get_ssh_session().\
                 read_remote_file(self.RADIO_SETUP_SCRIPT):
-            ln = ln.strip()
+            ln = ln.rstrip()
             m = re.search(self.RADIO_SETUP_SCRIPT_PATTERN, ln)
             if m and m[1] in subst:
-                outlines.append(
-                    re.sub(self.RADIO_SETUP_SCRIPT_PATTERN, subst[m[1]], ln))
+                res = re.sub(self.RADIO_SETUP_SCRIPT_PATTERN, subst[m[1]], ln)
+                outlines.append(res)
             else:
                 outlines.append(ln)
+        outlines.append("") # Add final newline...
         self.get_ssh_session().\
-            write_remote_file(self.RADIO_SETUP_SCRIPT, outlines)
+            write_remote_file(self.RADIO_SETUP_SCRIPT, outlines, overwrite=True)
 
     def _fetch_radio_config_file_settings(self):
         settings = {}
@@ -431,7 +443,7 @@ class BenetelWrapper(object):
         outlines = []
         for ln in self.get_ssh_session().\
                 read_remote_file(self.RADIO_CONFIG_FILE):
-            ln = ln.strip()
+            ln = ln.rstrip()
             m = re.search(self.RADIO_CONFIG_FILE_PATTERN, ln)
             if m and m[1] in self.RADIO_CONFIG_FILE_SETTINGS:
                 outlines.append(
@@ -439,8 +451,9 @@ class BenetelWrapper(object):
                            r'\1=' + str(settings[m[1]]), ln))
             else:
                 outlines.append(ln)
+        outlines.append("") # Add final newline since this is a script...
         self.get_ssh_session().\
-            write_remote_file(self.RADIO_CONFIG_FILE, outlines)
+            write_remote_file(self.RADIO_CONFIG_FILE, outlines, overwrite=True)
 
     def fetch_settings(self):
         settings = BenetelConfig()
@@ -452,7 +465,7 @@ class BenetelWrapper(object):
 
     def push_settings(self, settings):
         if not type(settings) == BenetelConfig:
-            raise ValueError(f"push_settings(): 'settings' argument must be a BenetelConfig object!")
+            raise ValueError(f"{self._me}: 'settings' argument must be a BenetelConfig object!")
         for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
             self._push_single_file_setting(stg, settings[stg])
         self._push_radio_setup_script_settings(settings)
@@ -460,5 +473,5 @@ class BenetelWrapper(object):
 
 if __name__ == "__main__":
     from getpass import getpass
-    bw = BenetelWrapper("eldritch.flux.utah.edu", "kwebb")
-    ssh = bw.get_ssh_session(getpass())
+    bw = BenetelWrapper("10.10.0.100")
+    ssh = bw.get_ssh_session()
