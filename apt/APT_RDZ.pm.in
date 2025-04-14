@@ -190,7 +190,8 @@ sub initRDZstate($$)
 		$$perrmsg = "RDZ instance is not an RDZ in RDZ";
 		return -1;
 	    }
-	    if ($parent_instance->status() ne "ready") {
+	    if ($parent_instance->status() ne "provisioned" &&
+		$parent_instance->status() ne "ready") {
 		$$perrmsg = "RDZ instance is not yet ready to accept ".
 		    "your request. Please try again in a few minutes.";
 		return 1;
