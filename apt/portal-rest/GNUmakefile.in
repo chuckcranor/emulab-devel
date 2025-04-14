@@ -35,7 +35,7 @@ INSTALL_RESTDIR = $(TBROOT)/portal-rest
 
 FILES		= config.py database.py __init__.py dependencies.py main.py
 MODELFILE       = api/models.py
-ROUTERS         = __init__.py experiments.py resgroups.py
+ROUTERS         = __init__.py experiments.py resgroups.py profiles.py
 
 #
 # Force dependencies on the scripts so that they will be rerun through

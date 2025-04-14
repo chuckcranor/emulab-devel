@@ -873,6 +873,18 @@ class AptProfiles(Base):
         Index('profileid_version', 'profileid', 'version')
     )
 
+    versions: Mapped[List["AptProfileVersions"]] = relationship(
+        "AptProfileVersions",
+        primaryjoin="AptProfiles.profileid==foreign(AptProfileVersions.profileid)",
+        viewonly=True)
+
+    current: Mapped["AptProfileVersions"] = relationship(
+        "AptProfileVersions",
+        primaryjoin=\
+        "and_(AptProfiles.profileid==foreign(AptProfileVersions.profileid), "+
+        "     AptProfiles.version==foreign(AptProfileVersions.version))",
+        viewonly=True)
+
     name: Mapped[str] = mapped_column(String(64), server_default=text("''"))
     profileid: Mapped[int] = mapped_column(INTEGER(10), primary_key=True, server_default=text('0'))
     version: Mapped[int] = mapped_column(INTEGER(8), server_default=text('0'))

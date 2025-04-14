@@ -25,7 +25,7 @@ from . import config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-engine = create_engine(config.DATABASE_URL, echo=False)
+engine = create_engine(config.DATABASE_URL, echo=False, pool_recycle=3600)
 SessionLocal = sessionmaker(autoflush=True, bind=engine)
 
 def get_DB():

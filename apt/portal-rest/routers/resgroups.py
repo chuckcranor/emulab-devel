@@ -110,7 +110,6 @@ def get_resgroups(
         current_user: Annotated[str, Depends(get_current_user)],
         resgroup_id: UUID = None,
         DB: Session = Depends(get_DB)) -> ResGroupList:
-    LOG.info("get_resgroups: current_user: %r", current_user)
     LOG.info("get_resgroups: args: %r", resgroup_id)
     result = []
     clause = "";
@@ -153,7 +152,6 @@ def create_resgroup(
         resgroup: ResGroup,
         response: Response,
         DB: Session = Depends(get_DB)) -> Union[ResGroup, ResGroupError]:
-    LOG.info("delete_resgroups: current_user: %r", current_user)
     LOG.info("create_resgroup: args: %r", resgroup)
     try:
         group = AccessCheck.ProjectGroup(resgroup.project, resgroup.group)
@@ -333,7 +331,6 @@ def update_resgroup(
         resgroup: ResGroup,
         resgroup_access = Depends(get_resgroup_access),
         DB: Session = Depends(get_DB)) -> ResGroup:
-    LOG.info("update_resgroup: current_user: %r", current_user)
     LOG.info("update_resgroup: args: %r, %r", resgroup_id, resgroup)
 
     if not resgroup_access.AccessCheck(
@@ -351,7 +348,6 @@ def delete_resgroup(
         resgroup_id: UUID,
         resgroup_access = Depends(get_resgroup_access),
         DB: Session = Depends(get_DB)):
-    LOG.info("delete_resgroup: current_user: %r", current_user)
     LOG.info("delete_resgroup: args: %r", resgroup_id)
     
     if not resgroup_access.AccessCheck(

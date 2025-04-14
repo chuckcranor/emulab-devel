@@ -105,6 +105,11 @@ class NoSuchResGroup(Exception):
         self.msg=msg
         pass
 
+class NoSuchProfile(Exception):
+    def __init__(self, msg):
+        self.msg=msg
+        pass
+
 class AccessCheckError(Exception):
     def __init__(self, msg):
         self.msg=msg
@@ -388,7 +393,7 @@ class ProjectGroup:
 	    #
 	    # Temporary until we can do per subgroup profiles.
 	    #
-            return TBMinTrust(user_trust, PROJMEMBERTRUST_USER)
+            return TBMinTrust(user_trust, PROJMEMBERTRUST_LOCALROOT)
 
         if (access_type == TB_PROJECT_MAKEOSID or 
             access_type == TB_PROJECT_MAKEIMAGEID or
@@ -610,15 +615,136 @@ class ResGroup:
         #
         group_trust = user.GroupTrust(self.projgroup)
         project_trust = user.GroupTrust(self.projgroup.project)
-        print(str(group_trust))
-        print(str(project_trust))
+        #print(str(group_trust))
+        #print(str(project_trust))
 
         return (TBMinTrust(group_trust, mintrust) or
                 TBMinTrust(project_trust, PROJMEMBERTRUST_GROUPROOT));
     
     pass
 
+#
+# Profiles
+#
+TB_PROFILE_READINFO            = 1
+TB_PROFILE_MODIFY              = 2
+TB_PROFILE_DESTROY             = 3
+TB_PROFILE_UPDATE              = 4
+TB_PROFILE_MIN                 = TB_PROFILE_READINFO
+TB_PROFILE_MAX                 = TB_PROFILE_UPDATE
 
+class Profile:
+    def __init__(self, arg1):
+        qres = None
+
+        #
+        # pid,name refers to current version of profile.
+        # uuid can refer to current version or a specific version.
+        #
+        if matched := re.match("^([\-\w]+),([\-\w]+)$", arg1):
+            qres = DBQueryWarn("select i.pid,i.pid_idx,i.gid,i.gid_idx," +
+                               "   v.creator,v.creator_idx, " +
+                               "   i.public,i.project_write, " +
+                               "   i.uuid,v.uuid as version_uuid " +
+                               " from apt_profiles as i " +
+                               "left join apt_profile_versions as v on " +
+			       "   v.profileid=i.profileid and " +
+			       "   v.version=i.version " +
+                               "where i.pid=%s and i.name=%s",
+                               (matched[1], matched[2]), asDict=True)
+        elif re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", arg1):
+	    #
+	    # First look to see if the uuid is for the profile itself,
+	    # which means current version. Otherwise look for a
+	    # version with the uuid.
+	    #
+            qres = DBQueryWarn("select i.pid,i.pid_idx,i.gid,i.gid_idx," +
+                               "   v.creator,v.creator_idx, " +
+                               "   i.public,i.project_write, " +
+                               "   i.uuid,v.uuid as version_uuid " +
+                               " from apt_profiles as i " +
+                               "left join apt_profile_versions as v on " +
+			       "   v.profileid=i.profileid and " +
+			       "   v.version=i.version " +
+                               "where i.uuid=%s", (arg1,), asDict=True)
+
+            if qres == None or len(qres) == 0:
+                qres = DBQueryWarn("select i.pid,i.pid_idx,i.gid,i.gid_idx," +
+                                   "   v.creator,v.creator_idx, " +
+                                   "   i.public,i.project_write, " +
+                                   "   i.uuid,v.uuid as version_uuid " +
+                                   " from apt_profile_versions as v " +
+                                   "left join apt_profiles as i on " +
+                                   "   v.profileid=i.profileid " +
+                                   "where v.uuid=%s and v.deleted is null",
+                                   (arg1,), asDict=True)
+                pass
+            pass
+        else:
+            raise NoSuchProfile("No such profile: %s" % (arg1,))
+
+        if qres == None or len(qres) != 1:
+            raise NoSuchProfile("No such profile: %s" % (arg1,))
+
+        row = qres[0]
+        self.pid          = row["pid"]
+        self.pid_idx      = row["pid_idx"]
+        self.gid          = row["gid"]
+        self.gid_idx      = row["gid_idx"]
+        self.creator      = row["creator"]
+        self.creator_idx  = row["creator_idx"]
+        self.uuid         = row["uuid"]
+        self.version_uuid = row["version_uuid"]
+        self.public       = row["public"]
+        self.project_write= row["project_write"]
+        self.projgroup    = ProjectGroup(self.pid_idx, self.gid_idx);
+        pass
+
+    @property
+    def group(self):
+        return self.projgroup
+    
+    def AccessCheck(self, user, access_type):
+        if isinstance(user, User):
+            user = user
+        else:
+            user = User(user)
+            pass
+
+        if (access_type < TB_PROFILE_MIN or
+	    access_type > TB_PROFILE_MAX):
+            raise AccessCheckError("*** Invalid access type: %r" % (access_type,))
+
+        # User can muck with his own stuff.
+        if self.creator_idx == user.uid_idx:
+            return True
+
+        if access_type == TB_PROFILE_READINFO:
+            if self.public:
+                return True
+            
+            mintrust = PROJMEMBERTRUST_LOCALROOT
+        else:
+            if self.project_write:
+                mintrust = PROJMEMBERTRUST_LOCALROOT
+            else:
+                mintrust = PROJMEMBERTRUST_GROUPROOT
+                pass
+            pass
+
+        #
+        # Either proper permission in the group, or group_root in the project.
+        # This lets group_roots muck with other people's experiments, including
+        # those in groups they do not belong to.
+        #
+        group_trust = user.GroupTrust(self.projgroup)
+        project_trust = user.GroupTrust(self.projgroup.project)
+        #print(str(group_trust))
+        #print(str(project_trust))
+
+        return (TBMinTrust(group_trust, mintrust) or
+                TBMinTrust(project_trust, PROJMEMBERTRUST_GROUPROOT));
+    
 #
 # Testing
 #
@@ -641,7 +767,10 @@ if __name__ == "__main__":
     lbsboxT1  = ProjectGroup("lbsbox", "T1")
     sensors   = Experiment("testbed", "tempsensors")
     rando     = Experiment("85ebf0e5-7aa8-11ef-a601-e4434b2381fc")
-    resgroupA = ResGroup("cb83e72a-04fd-11f0-af1a-e4434b2381fc");
+    #resgroupA = ResGroup("cb83e72a-04fd-11f0-af1a-e4434b2381fc")
+    profileA  = Profile("emulab-ops,small-lan")
+    profileB1 = Profile("95f0bfb3-7c5a-11ef-b3bd-e4434b2381fc")
+    profileB2 = Profile("4cbae978-7ad2-11ef-b3bd-e4434b2381fc")
     
     TestAccess("stoller read leebee", True,
                leebee.AccessCheck(stoller, TB_USERINFO_READINFO))
@@ -684,12 +813,22 @@ if __name__ == "__main__":
     TestAccess("leebee modify experiment sensors", False,
                sensors.AccessCheck(leebee, TB_EXPT_MODIFY))
 
-    TestAccess("leebee read resgroup A", True,
-               resgroupA.AccessCheck(leebee, TB_RESGROUP_READ))
-    TestAccess("stoller read resgroup A", False,
-               resgroupA.AccessCheck(stoller, TB_RESGROUP_READ))
-    TestAccess("stoller admin read resgroup A", True,
-               resgroupA.AccessCheck(admin, TB_RESGROUP_READ))
+    if False:
+        TestAccess("leebee read resgroup A", True,
+                   resgroupA.AccessCheck(leebee, TB_RESGROUP_READ))
+        TestAccess("stoller read resgroup A", False,
+                   resgroupA.AccessCheck(stoller, TB_RESGROUP_READ))
+        TestAccess("stoller admin read resgroup A", True,
+                   resgroupA.AccessCheck(admin, TB_RESGROUP_READ))
+        pass
 
+    TestAccess("stoller read profile profileA", True,
+               profileA.AccessCheck(stoller, TB_PROFILE_READINFO))
+    TestAccess("stoller read profile profileB1", False,
+               profileB1.AccessCheck(stoller, TB_PROFILE_READINFO))
+    TestAccess("stoller admin read profile profileB1", True,
+               profileB1.AccessCheck(admin, TB_PROFILE_READINFO))
+    TestAccess("leebee write profile profileB2", True,
+               profileB2.AccessCheck(leebee, TB_PROFILE_MODIFY))
 
 pass

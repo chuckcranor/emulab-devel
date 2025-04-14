@@ -33,7 +33,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import experiments
 from .routers import resgroups
-from .dependencies import get_token_header, PortalException, get_current_user
+from .routers import profiles
+from .dependencies import PortalException, get_current_user
 from .api.models import Error
 
 origins = [
@@ -59,7 +60,7 @@ def portal_exception_handler(request: Request, exc: PortalException):
 async def validation_exception_handler(request, exc):
     return JSONResponse(
         status_code=400,
-        content=Error(error = str(exc), code = exc.code).model_dump()
+        content=Error(error = str(exc), code = 400).model_dump()
     )
 
 @app.get("/")
@@ -68,3 +69,4 @@ async def root():
 
 app.include_router(experiments.router)
 app.include_router(resgroups.router)
+app.include_router(profiles.router)

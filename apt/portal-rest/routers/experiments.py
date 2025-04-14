@@ -36,7 +36,7 @@ import json
 from enum import Enum
 
 from typing import Annotated, Text, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AnyUrl
 from uuid import UUID
 from datetime import datetime, time, timedelta
 
@@ -51,7 +51,7 @@ from ..database import get_DB
 from ..dependencies import get_current_user, TBDatetimeGMT, SUEXEC
 from ..dependencies import PortalException, PortalValidate, HandleShellError
 from ..api.models import Error
-from ..api.models import Experiment, ExperimentList, ManifestArray, ExperimentID
+from ..api.models import Experiment, ExperimentList, ManifestArray
 from ..api.models import ExperimentModify, ExperimentCreate
 from ..api.models import AggregateStatus
 from ..api.models import AggregateNode
@@ -113,7 +113,7 @@ def check_experiment_id(experiment_id):
                            (match[1], match[2]))
         if qres == None or len(qres) != 1:
             raise PortalException(
-                status.HTTP_302_NOTFOUND, "No such experiment")
+                status.HTTP_404_NOTFOUND, "No such experiment")
         row = qres[0]
         return row[0]
 
@@ -592,6 +592,12 @@ def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
             #url = "https://",
             aggregates = aggregate_list,
         )
+        if instance.repourl:
+            exp.repository_url = AnyUrl(instance.repourl)
+            exp.repository_refspec = instance.reporef
+            exp.repository_hash = instance.repohash
+            pass
+            
         return exp
     pass
 

@@ -61,6 +61,14 @@ def get_token_header(x_api_token: Annotated[str, Header()]):
     return x_api_token
 
 #
+# Check for elaborate header
+#
+def get_elaborate_header(x_api_elaborate: Annotated[str, Header()] = None):
+    if not x_api_elaborate or x_api_elaborate == "":
+        return False
+    return True
+
+#
 # Convert the api_token to a user access object
 #
 def get_current_user(x_api_token: Annotated[str, Header()]):
@@ -71,12 +79,13 @@ def get_current_user(x_api_token: Annotated[str, Header()]):
     except Exception as exc:
         print(str(exc))
         raise HTTPException(status_code=400, detail="X-API-Token header invalid")
-    LOG.info("Current user: %r", claims)
+    LOG.info("Current user claims: %r", claims)
     role = "user"
     if "role" in claims and claims["role"] == "admin":
         role = "admin"
         pass
     user = AccessCheck.User(claims["sub"], role=role)
+    #LOG.info("Current user: %r", user)
     return user
 
 #
