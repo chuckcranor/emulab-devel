@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # This script manages Benetel O-RU devices. It does not (and should
@@ -10,17 +10,17 @@
 # * Configuration management
 #     - Reset all managed configuration values to defaults
 #     - Update specific configuration settings
-#     - Get all current configuration settings
-#     - Get specific configuration settings
+#     - Get (all) current configuration settings
 #
 # * Device status
 #     - Check device up/down status (ping)
-#     - Check initialization status
-#     - Wait for device initialization to complete
+#     - Check radio initialization status
+#     - Wait for radio initialization to complete
+#     - Get firmware version
 #
 # Note: Power control and reboot are handled by the standard testbed
 #       `node_reboot` and `power` scripts. Modules specifically for
-#       handling Benetel RUs are present in these scripts. They use
+#       handling Benetel RUs should be present in these scripts. They use
 #       this script to check device status and wait for initialization
 #       to complete. Reboot should NEVER be run directly on the device
 #       via remote shell. Doing so risks damage if a corresponding DU
@@ -29,13 +29,16 @@
 #
 
 import sys
-#import argparse
 import time
 import logging
 import re
+import json
+import subprocess
+from argparse import ArgumentParser
+from getpass import getpass
+from paramiko.client import SSHClient, AutoAddPolicy
 
-import paramiko.client as parcli
-import paramiko.ssh_exception as parexc
+### Global utility functions
 
 def _mk_logger(name, def_lvl = logging.INFO):
     lgr = logging.getLogger(name)
@@ -46,6 +49,15 @@ def _mk_logger(name, def_lvl = logging.INFO):
     lgr.addHandler(ch)
     return lgr
 
+def _ping(host, count=1):
+    arg = "-n" if sys.platform.lower() in ('windows', 'cygwin') else "-c"
+    cmd = ['ping', arg, str(count), host]
+    return subprocess.run(cmd, capture_output=True).returncode
+
+##############################################################################
+#
+# SSHWrapper class definition
+#
 class SSHWrapper(object):
     DEF_USER = "root"
     DEF_TIMEOUT = 30 # 30 seconds
@@ -57,9 +69,9 @@ class SSHWrapper(object):
         self.default_keyfile = default_keyfile
         self._me = self.__class__.__name__
         self.lgr = _mk_logger(self._me)
-        self.pcli = parcli.SSHClient()
+        self.pcli = SSHClient()
         self.pcli.load_system_host_keys()
-        self.pcli.set_missing_host_key_policy(parcli.AutoAddPolicy)
+        self.pcli.set_missing_host_key_policy(AutoAddPolicy)
         self.connected = False
         self.sftp = None
 
@@ -71,7 +83,6 @@ class SSHWrapper(object):
             username = self.default_username
         if not keyfile:
             keyfile = self.default_keyfile
-            
         try:
             self.pcli.connect(
                 self.daddr, username=username, password=password,
@@ -122,6 +133,7 @@ class SSHWrapper(object):
         #rfile.prefetch()
         #res = rfile.readlines()
         #rfile.close()
+        self.stat_remote_file(remote_path)
         return self.exec(f"cat {remote_path}")[0]
 
     def write_remote_file(self, remote_path, lines, overwrite = False):
@@ -199,6 +211,10 @@ class SSHWrapper(object):
         #rfile.close()
         return res
 
+##############################################################################
+#
+# BenetelConfig class definition
+#
 class BenetelConfig(object):
     DEFAULT_SETTINGS = {
         'center_frequency': {
@@ -328,11 +344,19 @@ class BenetelConfig(object):
                     f"setting '{key}' is not in the allowed set: {av}")
         self._settings[key] = value
 
-
+##############################################################################
+#
+# BenetelWrapper class definition
+#
 class BenetelWrapper(object):
     DEF_SSH_USER = "root"
     DEF_SSH_PASSWD = ""
+    DEF_BOOT_TIMEOUT = 120
+    DEF_SHUTDOWN_TIME = 30
     DEF_RADIO_ONLINE_TIMEOUT = 300
+    DEF_PING_TIMEOUT = 5
+    WAIT_PING_SLEEP = 1
+    FW_VERSION_UNKNOWN = "*UNKNOWN*"
     FW_VERSION_FILE = "/etc/benetel-rootfs-version"
     RADIO_BOOT_LOG = "/tmp/logs/radio_status"
     RADIO_ONLINE_STATUS_PATTERN = r'^[INFO] Radio bringup complete'
@@ -354,24 +378,53 @@ class BenetelWrapper(object):
     def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None):
         self._me = self.__class__.__name__
         self.lgr = _mk_logger(self._me)
+        self.addr = mgmt_addr
+        self.fwversion = self.FW_VERSION_UNKNOWN
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile)
 
-    def get_ssh_session(self, password = DEF_SSH_PASSWD):
-        if not self._ssh.is_connected():
-            if not self._ssh.connect(password = password):
-                raise RuntimeError(f"{self._me}: Could not connect to Benetel device!")
+    def connect_session(self, password = DEF_SSH_PASSWD, retries = 0):
+        self.wait_for_ping()
+        self._ssh.connect(password = password)
+        try:
+            contents = self._ssh.read_remote_file(self.FW_VERSION_FILE)
+        except FileNotFoundError as e:
+            self._ssh.close()
+            raise RuntimeError(f"Remote host is not a Benetel RU?: {e}")
+        self.fwversion = contents[0].strip()
+
+    def get_session(self):
+        if not self.is_connected():
+            self.connect_session()
         return self._ssh
 
-    def is_ssh_connected(self):
+    def close_session(self):
+        self._ssh.close()
+
+    def is_connected(self):
         return self._ssh.is_connected()
 
     def get_firmware_version(self):
-        return self.get_ssh_session().\
-            read_remote_file(self.FW_VERSION_FILE)[0].strip()
+        return self.fwversion
+
+    def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
+        wanted = 1 if invert else 0
+        ctime = time.time()
+        tmo = ctime + timeout
+        while time.time() <= tmo:
+            if _ping(self.addr) == wanted:
+                return
+            time.sleep(self.WAIT_PING_SLEEP)
+        raise TimeoutError(f"{self._me}: Timed out waiting for ping.")
+
+    def reboot(self):
+        self.get_session().exec("reboot")
+        self.wait_for_ping(self.DEF_SHUTDOWN_TIME, invert=True)
+        self.close_session()
 
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
-        self.get_ssh_session().\
+        self.wait_for_ping(DEF_BOOT_TIMEOUT)
+        self.get_session().\
             grep_remote_file(
                 self.RADIO_BOOT_LOG,
                 self.RADIO_ONLINE_STATUS_PATTERN,
@@ -379,17 +432,17 @@ class BenetelWrapper(object):
 
     def _fetch_single_file_setting(self, setting):
         rfile = self.SINGLE_FILE_SETTINGS_MAP[setting]
-        return self.get_ssh_session().read_remote_file(rfile)[0].strip()
+        return self.get_session().read_remote_file(rfile)[0].strip()
 
     def _push_single_file_setting(self, setting, value):
         rfile = self.SINGLE_FILE_SETTINGS_MAP[setting]
         outlines = (str(value),)
-        self.get_ssh_session().write_remote_file(rfile, outlines, overwrite=True)
+        self.get_session().write_remote_file(rfile, outlines, overwrite=True)
 
     def _fetch_radio_setup_script_settings(self):
         settings = {}
         scrset = {}
-        for ln in self.get_ssh_session().\
+        for ln in self.get_session().\
                 read_remote_file(self.RADIO_SETUP_SCRIPT):
             m = re.search(self.RADIO_SETUP_SCRIPT_PATTERN, ln)
             if m:
@@ -417,7 +470,7 @@ class BenetelWrapper(object):
             'C0315': prepat +
             settings['du_uplane_mac'][4:].upper(),
         }
-        for ln in self.get_ssh_session().\
+        for ln in self.get_session().\
                 read_remote_file(self.RADIO_SETUP_SCRIPT):
             ln = ln.rstrip()
             m = re.search(self.RADIO_SETUP_SCRIPT_PATTERN, ln)
@@ -427,12 +480,12 @@ class BenetelWrapper(object):
             else:
                 outlines.append(ln)
         outlines.append("") # Add final newline...
-        self.get_ssh_session().\
+        self.get_session().\
             write_remote_file(self.RADIO_SETUP_SCRIPT, outlines, overwrite=True)
 
     def _fetch_radio_config_file_settings(self):
         settings = {}
-        for ln in self.get_ssh_session().\
+        for ln in self.get_session().\
                 read_remote_file(self.RADIO_CONFIG_FILE):
             m = re.search(self.RADIO_CONFIG_FILE_PATTERN, ln)
             if m and m[1] in self.RADIO_CONFIG_FILE_SETTINGS:
@@ -441,7 +494,7 @@ class BenetelWrapper(object):
 
     def _push_radio_config_file_settings(self, settings):
         outlines = []
-        for ln in self.get_ssh_session().\
+        for ln in self.get_session().\
                 read_remote_file(self.RADIO_CONFIG_FILE):
             ln = ln.rstrip()
             m = re.search(self.RADIO_CONFIG_FILE_PATTERN, ln)
@@ -452,7 +505,7 @@ class BenetelWrapper(object):
             else:
                 outlines.append(ln)
         outlines.append("") # Add final newline since this is a script...
-        self.get_ssh_session().\
+        self.get_session().\
             write_remote_file(self.RADIO_CONFIG_FILE, outlines, overwrite=True)
 
     def fetch_settings(self):
@@ -471,7 +524,76 @@ class BenetelWrapper(object):
         self._push_radio_setup_script_settings(settings)
         self._push_radio_config_file_settings(settings)
 
+##############################################################################
+#
+# Top-level code (main script entry point)
+#
+def connect(args):
+    bw = BenetelWrapper(args.address, args.username)
+    passwd = getpass() if args.password else ""
+    bw.connect_session(password=passwd)
+    passwd = None
+    print(f"beneshell: Connected to {args.address}. Firmware: {bw.get_firmware_version()}")
+    return bw
+
+def update_config(args, bw):
+    cfg = []
+    json_data = None
+    if args.json_config == "-":
+        json_data = sys.stdin.read()
+    else:
+        try:
+            with open(args.json_config, "r") as cfg_f:
+                json_data = cfg_f.read()
+        except Exception as e:
+            print(f"beneshell: error opening specified JSON configuration file:\n{e}")
+    try:
+        cfg = json.loads(json_data)
+    except Exception as e:
+        print(f"beneshell: Unable to parse input JSON configuration:\n{e}")
+        return 1
+    try:
+        dcfg = bw.fetch_settings()
+        dcfg.update(cfg)
+        bw.push_settings(dcfg)
+    except Exception as e:
+        print(f"beneshell: Unable to update configuration:\n{e}")
+        return 1
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("address", help="Address (hostname or IP) of the device.")
+    parser.add_argument("-u", "--username", default=BenetelWrapper.DEF_SSH_USER, help="Username to supply when logging in to device.")
+    parser.add_argument("-p", "--password", action="store_true", help="Read password from command line.")
+    parser.add_argument("-g", "--get-config", action="store_true", help="Get configuration from device and print to stdout in JSON format.")
+    parser.add_argument("-j", "--json-config", help="Apply configuration, specified in a JSON file, to the device (specify '-' to read config from stdin).")
+    parser.add_argument("-r", "--reboot", action="store_true", help="Reboot the RU (via `reboot` over SSH session), applying any other specified actions first.")
+    parser.add_argument("-w", "--wait", type=int, default=0, help="Wait for the radio on the device to become active, timing out after WAIT seconds. Does NOT imply the reboot argument.")
+    return parser.parse_args()
+   
+def main():
+    args = parse_args()
+    bw = None
+    try:
+        bw = connect(args)
+    except Exception as e:
+        print(f"beneshell: Failed to connect to the device:\n{e}")
+        return 1
+    if args.json_config:
+        if update_config(args, bw) != 0:
+            return 1
+    if args.get_config:
+        dcfg = bw.fetch_settings()
+        print(json.dumps(dict(dcfg), sort_keys=True, indent=4))
+    if args.reboot:
+        bw.reboot()
+    if args.wait:
+        try:
+            bw.wait_for_radio_online(args.wait)
+        except Exception as e:
+            print(f"beneshell: Failed while waiting for radio to come online:\n{e}")
+            return 1
+    return 0
+
 if __name__ == "__main__":
-    from getpass import getpass
-    bw = BenetelWrapper("10.10.0.100")
-    ssh = bw.get_ssh_session()
+    sys.exit(main())
