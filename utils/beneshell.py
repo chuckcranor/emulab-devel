@@ -54,6 +54,11 @@ def _ping(host, count=1):
     cmd = ['ping', arg, str(count), host]
     return subprocess.run(cmd, capture_output=True).returncode
 
+def _whoami(obj):
+    klass = obj.__class__.__name__
+    func = sys._getframe(1).f_code.co_name
+    return f"{klass}.{func}()"
+
 ##############################################################################
 #
 # SSHWrapper class definition
@@ -67,8 +72,7 @@ class SSHWrapper(object):
         self.daddr = device_addr
         self.default_username = default_user
         self.default_keyfile = default_keyfile
-        self._me = self.__class__.__name__
-        self.lgr = _mk_logger(self._me)
+        self.lgr = _mk_logger(self.__class__.__name__)
         self.pcli = SSHClient()
         self.pcli.load_system_host_keys()
         self.pcli.set_missing_host_key_policy(AutoAddPolicy)
@@ -147,7 +151,7 @@ class SSHWrapper(object):
         except FileNotFoundError:
             exists = False
         if not overwrite and exists:
-            raise RuntimeError(f"{self._me}: file exists, but "
+            raise RuntimeError(f"{_whoami(self)}: file exists, but "
                                "`overwrite` was not set to True!")
         #rfile = self.open_remote_file(remote_path, "w")
         #rfile.writelines(lines)
@@ -165,8 +169,8 @@ class SSHWrapper(object):
         if not res[0] and res[1]:
             err = res[1][0].strip()
             if re.search("No such file", err):
-                raise FileNotFoundError(f"{self._me}: {err}")
-            raise RuntimeError(f"{self._me}: {remote_path}: {err}")
+                raise FileNotFoundError(f"{_whoami(self)}: {err}")
+            raise RuntimeError(f"{_whoami(self)}: {remote_path}: {err}")
         st = res[0][0].strip().split()
         stat_dict = {
             "fname": st[0],
@@ -272,7 +276,6 @@ class BenetelConfig(object):
     
     def __init__(self, settings = {}):
         self._settings = {}
-        self._me = self.__class__.__name__
         self._check_and_set(settings)
 
     def _check_and_set(self, settings):
@@ -312,7 +315,7 @@ class BenetelConfig(object):
 
     def __setitem__(self, key, value):
         if not key in self.DEFAULT_SETTINGS:
-            raise KeyError(f"{self._me}: key '{key}' is invalid.")
+            raise KeyError(f"{_whoami(self)}: key '{key}' is invalid.")
         vchk = self.DEFAULT_SETTINGS[key]
         if 'allowed_ranges' in vchk:
             rfound = False
@@ -323,7 +326,7 @@ class BenetelConfig(object):
                     break
                 if not rfound:
                     raise ValueError(
-                        f"{self._me}: value '{value}' provided for "
+                        f"{_whoami(self)}: value '{value}' provided for "
                         f"setting '{key}' is outside of allowed range(s)")
         if 'allowed_patterns' in vchk:
             pfound = False
@@ -333,14 +336,14 @@ class BenetelConfig(object):
                     break
                 if not pfound:
                     raise ValueError(
-                        f"{self._me}: value '{value}' provided for "
+                        f"{_whoami(self)}: value '{value}' provided for "
                         f"setting '{key}' does not match allowed pattern(s)")
         if 'allowed_values' in vchk:
             av = vchk['allowed_values']
             value = type(av[0])(value)
             if not value in av:
                 raise ValueError(
-                    f"{self._me}: value '{value}' provided for "
+                    f"{_whoami(self)}: value '{value}' provided for "
                     f"setting '{key}' is not in the allowed set: {av}")
         self._settings[key] = value
 
@@ -376,9 +379,8 @@ class BenetelWrapper(object):
          'compression', 'lf_prach_compression_enable')
 
     def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None):
-        self._me = self.__class__.__name__
-        self.lgr = _mk_logger(self._me)
         self.addr = mgmt_addr
+        self.lgr = _mk_logger(self.__class__.__name__)
         self.fwversion = self.FW_VERSION_UNKNOWN
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile)
@@ -410,12 +412,13 @@ class BenetelWrapper(object):
     def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
         ctime = time.time()
         tmo = ctime + timeout
-        while time.time() <= tmo:
+        while ctime <= tmo:
             res = _ping(self.addr)
             if (not invert and res == 0) or (invert and res > 0):
                 return
             time.sleep(self.WAIT_PING_SLEEP)
-        raise TimeoutError(f"{self._me}: Timed out waiting for ping.")
+            ctime = time.time()
+        raise TimeoutError(f"{_whoami(self)}: Timed out waiting for ping.")
 
     def reboot(self):
         self.get_session().exec("reboot")
@@ -518,7 +521,7 @@ class BenetelWrapper(object):
 
     def push_settings(self, settings):
         if not type(settings) == BenetelConfig:
-            raise ValueError(f"{self._me}: 'settings' argument must be a BenetelConfig object!")
+            raise ValueError(f"{_whoami(self)}: 'settings' argument must be a BenetelConfig object!")
         for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
             self._push_single_file_setting(stg, settings[stg])
         self._push_radio_setup_script_settings(settings)
