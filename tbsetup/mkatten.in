@@ -200,6 +200,7 @@ my $deffile = $ARGV[ 0 ];
 my $line = 0;
 my @ins = ();
 my @outs = ();
+my %nodes = ();
 
 if( !TBAdmin() && !$impotent ) {
     print STDERR "mkatten: must be administrator to modify attenuator matrix\n";
@@ -233,6 +234,8 @@ while( <> ) {
 	    "($deffile line $line), ignoring\n";	
 	next;
     }
+
+    $nodes{ $node } = 0; # haven't found rf-controlled feature yet
     
     if( $dir eq "in" ) {
 	if( $port < 1 || $port > 32 ) {
@@ -469,6 +472,30 @@ showpage
 EOF
 
     close( $pic );
+}
+
+my $query_result = DBQueryFatal( "SELECT node_id, feature FROM " .
+				 "node_features WHERE feature LIKE 'rf-%' " .
+				 "AND weight > 0.5" );
+while( my ($node, $feature) = $query_result->fetchrow_array() ) {
+    if( $feature eq "rf-controlled" ) {
+	if( exists( $nodes{ $node } ) ) {
+	    $nodes{ $node } = 1; # found correct rf-controlled feature, good
+	} else {
+	    print STDERR "mkatten: warning: node $node has rf-controlled " .
+		"feature, but not\n    found in matrix\n";
+	}
+    } else {
+	print STDERR "mkatten: warning: node $node in matrix, but has " .
+	    "unexpected $feature\n    feature\n"
+	    if( exists( $nodes{ $node } ) );
+    }
+}
+
+while( my ($node, $controlled) = each %nodes ) {
+    print STDERR "mkatten: warning: node $node in matrix, but missing " .
+	"rf-controlled feature\n"
+	if( !$controlled );
 }
 
 if( !$impotent ) {
