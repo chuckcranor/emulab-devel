@@ -408,11 +408,11 @@ class BenetelWrapper(object):
         return self.fwversion
 
     def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
-        wanted = 1 if invert else 0
         ctime = time.time()
         tmo = ctime + timeout
         while time.time() <= tmo:
-            if _ping(self.addr) == wanted:
+            res = _ping(self.addr)
+            if (not invert and res == 0) or (invert and res > 0):
                 return
             time.sleep(self.WAIT_PING_SLEEP)
         raise TimeoutError(f"{self._me}: Timed out waiting for ping.")
