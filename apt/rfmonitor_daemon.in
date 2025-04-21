@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -433,6 +433,13 @@ sub HandleChild($)
     my @tokens = split(",", $header);
     $CSVHEADER = join(",", splice(@tokens, 2));
 
+    #
+    # XXX the test for IsReserved is super inefficient, so lets not do
+    # the node lookup/IsReserved test for every line. Besides, at the
+    # moment the file is always for just one node.
+    #
+    my %nodes = ();
+
     for (my $i = 0; $i < scalar(@lines); $i++) {
 	my $line = $lines[$i];
 	chomp($line);
@@ -448,15 +455,21 @@ sub HandleChild($)
 	my $center    = $measurement->{"center"};
 	my $key       = "${nodeid}:${iface}:${frequency}";
 
-	my $node = Node->Lookup($nodeid);
-	if (!$node) {
-	    print STDERR "No such node $nodeid\n";
-	    next;
+	if (! exists($nodes{$nodeid})) {
+	    my $node = Node->Lookup($nodeid);
+	    if (!$node) {
+		print STDERR "No such node $nodeid\n";
+		next;
+	    }
+	    $node->_experiment($node->Reservation());
+	    $nodes{$nodeid} = $node;
 	}
+	my $node = $nodes{$nodeid};
+
 	#print "$nodeid:$iface: $frequency,$power\n";
 
 	# If the node experiment is in a swapmod, ignore this round.
-	my $experiment = $node->Reservation();
+	my $experiment = $node->_experiment();
 	if ($experiment) {
 	    if ($experiment->state() eq EXPTSTATE_MODIFY_RESWAP()) {
 		print STDERR "$node experiment is in a swapmod; skipping;\n";
