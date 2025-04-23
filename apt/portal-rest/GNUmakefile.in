@@ -45,10 +45,15 @@ all:	$(FILES) $(MODELFILE) $(addprefix routers/, $(ROUTERS))
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: all \
+install: all install-mkdirs \
 	$(addprefix $(INSTALL_RESTDIR)/, $(FILES)) \
 	$(INSTALL_RESTDIR)/$(MODELFILE) \
 	$(addprefix $(INSTALL_RESTDIR)/routers/, $(ROUTERS))
+
+install-mkdirs:
+	-mkdir -p $(INSTALL_RESTDIR)
+	-mkdir -p $(INSTALL_RESTDIR)/api
+	-mkdir -p $(INSTALL_RESTDIR)/routers
 
 portal-rest-install:
 
