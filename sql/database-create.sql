@@ -6365,6 +6365,24 @@ CREATE TABLE `user_token_passwords` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `user_jwt_tokens`
+--
+
+DROP TABLE IF EXISTS `user_jwt_tokens`;
+CREATE TABLE `user_jwt_tokens` (
+  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `issued` datetime NOT NULL,
+  `expires` datetime NOT NULL,
+  `role` enum('user','admin') default 'user',
+  `token` text,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `uuid` (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `users`
 --
 
