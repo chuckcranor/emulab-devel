@@ -1,5 +1,5 @@
 
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,7 @@ LIB_SCRIPTS     = libdb.pm Node.pm libdb.py libadminctrl.pm Experiment.pm \
 		  IPBuddyAlloc.pm IPBuddyWrapper.pm Lease.pm Quota.pm \
 		  libTaintStates.pm WebSession.pm WebTask.pm Brand.pm \
 		  Reservation.pm PreReservation.pm OSImage.pm ResUtil.pm \
-		  emdb_orm.py AccessCheck.py emutil.py
+		  AccessCheck.py emutil.py
 
 # Stuff installed on plastic.
 USERSBINS	= genelists.proxy dumperrorlog.proxy backup
