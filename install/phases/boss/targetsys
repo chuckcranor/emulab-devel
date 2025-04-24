@@ -28,8 +28,8 @@ my $DEFSEXTRA    = "$TOP_SRCDIR/install/$TARGETSYS_DIR/defs-extra";
 my $PORTSRC      = "http://www.emulab.net/downloads/FreeBSD-".
     "${FBSD_MAJOR}.${FBSD_MINOR}" . "-ports.tar.gz";
 my $ZZZ		 = "/usr/local/etc/rc.d/zzz-inelab.sh";
-my $DEFAULTOSID  = "UBUNTU18-64-STD";
-my @EXPORTEDOSIDS= ("UBUNTU18-64-STD");
+my $DEFAULTOSID  = "UBUNTU22-64-STD";
+my @EXPORTEDOSIDS= ("UBUNTU22-64-STD");
 my $PGOSSITEVAR  = "protogeni/default_osname";
 my $CHPASS	 = "/usr/bin/chpass";
 my $SSHTB	 = "$PREFIX/bin/sshtb";
@@ -335,7 +335,7 @@ sub Install($$$)
 		    exists($configvars{"CONFIG_NICKNAME"})) {
 		    my $nickname = $configvars{"CONFIG_NICKNAME"};
 		    
-		    $EXTRA .= "\n" +
+		    $EXTRA .= "\n" .
 			"POWDER_NICKNAME=\"${nickname}\"\n";
 		}
 		AppendToFileFatal($NEWDEFSFILE, $EXTRA);
