@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,7 +31,7 @@ include $(OBJDIR)/Makeconf
 
 SBIN_STUFF	= tbacct addsfskey addpubkey mkusercert quotamail genpubkeys \
 		  newuser newproj mksyscert spewcert dumpuser dumpproject \
-		  manageremote regencerts
+		  manageremote regencerts deactivate-users
 LIBEXEC_STUFF	= webtbacct webaddsfskey webaddpubkey webmkusercert \
 		  webnewuser webnewproj webspewcert webmanageremote
 CTRLSBIN_STUFF  = adduserhook accountsetup
