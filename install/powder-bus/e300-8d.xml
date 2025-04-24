@@ -46,9 +46,9 @@
 <attribute name="attr_boolean_bootdisk_trim">  <value>1</value></attribute>
 <attribute name="attr_integer_bootdisk_trim_interval">  <value>86400</value></attribute>
 <attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,ADMIN-LINUX</value></attribute>
-<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-STD</value></attribute>
-<attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>
+<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU22-64-STD</value></attribute>
+<attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD135-64-STD</value></attribute>
 <attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-LINUX</value></attribute>
 <attribute name="attr_string_recoverymfs_osid">  <value>emulab-ops,RECOVERY-LINUX</value></attribute>
-<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU18-64-STD</value></attribute>
+<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU22-64-STD</value></attribute>
 </nodetype>
