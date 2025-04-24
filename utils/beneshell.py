@@ -92,7 +92,7 @@ class SSHWrapper(object):
                 self.daddr, username=username, password=password,
                 key_filename=keyfile, timeout=timeout, allow_agent=False)
         except Exception as e:
-            self.lgr.info(f"Error occured when trying to connect to {self.daddr}: {e}")
+            self.lgr.warning(f"Error occured when trying to connect to {self.daddr}: {e}")
             raise
         else:
             self.connected = True
@@ -159,7 +159,7 @@ class SSHWrapper(object):
         res = self.exec(f"cat - > {remote_path}", '\n'.join(lines))
         if res[1]:
             err = res[1][0].strip()
-            raise RuntimeError(f"{__name__}: {err}")
+            raise RuntimeError(f"{_whoami(self)}: {err}")
 
     def stat_remote_file(self, remote_path):
         """
@@ -392,7 +392,8 @@ class BenetelWrapper(object):
             contents = self._ssh.read_remote_file(self.FW_VERSION_FILE)
         except FileNotFoundError as e:
             self._ssh.close()
-            raise RuntimeError(f"Remote host is not a Benetel RU?: {e}")
+            self.lgr.warning("Remote host is not a Benetel RU?")
+            raise
         self.fwversion = contents[0].strip()
 
     def get_session(self):
@@ -418,7 +419,7 @@ class BenetelWrapper(object):
                 return
             time.sleep(self.WAIT_PING_SLEEP)
             ctime = time.time()
-        raise TimeoutError(f"{_whoami(self)}: Timed out waiting for ping.")
+        raise TimeoutError(f"{_whoami(self)}: Timed out waiting for ping reply.")
 
     def reboot(self):
         self.get_session().exec("reboot")
@@ -426,12 +427,15 @@ class BenetelWrapper(object):
         self.close_session()
 
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
-        self.wait_for_ping(DEF_BOOT_TIMEOUT)
-        self.get_session().\
+        self.wait_for_ping(self.DEF_BOOT_TIMEOUT)
+        res = self.get_session().\
             grep_remote_file(
                 self.RADIO_BOOT_LOG,
                 self.RADIO_ONLINE_STATUS_PATTERN,
                 timeout = timeout)
+        if len(res) > 0:
+            return True
+        return False
 
     def _fetch_single_file_setting(self, setting):
         rfile = self.SINGLE_FILE_SETTINGS_MAP[setting]
@@ -536,7 +540,6 @@ def connect(args):
     passwd = getpass() if args.password else ""
     bw.connect_session(password=passwd)
     passwd = None
-    print(f"beneshell: Connected to {args.address}. Firmware: {bw.get_firmware_version()}")
     return bw
 
 def update_config(args, bw):
@@ -545,23 +548,12 @@ def update_config(args, bw):
     if args.json_config == "-":
         json_data = sys.stdin.read()
     else:
-        try:
-            with open(args.json_config, "r") as cfg_f:
-                json_data = cfg_f.read()
-        except Exception as e:
-            print(f"beneshell: error opening specified JSON configuration file:\n{e}")
-    try:
-        cfg = json.loads(json_data)
-    except Exception as e:
-        print(f"beneshell: Unable to parse input JSON configuration:\n{e}")
-        return 1
-    try:
-        dcfg = bw.fetch_settings()
-        dcfg.update(cfg)
-        bw.push_settings(dcfg)
-    except Exception as e:
-        print(f"beneshell: Unable to update configuration:\n{e}")
-        return 1
+        with open(args.json_config, "r") as cfg_f:
+            json_data = cfg_f.read()
+    cfg = json.loads(json_data)
+    dcfg = bw.fetch_settings()
+    dcfg.update(cfg)
+    bw.push_settings(dcfg)
 
 def parse_args():
     parser = ArgumentParser()
@@ -571,30 +563,48 @@ def parse_args():
     parser.add_argument("-g", "--get-config", action="store_true", help="Get configuration from device and print to stdout in JSON format.")
     parser.add_argument("-j", "--json-config", help="Apply configuration, specified in a JSON file, to the device (specify '-' to read config from stdin).")
     parser.add_argument("-r", "--reboot", action="store_true", help="Reboot the RU (via `reboot` over SSH session), applying any other specified actions first.")
-    parser.add_argument("-w", "--wait", type=int, default=0, help="Wait for the radio on the device to become active, timing out after WAIT seconds. Does NOT imply the reboot argument.")
+    parser.add_argument("-w", "--wait", type=int, default=-1, help="Wait for the radio on the device to become active, timing out after WAIT seconds. Does NOT imply the reboot argument.")
     return parser.parse_args()
    
 def main():
     args = parse_args()
+    lgr = _mk_logger("beneshell")
     bw = None
     try:
         bw = connect(args)
-    except Exception as e:
-        print(f"beneshell: Failed to connect to the device:\n{e}")
+        if not args.get_config:
+            lgr.info(f"Connected to {args.address}. Firmware: {bw.get_firmware_version()}")
+    except:
+        lgr.exception("Failed to connect to the device:")
         return 1
     if args.json_config:
-        if update_config(args, bw) != 0:
+        try:
+            update_config(args, bw)
+        except:
+            lgr.exception("Failed to update configuration on device:")
             return 1
     if args.get_config:
-        dcfg = bw.fetch_settings()
-        print(json.dumps(dict(dcfg), sort_keys=True, indent=4))
-    if args.reboot:
-        bw.reboot()
-    if args.wait:
         try:
-            bw.wait_for_radio_online(args.wait)
-        except Exception as e:
-            print(f"beneshell: Failed while waiting for radio to come online:\n{e}")
+            dcfg = bw.fetch_settings()
+            print(json.dumps(dict(dcfg), sort_keys=True, indent=4))
+        except:
+            lgr.exception("Failed to fetch or print device configuration:")
+            return 1
+    if args.reboot:
+        try:
+            bw.reboot()
+        except:
+            lgr.exception("Failure encountered while trying to reboot device:")
+            return 1
+    if args.wait >= 0:
+        res = False
+        try:
+            res = bw.wait_for_radio_online(args.wait)
+        except:
+            lgr.exception("Failed while waiting for radio to come online:")
+            return 1
+        if not res:
+            lgr.warning("Timed out while waiting for radio to come online.")
             return 1
     return 0
 
