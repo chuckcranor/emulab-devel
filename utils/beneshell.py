@@ -572,9 +572,9 @@ def parse_args():
     parser.add_argument("-u", "--username", default=BenetelWrapper.DEF_SSH_USER, help="Username to supply when logging in to device.")
     parser.add_argument("-p", "--password", action="store_true", help="Read password from command line.")
     parser.add_argument("-g", "--get-config", action="store_true", help="Get configuration from device and print to stdout in JSON format.")
-    parser.add_argument("-j", "--json-config", help="Apply configuration, specified in a JSON file, to the device (specify '-' to read config from stdin).")
-    parser.add_argument("-r", "--reboot", action="store_true", help="Reboot the RU (via `reboot` over SSH session), applying any other specified actions first.")
-    parser.add_argument("-w", "--wait", type=int, default=-1, help="Wait for the radio on the device to become active, timing out after WAIT seconds. Does NOT imply the reboot argument.")
+    parser.add_argument("-j", "--json-config", help="Apply configuration, specified in a JSON file, to the device (specify '-' to read config from stdin). Does NOT imply the `reboot` argument.")
+    parser.add_argument("-r", "--reboot", action="store_true", help="Reboot the RU (via `reboot` over SSH session). Performed after most other actions (see `--wait` argument).")
+    parser.add_argument("-w", "--wait", type=int, default=-1, help="Wait for the radio on the device to become active, timing out after WAIT seconds. Does NOT imply the `reboot` argument. This action is performed last (after all other actions complete).")
     return parser.parse_args()
    
 def main():
