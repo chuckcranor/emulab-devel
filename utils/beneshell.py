@@ -359,6 +359,7 @@ class BenetelWrapper(object):
     DEF_RADIO_ONLINE_TIMEOUT = 300
     DEF_PING_TIMEOUT = 5
     WAIT_PING_SLEEP = 1
+    WAIT_LOG_SLEEP = 1
     FW_VERSION_UNKNOWN = "*UNKNOWN*"
     FW_VERSION_FILE = "/etc/benetel-rootfs-version"
     RADIO_BOOT_LOG = "/tmp/logs/radio_status"
@@ -425,14 +426,24 @@ class BenetelWrapper(object):
         self.get_session().exec("reboot")
         self.wait_for_ping(self.DEF_SHUTDOWN_TIME, invert=True)
         self.close_session()
+        self.lgr.info("Device rebooted.")
 
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
+        res = []
+        stime = time.time()
         self.wait_for_ping(self.DEF_BOOT_TIMEOUT)
-        res = self.get_session().\
-            grep_remote_file(
-                self.RADIO_BOOT_LOG,
-                self.RADIO_ONLINE_STATUS_PATTERN,
-                timeout = timeout)
+        self.lgr.info("Received ping response from device.")
+        while time.time() <= stime + self.DEF_BOOT_TIMEOUT:
+            try:
+                res = self.get_session().\
+                    grep_remote_file(
+                        self.RADIO_BOOT_LOG,
+                        self.RADIO_ONLINE_STATUS_PATTERN,
+                        timeout = timeout)
+            except FileNotFoundError:
+                time.sleep(self.WAIT_LOG_SLEEP)
+            else:
+                break
         if len(res) > 0:
             return True
         return False
