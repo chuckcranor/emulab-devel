@@ -49,7 +49,6 @@ RUN_DEPENDS+=	\
 # For Leigh
 RUN_DEPENDS+=	\
 	autocutsel:${PORTSDIR}/deskutils/autocutsel \
-	vncserver:${PORTSDIR}/net/tigervnc-server \
 	xorg-fonts>=7.2:${PORTSDIR}/x11-fonts/xorg-fonts \
 	fvwm:${PORTSDIR}/x11-wm/fvwm2 \
 	xdpyinfo:${PORTSDIR}/x11/xdpyinfo \
@@ -57,6 +56,10 @@ RUN_DEPENDS+=	\
 	xrdb:${PORTSDIR}/x11/xrdb \
 	xset:${PORTSDIR}/x11/xset \
 	xsetroot:${PORTSDIR}/x11/xsetroot
+
+# This causes lots of multimedia crap packages to be installed
+# XXX hacked tigervnc makefile to not include ffmpeg, the primary culprit
+RUN_DEPENDS+=	vncserver:${PORTSDIR}/net/tigervnc-server
 
 # Unknown, but sound useful or important
 RUN_DEPENDS+=	\
