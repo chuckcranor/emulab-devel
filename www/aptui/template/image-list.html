@@ -94,7 +94,7 @@
 	  <% _.each(images, function(image, imageindex) { %>
 	    <% if (! (image.candelete || image.inactive)) { return; } %>
 	    <tr data-urn="<%- image.urn %>" class="naked-image"
-		data-index="<%- imageindex %>">
+		data-imageindex="<%- imageindex %>">
 	      <td>
 		<a href="" class="toggle-image">
 		  <span class="glyphicon glyphicon-chevron-right"></span></a>
@@ -270,7 +270,7 @@
 	    if (skip) { return; }
 	    %>
 	    <tr data-urn="<%- image.urn %>" class="naked-image"
-		data-index="<%- imageindex %>">
+		data-imageindex="<%- imageindex %>">
 	      <td>
 		<a href="" class="toggle-image">
 		  <span class="glyphicon glyphicon-chevron-right"></span></a>

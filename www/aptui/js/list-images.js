@@ -316,9 +316,10 @@ $(function ()
      */
     function DeleteImage(cluster, row) {
 	var urn      = $(row).attr('data-urn');
-	var index    = parseInt($(row).attr('data-index'));
 	var table    = $(row).closest("table");
-	console.info(cluster, urn, index);
+	var image_index   = parseInt($(row).attr('data-imageindex'));
+	var version_index = parseInt($(row).attr('data-index'));
+	console.info(cluster, urn, image_index, version_index);
 
 	// Callback for the delete request.
 	var callback = function (json) {
@@ -330,8 +331,6 @@ $(function ()
 	    }
 	    // Now to delete the row. This has a little trickiness.
 	    if ($(row).hasClass("image-version")) {
-		var imageindex = parseInt($(row).attr('data-imageindex'));
-		
 		//
 		// Individual version, delete the row. There should not be
 		// a following profile versions row, but watch for it
@@ -356,8 +355,8 @@ $(function ()
 		$(row).remove();
 
 		// Mark the image version as deleted in the data object.
-		imagelist[cluster][imageindex]
-		    .versions[index]["deleted"] = true;
+		imagelist[cluster][image_index]
+		    .versions[version_index]["deleted"] = true;
 	    }
 	    else {
 		/*
@@ -370,12 +369,12 @@ $(function ()
 		$(row).remove();
 
 		// Mark the entire image as deleted in the data object.
-		imagelist[cluster][index]["deleted"] = true;
+		imagelist[cluster][image_index]["deleted"] = true;
 	    }
 	    table.trigger('update');
 	};
 	var args = {"urn"     : urn,
-		    "pid"     : imagelist[cluster][index]["pid"],
+		    "pid"     : imagelist[cluster][image_index]["pid"],
 		    "cluster" : cluster};
 	/*
 	 * Look to see if this is a row with a profile in it, which
@@ -429,11 +428,10 @@ $(function ()
 	     * keeping in mind that versions might already have been marked
 	     * as deleted.
 	     */
-	    var imageindex = parseInt($(row).attr('data-imageindex'));
 	    var version    = parseInt($(row).attr('data-version'));
 	    var max        = 0;
 
-	    _.each(imagelist[cluster][imageindex].versions,
+	    _.each(imagelist[cluster][image_index].versions,
 		   function(image, index) {
 		       if (!image.deleted && image.version > max) {
 			   max = image.version;
