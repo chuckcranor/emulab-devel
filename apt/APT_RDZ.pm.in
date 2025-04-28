@@ -710,6 +710,11 @@ sub RequestSpectrum($$;$)
 	}
     }
     my $ZMC = GetZMC($instance);
+    if (!defined($ZMC)) {
+	$$perrmsg = "RequestSpectrum: ".
+	    "Cannot open the ZMC rest interface for the RDZ";
+	return -1;
+    }
     print $ZMC . "\n";
 
     foreach my $rfrange (values(%{$rfranges})) {
