@@ -4854,6 +4854,8 @@ $(function ()
 	
 	if (! jacksInstance)
 	{
+            var first = true;
+            
 	    var modified_callback = function (object) {
 		_.each(object.nodes, function (node) {
 		    jacksIDs[node.client_id] = node.id;
@@ -4864,6 +4866,11 @@ $(function ()
 			node.id;
 		});
 		console.log("jacksIDs", object, jacksIDs, jacksSites);
+                if (first) {
+                    first = false;
+                    if (_.size(jacksIDs) == 0)
+                        return;
+                }
 		ShowManifest(object.rspec);
 		window.jacksIDS = jacksIDs;
 		window.jacksSites = jacksSites;
