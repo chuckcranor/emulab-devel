@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2023 University of Utah and the Flux Group.
+# Copyright (c) 2010-2023, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -396,6 +396,13 @@ if (defined($image)) {
     #
     # This copy back stuff is messy.
     #
+    if ($copyback || $relocate) {
+	# At the origin cluster, the project might not have been active
+	# long enough to not be mounted.
+	my $project = $image->GetProject();
+	$project->UpdateExports(1) == 0
+	    or fatal("Could not update exports")
+    }
     if ($copyback) {
 	$url = $copyback_url;
     }
