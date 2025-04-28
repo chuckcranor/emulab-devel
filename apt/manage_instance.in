@@ -8560,7 +8560,7 @@ sub DoMetaData($)
 {
     my ($usage)  = @_;
     my $slice    = $instance->GetGeniSlice();
-    my $optlist  = "S:R";
+    my $optlist  = "S:U";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	&$usage();
