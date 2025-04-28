@@ -1230,7 +1230,7 @@ $(function ()
 	    // Trigger status update.
 	    GetStatus();
 	}
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "Refresh",
@@ -1259,7 +1259,7 @@ $(function ()
 	    sup.HideModal('#waitwait-modal');
 	}
 	statusHold = 1;
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "ReloadTopology",
@@ -1932,7 +1932,7 @@ $(function ()
 		// Trigger status update.
 		GetStatus();
 	    }
-	    sup.ShowModal('#waitwait-modal');
+	    sup.ShowWaitWait();
 	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", method,
 						{"uuid"     : uuid,
 						 "node_ids" : nodeList});
@@ -2027,7 +2027,7 @@ $(function ()
 		args["clear"] = true;
 	    }
 	    console.info(inrecovery, args);
-	    sup.ShowModal('#waitwait-modal');
+	    sup.ShowWaitWait();
 	    var xmlthing = sup.CallServerMethod(ajaxurl, "status",
 						"Recovery", args);
 						
@@ -4375,7 +4375,7 @@ $(function ()
 
     function NewConsoleTab(client_id)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 
 	var callback = function(json) {
 	    console.info("NewConsoleTab", json);
@@ -4588,7 +4588,7 @@ $(function ()
 			   "Please wait ... </span>" +
 			   "<img src='" + spinner + "'/></center>");
 	
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 
 	var callback = function(json) {
 	    sup.HideModal('#waitwait-modal');
@@ -4642,7 +4642,7 @@ $(function ()
     //
     function DoServiceLogs(client_id)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
