@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2024 University of Utah and the Flux Group.
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1597,6 +1597,27 @@ sub Leases($)
 	my $lease = Lease->Lookup($lease_idx);
 	if ($lease) {
 	    push(@result, $lease);
+	}
+    }
+    return \@result;
+}
+
+sub Datasets($)
+{
+    my ($self) = @_;
+    my $pid = $self->pid();
+    my @result  = ();
+    require APT_Dataset;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_datasets where pid='$pid'");
+    if (!$query_result) {
+	return undef;
+    }
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $dataset = APT_Dataset->Lookup($uuid);
+	if ($dataset) {
+	    push(@result, $dataset);
 	}
     }
     return \@result;
