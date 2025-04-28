@@ -483,7 +483,7 @@ $(function ()
     {
 	GetStatus();
 	statusID = setInterval(GetStatus,
-                               (window.APT_OPTIONS.slowdown ? 30000 : 5000));
+                               (window.APT_OPTIONS.slowdown ? 15000 : 5000));
     }
     
     function GetStatus()
