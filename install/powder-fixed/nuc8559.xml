@@ -36,8 +36,8 @@
 <attribute name="attr_integer_virtnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_string_console_type">  <value>vga</value></attribute>
 <attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,FREEBSD-MFS</value></attribute>
-<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-STD</value></attribute>
-<attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>
+<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU22-64-STD</value></attribute>
+<attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD135-64-STD</value></attribute>
 <attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-MFS</value></attribute>
-<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU18-64-STD</value></attribute>
+<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU22-64-STD</value></attribute>
 </nodetype>

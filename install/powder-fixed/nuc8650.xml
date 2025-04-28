@@ -39,9 +39,9 @@
 <attribute name="attr_string_console_type">  <value>vga</value></attribute>
 <attribute name="attr_string_pxe_boot_path"> <value>/tftpboot/grub2pxe-bios-vga/grub2pxe</value></attribute>
 <attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,ADMIN-LINUX</value></attribute>
-<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-UHD-STD</value></attribute>
-<attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>
+<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU22-64-STD</value></attribute>
+<attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD135-64-STD</value></attribute>
 <attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-LINUX</value></attribute>
-<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU18-64-UHD-STD</value></attribute>
+<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU22-64-UHD-STD</value></attribute>
 <attribute name="attr_string_recoverymfs_osid">  <value>emulab-ops,RECOVERY-LINUX</value></attribute>
 </nodetype>
