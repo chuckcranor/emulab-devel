@@ -39,13 +39,14 @@ use Carp;
 # 
 sub usage()
 {
-    print "Usage: triggerimageupdate [-d] [-l] [-f] <image>\n";
+    print "Usage: triggerimageupdate [-d] [-l] [-f] [-B origin_uuid] <image>\n";
     exit(1);
 }
-my $optlist  = "dlf";
+my $optlist  = "dlfB:";
 my $debug    = 0;
 my $nolock   = 0;
 my $force    = 0;
+my $origin_uuid;
 my $errormsg;
 
 #
@@ -111,6 +112,9 @@ if (defined($options{"l"})) {
 if (defined($options{"f"})) {
     $force = 1;
 }
+if (defined($options{"B"})) {
+    $origin_uuid = $options{"B"};
+}
 usage()
     if (!@ARGV);
 
@@ -152,8 +156,12 @@ if ($force) {
 	emdb::DBQueryFatal("select * from image_notifications ".
 			   "where imageid='$imageid' and version='$version'");
     if (!$query_result->numrows) {
-	my $origin_uuid = $image->origin_uuid();
-
+	if (!defined($origin_uuid)) {
+	    $origin_uuid = $image->origin_uuid();
+	    if (!defined($origin_uuid)) {
+		fatal("Could not determine origin_uuid")
+	    }
+	}
 	emdb::DBQueryWarn("replace into image_notifications set ".
 			  "  imageid='$imageid',version='$version', ".
 			  "  origin_uuid='$origin_uuid',notified=now()");
