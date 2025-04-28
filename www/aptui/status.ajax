@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -598,11 +598,9 @@ function Do_RequestExtension()
         }
     }
     else {
-	if (!isset($ajax_args["reason"]) || $ajax_args["reason"] == "") {
-	    SPITAJAX_ERROR(1, "Missing reason");
-	    goto bad;
+	if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
+            $reason = $ajax_args["reason"];
 	}
-	$reason = $ajax_args["reason"];
     }
     if (isset($reason)) {
         if (!TBvalid_fulltext($reason)) {

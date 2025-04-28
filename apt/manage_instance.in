@@ -1882,7 +1882,7 @@ sub DoExtend($)
 	my $diff  = $expires_time - time();
 	my $cdiff = time() - $created_time;
 
-	if (! defined($reason)) {
+	if (0 && !defined($reason)) {
 	    $errcode = -1;
 	    $errmsg  = "You must supply a reason for this extension";
 	    goto bad;
