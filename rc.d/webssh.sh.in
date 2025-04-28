@@ -26,7 +26,7 @@ if [ $PROXIED == "0" ]; then
     address="--address=127.0.0.1"
 fi
 
-options="$address --port=8888 --xsrf=False"
+options="$address --port=8888 --xsrf=False --maxconn=50"
 logopts="--log-file-max-size=1000000 --log-file-prefix=$TBROOT/log/wssh"
 origin="--origin=https://${USERNODE},https://${BOSSNODE},https://${WWWHOST}"
 allopts="$options $logopts $origin"
