@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -232,11 +232,13 @@ function Do_ProjectProfile()
     if (CheckPageArgs()) {
         return;
     }
+    $leader  = $target_project->GetLeader();
     $results = array();
 
     $results["pid"]         = $target_project->pid();
     $results["pid_idx"]     = $target_project->pid_idx();
     $results["leader"]      = $target_project->head_uid();
+    $results["leader_affil"]= $leader->affil();
     $results["portal"]      = $target_project->portal();
     $results["created"]     = DateStringGMT($target_project->created());
     $results["approved"]    = $target_project->approved() ? true : false;
