@@ -259,6 +259,14 @@
 		<% } %>
 	      </td>
 	    </tr>
+	    <tr>
+	      <td>Last Power Cycle</td>
+	      <% if (_.has(fields.outlet, "last_power")) { %>
+		<td class="format-date"><%- fields.outlet.last_power %></td>
+	      <% } else { %>
+		<td></td>
+	      <% } %>
+	    </tr>
 	  <% } %>
 	  <% if (_.has(fields, "urn")) { %>
 	    <tr>

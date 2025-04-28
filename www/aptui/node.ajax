@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -154,6 +154,11 @@ function Do_GetInfo()
         $blob["vinterfaces"]   = $node->GetVinterfaces();
         $blob["vlans"]         = $node->GetVlans();
         $blob["outlet"]        = $node->OutletInfo();
+        # The timestamp needs to be in GMT.
+        if ($blob["outlet"] && $blob["outlet"]["last_power"]) {
+            $gmt = DateStringGMT($blob["outlet"]["last_power"]);
+            $blob["outlet"]["last_power"] = $gmt;
+        }
         $blob["tipline"]       = $node->TiplineInfo();
         if (!$node->IsVirtNode()) {
             $blob["vnodes"] = $node->GetVnodes();
