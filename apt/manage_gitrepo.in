@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -927,11 +927,16 @@ sub GetBranchList($)
 	if ($_ =~ /^(\w+)\s+(.*)$/) {
 	    my $hash = $1;
 	    my $log  = $2;
+	    $log =~ tr/\x80-\xFF//d;
+	    
 	    # Scan forward till the terminator.
 	    while (<GIT>) {
 		last
 		    if ($_ =~ /^\@FF\@$/);
-		$log .= $_;
+
+		my $line = $_;
+		$line =~ tr/\x80-\xFF//d;
+		$log .= $line;
 	    }
 	    if (exists($branches{$hash})) {
 		foreach my $blob (@{ $branches{$hash} }) {
