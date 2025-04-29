@@ -6377,6 +6377,8 @@ CREATE TABLE `user_jwt_tokens` (
   `issued` datetime NOT NULL,
   `expires` datetime NOT NULL,
   `role` enum('user','admin') default 'user',
+  `scope_type` enum('global','experiment') default 'global',
+  `scope_value` tinytext,
   `token` text,
   PRIMARY KEY (`idx`),
   UNIQUE KEY `uuid` (`uuid`)

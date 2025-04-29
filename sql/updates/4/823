@@ -1,0 +1,26 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("user_jwt_tokens", "scope_type")) {
+	DBQueryFatal("ALTER TABLE user_jwt_tokens ADD ".
+		     " `scope_type` enum('global','experiment') default 'global' ".
+		     "    after `role`");
+    }
+    if (!DBSlotExists("user_jwt_tokens", "scope_value")) {
+	DBQueryFatal("ALTER TABLE user_jwt_tokens ADD ".
+		     " `scope_value` tinytext after `scope_type`");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
