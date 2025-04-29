@@ -2381,6 +2381,15 @@ sub vnodePreConfig($$$$$){
 	if ($vninfo->{'ishvm'} || $vninfo->{'ispvh'}) {
 	    unlink("$vnoderoot/etc/wall_cmos_clock");
 	}
+
+	#
+	# HVM cannot handle loading of latest (as of early 2025) PERC
+	# RAID kernel module. Make sure we don't try to load it.
+	#
+	if ($vninfo->{'ishvm'}) {
+	    mysystem2("sed -i.bak -e 's;^mpi3mr_load;#mpi3mr_load;' ".
+		  "  $vnoderoot/boot/loader.conf");
+	}
     }
 
     #
