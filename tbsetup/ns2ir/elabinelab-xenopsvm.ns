@@ -235,7 +235,7 @@ if { $forcehvm != {} &&
 set forcepvh [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_PVH"]
 if { $forcepvh != {} &&
      (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
-   $myboss add-attribute "XEN_FORCE_HVM" $forcepvh
+   $myboss add-attribute "XEN_FORCE_PVH" $forcepvh
 }
 
 #
