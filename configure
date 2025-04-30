@@ -7337,6 +7337,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/panic tbsetup/tbrsync tbsetup/nfstrace \
 	tbsetup/checkup/GNUmakefile tbsetup/checkup/checkup_daemon \
 	tbsetup/libtblog.pm tbsetup/template_cvsroot/GNUmakefile \
+	tbsetup/mkatten \
 	tmcd/GNUmakefile tmcd/tmcd.restart \
 	utils/GNUmakefile utils/vlandiff utils/vlansync utils/delay_config \
 	utils/sshtb utils/create_image utils/node_admin \
