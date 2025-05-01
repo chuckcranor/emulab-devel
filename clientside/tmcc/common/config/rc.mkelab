@@ -2148,7 +2148,7 @@ sub SetupBossNode($)
 	#    xbd0p3 -> /	    (~64.25GB)
 	#    xbd1p3 -> /ops	    (from XEN_EXTRADISKS disk1, ~64.25GB)
 	#    xbd2p1 -> /usr/testbed (from XEN_EXTRADISKS disk2, ~100GB)
-	#    xbd3p1 -> ZFS zpool    (from XEN_EXTRADISKS disk3, ~700GB)
+	#    xbd3p1 -> ZFS zpool    (from XEN_EXTRADISKS disk3, ~600GB)
 	#
 	RecreateDir($TBDIR, 1);
 	if ($isfs && $usezfs) {
@@ -4247,12 +4247,16 @@ sub FindExtraFSConfig($)
 		#
 		# XXX attempt to map "ada" to the real disk type.
 		# Over time we have used "da", "ada", and now "xbd" depending
-		# on the version of Xen and FreeBSD. We only care about "xbd"
-		# going forward.
+		# on the version of Xen and FreeBSD. Try to map to either
+		# "xbd" or "da" as appropriate.
 		#
-		if ($dev =~ /^ada(.*)$/ && ! -e "/dev/$dev" &&
-		    -e "/dev/xbd$1") {
-		    $dev = "xbd$1";
+		if ($dev =~ /^ada(.*)$/ && ! -e "/dev/$dev") {
+		    my $u = $1;
+		    if (-e "/dev/xbd$u") {
+			$dev = "xbd$u";
+		    } elsif (-e "/dev/da$u") {
+			$dev = "da$u";
+		    }
 		}
 		return $dev;
 	    }
