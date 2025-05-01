@@ -220,22 +220,26 @@ if { $bossmem != {} } {
 }
 
 #
-# Add extra features for the boss node
+# Virtualization tech
+#
+set forcehvm [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_HVM"]
+if { $forcehvm != {} } {
+    $myboss add-attribute XEN_FORCE_HVM $forcehvm
+    $vhost add-attribute XEN_FORCE_HVM $forcehvm
+}
+set forcepvh [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_PVH"]
+if { $forcepvh != {} } {
+    $myboss add-attribute XEN_FORCE_PVH $forcepvh
+    $vhost add-attribute XEN_FORCE_PVH $forcepvh
+}
+
+#
+# Add extra features for us.
 #
 set devices [tb-get-elabinelab-role-attribute "boss" "XEN_USBDEVICES"]
 if { $devices != {} &&
      (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
-    $myboss add-attribute "XEN_USBDEVICES" $devices
-}
-set forcehvm [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_HVM"]
-if { $forcehvm != {} &&
-     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
-   $myboss add-attribute "XEN_FORCE_HVM" $forcehvm
-}
-set forcepvh [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_PVH"]
-if { $forcepvh != {} &&
-     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
-   $myboss add-attribute "XEN_FORCE_PVH" $forcepvh
+    $myboss add-attribute XEN_USBDEVICES $devices
 }
 
 #
