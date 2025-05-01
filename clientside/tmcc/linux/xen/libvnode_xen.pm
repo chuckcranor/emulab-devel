@@ -1347,6 +1347,7 @@ sub vnodeCreate($$$$)
     my $vdiskprefix = "sd";	# yes, this is right for FBSD too
     my $ishvm = 0;
     my $ispvh = 0;
+    my $ispvdisk = 0;
     my $os;
     
     if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
@@ -1373,12 +1374,10 @@ sub vnodeCreate($$$$)
 	    if ($imagemetadata->{'OSVERSION'} >= 12 &&
 		($xeninfo{xen_major} > 4 ||
 		 $xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
-		$vdiskprefix = "xvd";
 		$ispvh = 1;
 	    }
 	    # ...otherwise we assume that all 10.0 and above are PVHVM
 	    elsif ($imagemetadata->{'OSVERSION'} >= 10) {
-		$vdiskprefix = "hd";
 		$ishvm = 1;
 	    }
 	    #
@@ -1390,17 +1389,34 @@ sub vnodeCreate($$$$)
 		$ispvh = 0;
 	    }
 	}
+
+	# Always use paravirtualized disks for FreeBSD 12+ and Xen 4.11+
+	if ($imagemetadata->{'OSVERSION'} >= 12 &&
+	    ($xeninfo{xen_major} > 4 ||
+	     $xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
+	    $vdiskprefix = "xvd";
+	    $ispvdisk = 1;
+	} elsif ($ispvh) {
+	    $vdiskprefix = "xvd";
+	    $ispvdisk = 1;
+	} elsif ($ishvm) {
+	    $vdiskprefix = "hd";
+	} else {
+	    $vdiskprefix = "sd";
+	}
     }
     else {
 	$os = "Linux";
 
 	if ($xeninfo{xen_major} >= 4) {
 	    $vdiskprefix = "xvd";
+	    $ispvdisk = 1;
 	}
     }
     $private->{'os'} = $os;
     $private->{'ishvm'} = $ishvm;
     $private->{'ispvh'} = $ispvh;
+    $private->{'ispvdisk'} = $ispvdisk;
 
     # All of the disk stanzas for the config file.
     my @alldisks = ();
@@ -1939,10 +1955,12 @@ okay:
     if ($ispvh) {
 	addConfig($vninfo, "type='pvh'", 2);
 	if ($os eq "FreeBSD") {
-	    my $rfs = "xbd0s1a";
+	    my $rfs = "${vdiskprefix}0";
 	    # XXX GUFI image
 	    if ($loadslice == 0 && $bootslice == 3) {
-		$rfs = "xbd0p3";
+		$rfs .= "p3";
+	    } else {
+		$rfs .= "s1a";
 	    }
 	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:$rfs'", 2);
 	}
@@ -2003,8 +2021,15 @@ okay:
 	}
     } else {
 	if ($os eq "FreeBSD") {
+	    my $rfs = "${vdiskprefix}0";
+	    # XXX GUFI image
+	    if ($loadslice == 0 && $bootslice == 3) {
+		$rfs .= "p3";
+	    } else {
+		$rfs .= "s1a";
+	    }
 	    addConfig($vninfo, "extra = 'boot_verbose=1" .
-		      ",vfs.root.mountfrom=ufs:/dev/da0s1a".
+		      ",vfs.root.mountfrom=ufs:/dev/$rfs".
 		      ",kern.bootfile=/boot/kernel/kernel'", 2);
 	}
 	else {
@@ -2343,7 +2368,9 @@ sub vnodePreConfig($$$$$){
 		if ($?);
 	
 	my $ldisk = "da";
-	if ($vninfo->{'ispvh'}) {
+	if ($vninfo->{'ispvdisk'}) {
+	    $ldisk = "xbd";
+	} elsif ($vninfo->{'ispvh'}) {
 	    $ldisk = "xbd";
 	} elsif ($vninfo->{'ishvm'}) {
 	    $ldisk = "ada";
