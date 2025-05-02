@@ -1955,12 +1955,13 @@ okay:
     if ($ispvh) {
 	addConfig($vninfo, "type='pvh'", 2);
 	if ($os eq "FreeBSD") {
-	    my $rfs = "${vdiskprefix}0";
+	    my $rfs = (($ispvdisk || $ispvh) ? "xbd" :
+		       ($ishvm ? "da" : "ada"));
 	    # XXX GUFI image
 	    if ($loadslice == 0 && $bootslice == 3) {
-		$rfs .= "p3";
+		$rfs .= "0p3";
 	    } else {
-		$rfs .= "s1a";
+		$rfs .= "0s1a";
 	    }
 	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:$rfs'", 2);
 	}
@@ -2021,12 +2022,13 @@ okay:
 	}
     } else {
 	if ($os eq "FreeBSD") {
-	    my $rfs = "${vdiskprefix}0";
+	    my $rfs = (($ispvdisk || $ispvh) ? "xbd" :
+		       ($ishvm ? "da" : "ada"));
 	    # XXX GUFI image
 	    if ($loadslice == 0 && $bootslice == 3) {
-		$rfs .= "p3";
+		$rfs .= "0p3";
 	    } else {
-		$rfs .= "s1a";
+		$rfs .= "0s1a";
 	    }
 	    addConfig($vninfo, "extra = 'boot_verbose=1" .
 		      ",vfs.root.mountfrom=ufs:/dev/$rfs".
