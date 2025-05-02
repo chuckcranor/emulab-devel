@@ -363,7 +363,7 @@ class BenetelWrapper(object):
     FW_VERSION_UNKNOWN = "*UNKNOWN*"
     FW_VERSION_FILE = "/etc/benetel-rootfs-version"
     RADIO_BOOT_LOG = "/tmp/logs/radio_status"
-    RADIO_ONLINE_STATUS_PATTERN = r'^[INFO] Radio bringup complete'
+    RADIO_ONLINE_STATUS_PATTERN = r'^\[INFO\] Radio bringup complete'
     RADIO_SETUP_SCRIPT = "/usr/sbin/radio_setup_a.sh"
     RADIO_SETUP_SCRIPT_PATTERN = r'-w (C[0-9A-Fa-f]+) -x 0x([0-9A-Fa-f]+)'
     RADIO_CONFIG_FILE = "/etc/ru_config.cfg"
