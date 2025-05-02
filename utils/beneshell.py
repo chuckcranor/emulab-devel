@@ -432,7 +432,7 @@ class BenetelWrapper(object):
         res = []
         stime = time.time()
         self.wait_for_ping(self.DEF_BOOT_TIMEOUT)
-        self.lgr.info("Received ping response from device.")
+        self.lgr.info("Device pings. Waiting for radio.")
         while time.time() <= stime + self.DEF_BOOT_TIMEOUT:
             try:
                 res = self.get_session().\
@@ -445,6 +445,7 @@ class BenetelWrapper(object):
             else:
                 break
         if len(res) > 0:
+            self.lgr.info("Radio is ready.")
             return True
         return False
 
