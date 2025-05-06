@@ -3580,6 +3580,7 @@ CREATE TABLE `interfaces` (
   `autocreated` tinyint(1) unsigned NOT NULL default '0',
   `ptp` tinyint(1) NOT NULL default '0',
   `synce` tinyint(1) NOT NULL default '0',
+  `pvid` int(11) unsigned default NULL,
   PRIMARY KEY  (`node_id`,`iface`),
   KEY `mac` (`mac`),
   KEY `IP` (`IP`),
