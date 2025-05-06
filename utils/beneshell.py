@@ -480,6 +480,8 @@ class BenetelWrapper(object):
             format(settings['fh_cplane_vlan'], 'X'),
             'C0318': prepat +
             format(settings['fh_uplane_vlan'], 'X'),
+            'C0330': prepat +
+            format(settings['fh_uplane_vlan'], 'X'),
             'C031A': prepat +
             settings['du_cplane_mac'][0:4].upper(),
             'C0319': prepat +
