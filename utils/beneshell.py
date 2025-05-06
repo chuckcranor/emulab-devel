@@ -597,6 +597,8 @@ def main():
         except:
             lgr.exception("Failed to update configuration on device:")
             return 1
+        else:
+            lgr.info("Device settings updated successfully.")
     if args.get_config:
         try:
             dcfg = bw.fetch_settings()
@@ -605,6 +607,7 @@ def main():
             lgr.exception("Failed to fetch or print device configuration:")
             return 1
     if args.reboot:
+        lgr.info("Rebooting device.")
         try:
             bw.reboot()
         except:
