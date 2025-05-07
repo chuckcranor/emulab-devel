@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -64,10 +64,12 @@ sub usage()
     print "  -t  - Required for -r,-s,-z. The rfswitch type.\n";
     exit(1);
 }
-my $optlist   = "adnzs:rt:ovO";
+my $optlist   = "adfnzs:rt:ovO";
 my $debug     = 0;
 my $impotent  = 0;
+my $force     = 0;
 my $zero      = 0;
+my $off       = 0;
 my $set       = 0;
 my $read      = 0;
 my $all       = 0;
@@ -133,6 +135,12 @@ if (defined($options{"a"})) {
 }
 if (defined($options{"n"})) {
     $impotent = 1;
+}
+if (defined($options{"f"})) {
+    $force = 1;
+}
+if (defined($options{"o"})) {
+    $off = 1;
 }
 if (defined($options{"z"})) {
     $zero = 1;
@@ -210,8 +218,10 @@ if (!defined($node)) {
     fatal("No such node $arg");
 }
 if (! $node->IsReserved()) {
-    print STDERR "$arg is not reserved, refusing to listen to you\n";
-    exit(1);
+    if (! ($off && $force)) {
+	print STDERR "$arg is not reserved, refusing to listen to you\n";
+	exit(1);
+    }
 }
 exit(SetSwitchPort($node));
 
@@ -528,7 +538,7 @@ sub SetSwitchPort($)
 	print STDERR "rfswitch_type must be one of rffe or rpi: $rfswtype\n";
     }
     my $next_port;
-    if (defined($options{"o"})) {
+    if ($off) {
 	$next_port = 0;
     }
     else {
@@ -592,10 +602,34 @@ sub SetSwitchPort($)
 
     #
     # Switching away, radio must be powered off first.
+    # If there is no outlet, then the power on/off state is meaningless.
     #
     if ($next_port != $rfswitch_port &&
 	$node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
-	if (defined($options{"O"})) {
+
+	if (!$node->HasOutlet()) {
+	    if ($impotent) {
+		print "$node_id does not have a power outlet; ".
+		    "would try to shutdown before switching away\n";
+	    }
+	    else {
+		print "$node_id does not have a power outlet; ".
+		    "will try to shutdown before switching away\n";
+		
+		$UID = 0;
+		system("$SSH -F /dev/null ".
+		       " -o ConnectTimeout=10 ".
+		       " -o UserKnownHostsFile=/dev/null ".
+		       " -o IdentitiesOnly=yes ".
+		       " -o StrictHostKeyChecking=no elabman\@${node_id} ".
+		       " 'sudo shutdown now &'");
+		$UID = $SAVEUID;
+		# Give the node some time to shutdown.
+		print "Delaying a bit to let the node go to sleep\n";
+		sleep(10);
+	    }
+	}
+	elsif (defined($options{"O"})) {
 	    if ($impotent) {
 		print "Would power off $node_id before switching away\n";
 	    }

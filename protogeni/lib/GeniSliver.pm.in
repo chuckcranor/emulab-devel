@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -77,6 +77,7 @@ my $VNODESETUP     = "$TB/sbin/vnode_setup";
 my $GENTOPOFILE    = "$TB/libexec/gentopofile";
 my $POWER          = "$TB/bin/power";
 my $OSLOAD         = "$TB/bin/os_load";
+my $RFSWITCHER     = "$TB/sbin/powder-rfswitcher";
 
 # Cache of instances to avoid regenerating them.
 my %slivers      = ();
@@ -1284,6 +1285,17 @@ sub UnProvision($;$)
 	    }
 	}
 	else {
+	    #
+	    # Powder. Special case for RPI based UEs. 
+	    #
+	    if ($node->rfswitch_port() && !$node->HasOutlet()) {
+		my $slice = $self->GetSlice();
+		GeniUtil::FlipToElabMan();
+		print STDERR "Calling the RF switcher on $node_id\n";
+		mysystem("$RFSWITCHER -f -o $node_id");
+		GeniCM::FlipToUser($slice);
+	    }
+	    
 	    if ($nophysfree) {
 		# Unincorporate the node. Bogus, needs fixing.
 		$node->ModifyReservation({"genisliver_idx" => 0});
