@@ -363,7 +363,7 @@ class BenetelWrapper(object):
     FW_VERSION_UNKNOWN = "*UNKNOWN*"
     FW_VERSION_FILE = "/etc/benetel-rootfs-version"
     RADIO_BOOT_LOG = "/tmp/logs/radio_status"
-    RADIO_ONLINE_STATUS_PATTERN = r'^[INFO] Radio bringup complete'
+    RADIO_ONLINE_STATUS_PATTERN = r'^\[INFO\] Radio bringup complete'
     RADIO_SETUP_SCRIPT = "/usr/sbin/radio_setup_a.sh"
     RADIO_SETUP_SCRIPT_PATTERN = r'-w (C[0-9A-Fa-f]+) -x 0x([0-9A-Fa-f]+)'
     RADIO_CONFIG_FILE = "/etc/ru_config.cfg"
@@ -432,7 +432,7 @@ class BenetelWrapper(object):
         res = []
         stime = time.time()
         self.wait_for_ping(self.DEF_BOOT_TIMEOUT)
-        self.lgr.info("Received ping response from device.")
+        self.lgr.info("Device pings. Waiting for radio.")
         while time.time() <= stime + self.DEF_BOOT_TIMEOUT:
             try:
                 res = self.get_session().\
@@ -445,6 +445,7 @@ class BenetelWrapper(object):
             else:
                 break
         if len(res) > 0:
+            self.lgr.info("Radio is ready.")
             return True
         return False
 
@@ -478,6 +479,8 @@ class BenetelWrapper(object):
             'C0331': prepat +
             format(settings['fh_cplane_vlan'], 'X'),
             'C0318': prepat +
+            format(settings['fh_uplane_vlan'], 'X'),
+            'C0330': prepat +
             format(settings['fh_uplane_vlan'], 'X'),
             'C031A': prepat +
             settings['du_cplane_mac'][0:4].upper(),
@@ -594,6 +597,8 @@ def main():
         except:
             lgr.exception("Failed to update configuration on device:")
             return 1
+        else:
+            lgr.info("Device settings updated successfully.")
     if args.get_config:
         try:
             dcfg = bw.fetch_settings()
@@ -602,6 +607,7 @@ def main():
             lgr.exception("Failed to fetch or print device configuration:")
             return 1
     if args.reboot:
+        lgr.info("Rebooting device.")
         try:
             bw.reboot()
         except:
