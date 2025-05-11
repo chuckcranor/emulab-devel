@@ -2694,6 +2694,17 @@ use Node;
 use English;
 use Data::Dumper;
 
+package libossetup_bt_ru550;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
 package libossetup_bt_ru650;
 use base qw(libossetup_sdr);
 
