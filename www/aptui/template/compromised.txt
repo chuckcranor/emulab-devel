@@ -1,0 +1,33 @@
+This experiment is being quarantined because we have determined that
+one or more nodes in the experiment has been compromised and is
+engaged in improper activity. Here are guidelines for properly
+securing your nodes:
+
+If you are using Apache/Spark/Hadoop, it has has known vulnerabilities
+as described here:
+
+  https://groups.google.com/forum/#!msg/cloudlab-users/qvGyZo8SIoE/vyiSgzRUDAAJ
+  
+Using weak passwords (especially those like 'hadoop', 'root', 'linux',
+or 'admin') is strictly forbidden, even if online instructions tell
+you to do so.
+
+Starting web services on the public facing IP address, that are weakly
+protected (see note above about passwords) is also prohibited. Again,
+it does not matter what online instructions tell you to do, you must
+not enable weakly protected web services.
+
+Please note that you are fully responsible for the security of your
+nodes and any software you install on it.
+
+As soon as we know what you were doing and how you are going to
+prevent this from happening again, we can unfreeze your account.
+
+Once a node is compromised, the experiment must be terminated.  If you
+have any data on the node you need, we can boot it into a memory based
+'Recovery' system [1] where you can ssh into the experiment nodes,
+mount the filesystem [2], and copy that data off.
+
+[1] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS
+[2] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS#mounting-the-root-filesystem
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

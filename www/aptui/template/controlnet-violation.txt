@@ -1,0 +1,25 @@
+Please tell us what you are doing, you are sending a very unusual
+amount of traffic over the shared control network instead of your own
+internal network(s). Your internal networks have IP addresses in the
+10.XXX.YYY.ZZZ range, see /etc/hosts on your nodes for the specific
+addresses to use in your software configuration.
+
+If your experimentation involves RDMA, you will need to make sure that
+your configuration is using the correct interface.  Simply specifying
+the internal IP (10.x.x.x) is often insufficient for ensuring your
+RDMA traffic is flowing over the correct interface.  In utilities such
+as ib_send_bw for example, the internal IP is used for the handshake
+QP info exchange, but the physical port that it actually sends traffic
+out on is selected with a different argument.  By default, it will
+select the first port on the first RDMA-capable NIC it finds, which is
+the Control network port for a number of CloudLab hardware types.
+You'll want to use utilities such as ibstat or ibv_devinfo to find the
+device that you actually want to send on, and then ensure that your
+application is properly configured to use that.  In the case of
+ib_send_bw for example, you specify it with the -d flag in your
+arguments.
+
+We need to know very soon so we do not have to terminate this
+experiment. You are not permitted to send high volume traffic on the
+public facing shared network!
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
