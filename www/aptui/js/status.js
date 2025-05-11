@@ -4715,7 +4715,7 @@ $(function ()
     //
     function ShowPortstatsTab()
     {
-	if (isadmin) {
+	if (1) {
 	    $('#show_portstats_li').removeClass("hidden");
 	    $("#Portstats").removeClass("hidden");
 	    var phandler = function () {
