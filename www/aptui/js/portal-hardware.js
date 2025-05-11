@@ -277,9 +277,13 @@ $(function ()
 		}
                 else if (key == "Number in service") {
 		    var urn  = row["URN"];
-                    var now  = amlist[urn].typeinfo[hwtype].count;
-                    var free = amlist[urn].typeinfo[hwtype].free;
-                    
+                    var now  = 0;
+                    var free = 0;
+
+                    if (_.has(amlist[urn].typeinfo, hwtype)) {
+                        now  = amlist[urn].typeinfo[hwtype].count;
+                        free = amlist[urn].typeinfo[hwtype].free;
+                    }
 		    html += "<td>";
 		    html += free;
 		    html += "</td>";
