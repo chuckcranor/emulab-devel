@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -96,9 +96,9 @@ function ValidateClusters(&$clusters)
                       "uuid"    => $cluster["uuid"]);
     }
     if ($cluster_errors) {
-        return [$cluster_errors];
+        return [$cluster_errors, null];
     }
-    return [0, $safe_clusters];
+    return [null, $safe_clusters];
 }
 
 function ValidateRanges(&$ranges)
@@ -169,9 +169,9 @@ function ValidateRanges(&$ranges)
                       "uuid"      => $range["uuid"]);
     }
     if ($range_errors) {
-        return [$range_errors];
+        return [$range_errors, null];
     }
-    return [0, $safe_ranges];
+    return [null, $safe_ranges];
 }
 
 function ValidateRoutes(&$routes)
@@ -227,9 +227,9 @@ function ValidateRoutes(&$routes)
                       "uuid"      => $route["uuid"]);
     }
     if ($route_errors) {
-        return [$route_errors];
+        return [$route_errors, null];
     }
-    return [0, $safe_routes];
+    return [null, $safe_routes];
 }
 
 #
