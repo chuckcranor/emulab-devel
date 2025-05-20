@@ -229,6 +229,10 @@ class BenetelConfig(object):
             'def': 20000000,
             'allowed_values': (20000000, 40000000)
         },
+        'gain': {
+            'def': 37.0,
+            'allowed_ranges': ((1.0,37.0),)
+        },
         'fh_cplane_vlan': {
             'def': 1,
             'allowed_ranges': ((1,4096),)
@@ -265,6 +269,10 @@ class BenetelConfig(object):
         'lf_prach_compression_enable': {
             'def': 'false',
             'allowed_values': ('true', 'false')
+        },
+        'flexran_prach_workaround': {
+            'def': 'disabled',
+            'allowed_values': ('enabled', 'disabled')
         },
 # TDD setting needs special attention...
 #        'TDD_mode': {
@@ -371,13 +379,15 @@ class BenetelWrapper(object):
     SINGLE_FILE_SETTINGS_MAP = {
         'center_frequency': '/etc/ru-center-frequency-mhz',
         'bandwidth': '/etc/ru-bandwidth',
+        'gain': '/etc/ru-tx-gain-db',
     }
     RADIO_SETUP_SCRIPT_SETTINGS = \
         ('fh_cplane_vlan', 'fh_uplane_vlan', 'du_cplane_mac',
          'du_uplane_mac')
     RADIO_CONFIG_FILE_SETTINGS = \
         ('mimo_mode', 'downlink_scaling', 'prach_format',
-         'compression', 'lf_prach_compression_enable')
+         'compression', 'lf_prach_compression_enable',
+         'flexran_prach_workaround')
 
     def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None):
         self.addr = mgmt_addr
