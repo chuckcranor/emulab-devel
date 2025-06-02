@@ -662,6 +662,10 @@ sub SetSwitchPort($)
 	    if ($debug) {
 		print "Confirming $other_node_id is powered off\n";
 	    }
+	    if (!$other_node->HasOutlet()) {
+		print "*** No outlet for $other_node_id, hoping for the best\n";
+		next;
+	    }
 	    if ($other_node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
 		if ($all) {
 		    print "Powering off $node_id before switching away\n";

@@ -2597,6 +2597,12 @@ sub LightUpNodes($@)
 	next
 	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 
+	if (!$node->HasOutlet()) {
+	    my $node_id = $node->node_id();
+	    tbnotice("SDR $node_id does not have a power outlet, skipping\n");
+	    next;
+	}
+
 	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
 	    push(@ons, $node->node_id())
 	}
@@ -2678,6 +2684,17 @@ use English;
 use Data::Dumper;
 
 package libossetup_cl_ap;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+package libossetup_bt_ru550;
 use base qw(libossetup_sdr);
 
 use libdb;

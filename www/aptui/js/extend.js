@@ -320,7 +320,7 @@ window.ShowExtendModal = (function()
 	    }
 
 	    // For the char countdown below.
-	    minchars = $('#label' + label + "_request").attr('data-minchars');
+	    minchars = parseInt($('#label' + label + "_request").attr('data-minchars'));
 	    UpdateCountdown();
 
 	    lastvalue = which;

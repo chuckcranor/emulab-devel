@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2014 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -99,6 +99,7 @@ use emdb;
 use Experiment;
 use EmulabConstants;
 use Node;
+use Interface;
 use emutil;
 use libEmulab;
 
@@ -153,6 +154,12 @@ while (1) {
 	if (!$query_result || !$query_result->numrows);
 
     while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	next
+	    if (!defined($node));
+	next
+	    if (!Interface->LookupControl($node));
+
 	print "Checking to see if $node_id is reactive ...\n";
 	my $status = SSHwithTimeout($node_id, "ls / > /dev/null", 60, $debug);
 	if ($status) {

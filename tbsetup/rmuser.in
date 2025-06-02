@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -247,8 +247,8 @@ if (@explist) {
 		    fatal("$target_user is still heading up experiments in ".
 			  "project $project!");
 		}
+		endexp($experiment);
 	    }
-	    endexp($experiment);
 	}
 	else {
 	    if (!$force) {
