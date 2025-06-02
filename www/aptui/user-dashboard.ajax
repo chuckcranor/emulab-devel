@@ -476,7 +476,7 @@ function Do_FreezeOrThaw()
     }
     $target_idx  = $target_user->uid_idx();
     $target_uid  = $target_user->uid();
-    $target_url  = "$APTBASE/user-dashboard.php?user=$target_uid";
+    $target_url  = $target_user->AptURL();
     $this_uid    = $this_user->uid();
 
     if (!isset($ajax_args["which"])) {
@@ -587,6 +587,7 @@ function Do_SendTestMessage()
     $target_email = $target_user->email();
     $target_name  = $target_user->name();
     $target_uid   = $target_user->uid();
+    $target_url   = $target_user->AptURL();
     $adminemail   = $target_user->adminEmail();
     $reference    = GENHASH();
 
@@ -600,6 +601,7 @@ function Do_SendTestMessage()
            "as soon as you receive it. If we do not hear back from you, we\n".
            "may be forced to freeze your account.\n".
            "\n".
+           "User: $target_url\n".
            "Reference: $reference\n\n".
            "Thank you very much!\n",
            "From: $adminemail\n".
@@ -629,7 +631,7 @@ function Do_SendMessage()
     $target_email = $target_user->email();
     $target_name  = $target_user->name();
     $target_uid   = $target_user->uid();
-    $target_url   = "$APTBASE/user-dashboard.php?user=$target_uid";
+    $target_url   = $target_user->AptURL();
     $adminemail   = $APTMAIL;
 
     TBMAIL("$target_name '$target_uid' <$target_email>",

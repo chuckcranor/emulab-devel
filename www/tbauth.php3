@@ -931,6 +931,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     do {
       if ($user) {
 	$uid         = $user->uid();
+        $url         = $user->AptURL();
         $db_encoding = $user->pswd();
 	$isadmin     = $user->admin();
 	$frozen      = $user->weblogin_frozen();
@@ -942,13 +943,6 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$usr_email   = $user->email();
         $ga_userid   = $user->ga_userid();
         $lastlogin   = $user->weblogin_last();
-
-        if ($APTBASE) {
-            $url = "$APTBASE/user-dashboard.php?user=$uid";
-        }
-        else {
-            $url = "$TBBASE/showuser.php3?user=$uid";
-        }
 
         #
         # Yuck.
@@ -1214,11 +1208,14 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     }
     if ($lastlogin && 
         time() - $lastlogin > (3600 * 24 * 365)) {
+        $user = User::Lookup($uid_idx);
+        $url  = $user->AptURL();
         TBMAIL($usr_email,
                "Web Login Inactivity Alert: '$uid'",
                "Login by $uid ($uid_idx) after extended period ".
                "of inactivity!\n".
-               "Last activity was $lastloginstr\n",
+               "Last activity was $lastloginstr\n\n".
+               "$url\n",
                "From: $TBMAIL_OPS\n".
                "Bcc: $TBMAIL_AUDIT\n".
                "CC: $TBMAIL_OPS\n".

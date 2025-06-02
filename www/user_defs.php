@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2036,6 +2036,20 @@ class User
                      "where uid_idx='$uid_idx'");
 
         return 0;
+    }
+
+    function AptURL()
+    {
+        global $APTBASE, $TBBASE;
+        $uid = $this->uid();
+
+        if ($APTBASE) {
+            $url = "$APTBASE/user-dashboard.php?user=$uid";
+        }
+        else {
+            $url = "$TBBASE/showuser.php3?user=$uid";
+        }
+        return $url;
     }
     
 }
