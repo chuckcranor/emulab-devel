@@ -5924,6 +5924,9 @@ $(function ()
 	    });
 	    modifyready = true;
 	}
+        // For the PP wizard
+	$('#paramdefs').val(JSON.stringify(expinfo.paramdefs));
+        $('#script_textarea').val(expinfo.script);
 
 	$('.ppwizard-cancel').click(function (event) {
 	    event.preventDefault();
@@ -6037,8 +6040,6 @@ $(function ()
 	    fromrepo         : expinfo.repourl ? true : false,
 	    rerun_instance   : expinfo.uuid,
 	    rerun_paramset   : null,
-	    paramdefs        : (expinfo.paramdefs ?
-				JSON.stringify(expinfo.paramdefs) : null),
 	    bindings         : expinfo.params, 
 	    setStepsMotion   : function (which) {
 		console.info("setStepsMotion", which);

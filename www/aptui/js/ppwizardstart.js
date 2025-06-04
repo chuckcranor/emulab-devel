@@ -3818,7 +3818,7 @@ $(function () {
 	    // on the fly from the script, so we have to pass that along (with
 	    // repo based profiles, we have to go find the exact script each time).
 	    //
-	    if ($('#paramdefs').val() !== undefined) {
+	    if ($('#paramdefs').val() != "") {
 		formfields["paramdefs"] = $('#paramdefs').val();
 		formfields["script"]    = $('#script_textarea').val();
 	    }
@@ -3962,7 +3962,7 @@ $(function () {
 	    // This is a terrible way to do this, but it saves a bunch of time
 	    // when starting the ppwizard.
 	    //
-	    if ($('#paramdefs').val() !== undefined) {
+	    if ($('#paramdefs').val() !== "") {
 		blob["paramdefs"] = $('#paramdefs').val();
 	    }
 	    else if (args.paramdefs) {

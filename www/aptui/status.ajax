@@ -1874,6 +1874,9 @@ function Do_ExpInfo()
     else {
         $blob["paramdefs"] = null;
     }
+    if ($instance->script()) {
+        $blob["script"] = $instance->script();
+    }
     if (isset($profile)) {
         $blob["profile_name"] = $profile->name();
         $blob["profile_uuid"] = $profile->uuid();

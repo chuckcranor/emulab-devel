@@ -161,6 +161,7 @@ class Instance
     function isopenstack()  { return $this->field('isopenstack'); }
     function params()       { return $this->field('params'); }
     function paramdefs()    { return $this->field('paramdefs'); }
+    function script()       { return $this->field('script'); }
     function portal()       { return $this->field('portal'); }
     function powder_zones() { return $this->field('powder_zones'); }
     function deferred_reason() { return $this->field('deferred_reason'); }
