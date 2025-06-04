@@ -31,7 +31,7 @@ include $(OBJDIR)/Makeconf
 
 SBIN_STUFF	= tbacct addsfskey addpubkey mkusercert quotamail genpubkeys \
 		  newuser newproj mksyscert spewcert dumpuser dumpproject \
-		  manageremote regencerts deactivate-users
+		  manageremote regencerts deactivate-users getipinfo
 LIBEXEC_STUFF	= webtbacct webaddsfskey webaddpubkey webmkusercert \
 		  webnewuser webnewproj webspewcert webmanageremote
 CTRLSBIN_STUFF  = adduserhook accountsetup
