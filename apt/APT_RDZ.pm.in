@@ -883,6 +883,11 @@ sub RequestSpectrum($$;$)
 			$failed++;
 		    }
 		}
+		elsif (UpdateSpectrum(
+			   $instance, $rfrange, undef, undef, $grant_id)) {
+		    $failure_message = "Failed to update range";
+		    $failed++;
+		}
 		$rfrange->Update({"rdz_status" => "active"});
 	    }
 	    elsif ($response->{'revoked_at'}) {
@@ -1194,17 +1199,19 @@ sub UpdateSpectrum($$$$$)
 	    if ($request->{"frequency_uuid"} eq $rfrange->freq_uuid()) {
 		my $xmlref = $request->{'element'};
 
-		# This is handy information for debugging.
-		if (!GeniXML::GetText("original_frequency_low", $xmlref)) {
-		    GeniXML::SetText("original_frequency_low", $xmlref,
-				     $request->{"frequency_low"});
+		if (defined($new_low) && defined($new_high)) {
+		    # This is handy information for debugging.
+		    if (!GeniXML::GetText("original_frequency_low", $xmlref)) {
+			GeniXML::SetText("original_frequency_low", $xmlref,
+					 $request->{"frequency_low"});
+		    }
+		    if (!GeniXML::GetText("original_frequency_high", $xmlref)) {
+			GeniXML::SetText("original_frequency_high", $xmlref,
+					 $request->{"frequency_high"});
+		    }
+		    GeniXML::SetText("frequency_low", $xmlref, $new_low);
+		    GeniXML::SetText("frequency_high", $xmlref, $new_high);
 		}
-		if (!GeniXML::GetText("original_frequency_high", $xmlref)) {
-		    GeniXML::SetText("original_frequency_high", $xmlref,
-				     $request->{"frequency_high"});
-		}
-		GeniXML::SetText("frequency_low", $xmlref, $new_low);
-		GeniXML::SetText("frequency_high", $xmlref, $new_high);
 		GeniXML::SetText("rdz_grant_id", $xmlref, $grant_id);
 	    }
 	}
@@ -1219,9 +1226,11 @@ sub UpdateSpectrum($$$$$)
     }
 
     # Flag to update history too
-    if ($rfrange->Update({"freq_low"  => $new_low,
-			  "freq_high" => $new_high}, 1)) {
-	return 1;
+    if (defined($new_low) && defined($new_high)) {
+	if ($rfrange->Update({"freq_low"  => $new_low,
+			      "freq_high" => $new_high}, 1)) {
+	    return 1;
+	}
     }
     return 0;
 }
