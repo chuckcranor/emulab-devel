@@ -972,6 +972,10 @@ class Instance
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
+            $skiptypes["d760p"]    = true;
+            $skiptypes["d760-gpu"] = true;
+            $skiptypes["d760-hgpu"]= true;
+
             #
             # Grab all the local individually reservable nodes.
             #
