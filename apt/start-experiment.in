@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -130,7 +130,7 @@ my $bindingfile;
 my $bindingstr;
 my $sshpubkeyfile;
 my $sshpubkeystr;
-my ($refspec, $repohash, $reporef, $script, $rspec, $bindings);
+my ($refspec, $repohash, $reporef, $script, $rspec, $bindings, $paramdefs);
 my $default_urn;
 my $logfile;
 my $project;
@@ -398,6 +398,28 @@ if (defined($refspec)) {
     $webtask->Refresh();
     $repohash = $webtask->hash() if (!defined($repohash));
     $webtask->Delete();
+
+    #
+    # If we got a refspec we need to pass through the parameter defs
+    # for that refspec. 
+    #
+    if (defined($script)) {
+	my ($sfp, $scriptfile) = tempfile(UNLINK => 0);
+	print $sfp $script;
+    
+	my $opts = "-p  -r " . $profile->reponame();
+	$opts .= " -h '" . $reporef . "'";
+	$output = emutil::ExecQuiet("$RUNGENILIB $opts $scriptfile");
+	if ($?) {
+	    print STDERR "Could not get parameter defs for profile\n";
+	    print STDERR $output;
+	    unlink($scriptfile);
+	    fatal($output);
+	}
+	unlink($scriptfile);
+	chomp($output);
+	$paramdefs = $output;
+    }
 }
 
 #
@@ -430,7 +452,11 @@ if (defined($bindings)) {
     close($pfp);
     close($sfp);
 
-    my $output = emutil::ExecQuiet("$RUNGENILIB -b $paramfile $scriptfile");
+    my $opts = "-b $paramfile";
+    $opts .= " -r " . $profile->reponame();
+    $opts .= " -h '" . $reporef . "'" if (defined($reporef));
+
+    my $output = emutil::ExecQuiet("$RUNGENILIB $opts $scriptfile");
     if ($?) {
 	print STDERR "Could not apply parameter set to script\n";
 	print STDERR $output;
@@ -464,6 +490,8 @@ if (defined($reporef)) {
     $xmlstuff{"reporef"}  = $reporef;
     $xmlstuff{"repohash"} = $repohash;
     $xmlstuff{"script"}   = $script if (defined($script));
+    $xmlstuff{"paramdefs"}= $paramdefs if (defined($paramdefs));
+   
 }
 if (defined($rspec)) {
     $xmlstuff{"rspec"} = $rspec;
