@@ -593,7 +593,7 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     case CHECKLOGIN_NOTLOGGEDIN:
 	if ($redirect_url) {
             SetReferrer($referrer);
-	    header("Location: $redirect_url&error=notloggedin");
+	    header("Location: $redirect_url?error=notloggedin");
 	    exit;
         } else {
             USERERROR("You do not appear to be logged in! $link",
@@ -603,7 +603,7 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     case CHECKLOGIN_TIMEDOUT:
 	if ($redirect_url) {
             SetReferrer($referrer);
-	    header("Location: $redirect_url&error=timedout");
+	    header("Location: $redirect_url?error=timedout");
 	    exit;
         } else {
             USERERROR("Your login has timed out! $link",

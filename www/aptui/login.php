@@ -80,7 +80,7 @@ if (NOLOGINS() && !$adminmode) {
 #
 # Spit out the form.
 # 
-function SPITFORM($uid, $error)
+function SPITFORM($error)
 {
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN;
@@ -230,7 +230,7 @@ if (!$ajax_request && !isset($login)) {
                       "please try again later.");
         return;
     }
-    SPITFORM(REMEMBERED_ID(), null);
+    SPITFORM(null);
     return;
 }
 
@@ -372,7 +372,7 @@ if ($login_status == $STATUS_LOGINFAIL) {
 	SPITAJAX_ERROR(1, "login failed");
 	exit(0);
     }
-    SPITFORM($uid, "failed");
+    SPITFORM("failed");
     return;
 }
 #

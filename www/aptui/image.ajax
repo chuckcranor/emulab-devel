@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2022, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -783,7 +783,9 @@ function Do_SnapshotStatus()
     else {
 	$blob["image_size"] = 0;
     }
-    $blob["image_status"] = $taskdata["status"];
+    if (isset($taskdata["status"])) {
+        $blob["image_status"] = $taskdata["status"];
+    }
 
     #
     # We stuck the node_id in above when we started the snapshot

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,6 +56,7 @@ elseif (isset($target_project)) {
            ISADMIN() || ISFOREIGN_ADMIN())) {
         SPITUSERERROR("Not enough permission to view this page!");
     }
+    $target_user = null;
 }
 else {
     $target_user = $this_user;

@@ -62,7 +62,7 @@ if (file_exists($sitefile)) {
 } else {
     $matter    = file_get_contents("frontpage.html");
 }
-$json      = file_get_contents("$APTBASE/stats-ajax.php", false, $sslcontext);
+$json      = @file_get_contents("${APTBASE}/stats-ajax.php", false, $sslcontext);
 if ($json === false) {
     PAGEERROR("Could not continue. Please contact $TBMAILADDR");
 }

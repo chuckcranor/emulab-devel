@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -947,10 +947,10 @@ function CheckStep3()
         elseif ($end < time()) {
             $errors["end_day"] = "End is in the past";
         }
-        elseif ($start && $end <= $start) {
+        elseif (isset($start) && $end <= $start) {
             $errors["end_day"] = "End is before the start";
         }
-        elseif (($start && $end < $start + 3600) ||
+        elseif ((isset($start) && $end < $start + 3600) ||
                 $end < time() + 3600) {
             $errors["end_day"] = "Too short, must be > 1 hour";
         }

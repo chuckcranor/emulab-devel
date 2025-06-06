@@ -1751,16 +1751,16 @@ function Do_SearchProfiles()
         $blob["version"]   = $row["version"];
         $blob["name"]      = $row["name"];
         $blob["pid"]       = $row["pid"];
-        $blob["desc"]      = CleanString($row["description"]);
+        $blob["desc"]      = "";
         $blob["created"]   = DateStringGMT($row["created"]);
         $blob["public"]    = $row["public"];
         $blob["listed"]    = $row["listed"] ? "Yes" : "No";
         $blob["shared"]    = $row["shared"];
         $blob["creator"]   = $row["creator"];
 
-        if ($public)
+        if ($row["public"] != 0)
             $privacy = "Public";
-        elseif ($shared)
+        elseif ($row["shared"] != 0)
             $privacy = "Site";
         else
             $privacy = "Project";

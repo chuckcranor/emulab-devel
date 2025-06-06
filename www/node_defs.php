@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -878,7 +878,7 @@ class Node
               </tr>\n";
 
 	    if ($eventstate) {
-		$when = strftime("20%y-%m-%d %H:%M:%S", $state_timestamp);
+		$when = date("Y-m-d H:i:s", $state_timestamp);
 		echo "<tr>
                      <td>EventState:</td>
                      <td class=left>$eventstate ($when)</td>
@@ -886,7 +886,7 @@ class Node
 	    }
 
 	    if ($op_mode) {
-		$when = strftime("20%y-%m-%d %H:%M:%S", $op_mode_timestamp);
+		$when = date("Y-m-d H:i:s", $op_mode_timestamp);
 		echo "<tr>
                      <td>Operating Mode:</td>
                      <td class=left>$op_mode ($when)</td>
@@ -894,7 +894,7 @@ class Node
 	    }
 
 	    if ($allocstate) {
-		$when = strftime("20%y-%m-%d %H:%M:%S", $allocstate_timestamp);
+		$when = date("Y-m-d H:i:s", $allocstate_timestamp);
 		echo "<tr>
                      <td>AllocState:</td>
                      <td class=left>$allocstate ($when)</td>

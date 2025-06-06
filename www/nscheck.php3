@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007, 2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -135,8 +135,7 @@ elseif ($specupload) {
     # See backend scripts.
     # 
     list($usec, $sec) = explode(' ', microtime());
-    srand((float) $sec + ((float) $usec * 100000));
-    $foo = rand();
+    $foo = "$sec" . "$usec";
 
     $nsfile = "/tmp/$uid-$foo.nsfile";
     $handle = fopen($nsfile,"w");
