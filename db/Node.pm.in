@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2024 University of Utah and the Flux Group.
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2239,8 +2239,10 @@ sub ClearInterfaces($)
 
     my $node_id = $self->node_id();
 
-    DBQueryWarn("update interfaces set IP='',IPaliases=NULL,mask=NULL,".
-		"       rtabid='0',vnode_id=NULL,current_speed='0',trunk='0' ".
+    DBQueryWarn("update interfaces set IP='',IPaliases=NULL,mask=NULL, ".
+		"       rtabid='0',vnode_id=NULL,current_speed='0', ".
+		"       trunk='0',trunk_mode='equal', ".
+		"       ptp='0',synce='0' ".
 		"where node_id='$node_id' and ".
 		"  role='" . TBDB_IFACEROLE_EXPERIMENT() . "'")
 	or return -1;
