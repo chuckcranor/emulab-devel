@@ -135,7 +135,7 @@ elseif ($specupload) {
     # See backend scripts.
     # 
     list($usec, $sec) = explode(' ', microtime());
-    $foo = "$sec" . "$usec";
+    $foo = "$sec" . str_replace(".", "", $usec);
 
     $nsfile = "/tmp/$uid-$foo.nsfile";
     $handle = fopen($nsfile,"w");
