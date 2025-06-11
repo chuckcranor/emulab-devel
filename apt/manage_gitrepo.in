@@ -1113,6 +1113,9 @@ sub GetCommitList($$)
 	my ($hash,$author,$when,$log) = split(/\x1f/, $line);
 	next if (!defined($log));
 
+	# Remove non ascii chars
+	$author =~ tr/\x80-\xFF//d;	
+
 	push(@{ $commits }, {"hash"   => $hash,
 			     "author" => $author,
 			     "when"   => TBDateStringGMT(str2time($when)),
@@ -1165,6 +1168,9 @@ sub DoCommitInfo()
     if (!defined($size)) {
 	$size = "???";
     }
+    # Remove non ascii chars
+    $author =~ tr/\x80-\xFF//d;	
+    
     my $blob = {"hash"      => $hash,
 		"author"    => $author,
 		"when"      => TBDateStringGMT(str2time($when)),
