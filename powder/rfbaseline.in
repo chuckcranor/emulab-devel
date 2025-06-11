@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -73,7 +73,7 @@ my %results = ();
 # This the binding string we pass along to startExperiment.
 #
 my $bindingsTemplate =
-    '{"Where" : "%s", "NodeID" : "%s", "Type" : "%s", "ComputeType" : "Any"}';
+    '{"Radios" : ["%s"], "runCount" : 1}';
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -236,7 +236,7 @@ sub RunMonitor($$)
 {
     my ($id, $node_id) = @_;
     my $urn  = $endpoints{$id}->{"urn"};
-    my $type = $endpoints{$id}->{"nodes"}->{$node_id};
+    my $radio = $endpoints{$id}->{"nodes"}->{$node_id};
     my $name = "m-" . substr($id, 0, 7) . "-${node_id}";
     my $errmsg;
     my $blob;
@@ -250,6 +250,7 @@ sub RunMonitor($$)
     # Look for experiment still running, in case we got killed and are starting
     # up again. 
     #
+    if (0) {
     my $rval = GetStatus($name, 0, \$blob, \$errmsg);
     if ($rval < 0) {
 	print "Could not get current status for $name: $errmsg\n";
@@ -283,9 +284,11 @@ sub RunMonitor($$)
 	# while for reset.
 	return 1;
     }
+    }
+    my $rval;
 
     # Create the bindings to pass to startExperiment
-    my $bindings = sprintf($bindingsTemplate, $urn, $node_id, $type);
+    my $bindings = sprintf($bindingsTemplate, $radio);
     my $stop = time() + (3600 * 1);
 
     my $command = "$STARTEXP -s -P -p $PID --bindings='$bindings' ".
