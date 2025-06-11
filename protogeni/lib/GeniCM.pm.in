@@ -9441,7 +9441,7 @@ sub HandleBlockstore($$$$$$@)
 		#
 		# Only one read-write user at a time.
 		#
-		if (!$readonly && $lease->InUseReadWrite()) {
+		if ((!($readonly || $rwclone)) && $lease->InUseReadWrite()) {
 		    $message = "Dataset $dataset_id is already in use RW";
 		    $errorcode = GENIRESPONSE_BADARGS;
 		    last;
