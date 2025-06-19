@@ -1063,6 +1063,21 @@ sub AnnotateManifest($)
     GeniXML::SetText( "sim_imsi", $rspec, $sim_imsi )
 	if( defined( $sim_imsi ) );
 
+    my $ru_cfreq;
+    $experiment->GetVirtNodeAttribute( $vname, "center_frequency", \$ru_cfreq );
+    GeniXML::SetText( "center_frequency", $rspec, $ru_cfreq )
+	if( defined( $ru_cfreq ) );
+
+    my $ru_bandw;
+    $experiment->GetVirtNodeAttribute( $vname, "bandwidth", \$ru_bandw );
+    GeniXML::SetText( "bandwidth", $rspec, $ru_bandw )
+	if( defined( $ru_bandw ) );
+
+    my $ru_mimom;
+    $experiment->GetVirtNodeAttribute( $vname, "mimo_mode", \$ru_mimom );
+    GeniXML::SetText( "mimo_mode", $rspec, $ru_mimom )
+	if( defined( $ru_mimom ) );
+    
     #
     # Add Emulab extension that says which virtnodes are instantiated
     # on this physical host.

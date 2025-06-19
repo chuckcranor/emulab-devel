@@ -2223,6 +2223,30 @@ sub GetTicketAuxAux($)
 					    "attrkey"   => "adb_target",
 					    "attrvalue" => $adb_target } );
 	}
+
+	#
+	# COTS RU parameter extraction.
+	#
+	my %ru_param_checks = (
+	    'center_frequency' => qr/^\d{1,12}(\.\d{1,6})?$/,
+	    'bandwidth' => qr/^\d{1,12}(\.\d{1,6})?$/,
+	    'mimo_mode' => qr/^\w{1,16}$/
+	    );
+	my $ru_params = GeniXML::GetCOTSRUParameters( $ref );
+	if ( defined( $ru_params ) ) {
+	    while ( my ( $k, $v ) = each %{ $ru_params } ) {
+		if ( $v !~ $ru_param_checks{$k} ) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_BADARGS, undef,
+			"COTS RU parameter $k invalid" );
+		    goto bad;
+		}	    
+		$virtexperiment->NewTableRow( "virt_node_attributes",
+					      { "vname"     => $node_nickname,
+						"attrkey"   => $k,
+						"attrvalue" => $v } );
+	    }
+	}
 	
 	#
 	# Special hack for allocating from a specific chassis.
