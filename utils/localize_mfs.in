@@ -531,6 +531,35 @@ sub LocalizeBSD()
 }
 
 #
+# New (all?) Linux MFSes use dropbear for their ssh server. We need to copy our
+# our ssh keys to /etc/dropbear so that the startup script can convert them to
+# dropbear format. Return 0 on success, 1 if there was a problem.
+#
+sub UpdateDropBear()
+{
+    my $dbdir = "etc/dropbear";
+
+    # XXX need -l check since -e does not pick up symlink that does not resolve
+    if (-l $dbdir || (-e _ && ! -d _)) {
+	unlink($dbdir);
+    }
+    if (! -e $dbdir && ! mkdir($dbdir, 0755)) {
+	print STDERR "Could not create $dbdir for dropbear keys\n";
+	return 1;
+    }
+
+    print "Installing SSH keys for dropbear ...\n";
+    foreach my $kt ("rsa", "ecdsa", "ed25519") {
+	my $kf = "$IMAGEKEYS_DIR/ssh_host_${kt}_key";
+	if (-f "$kf" && ExecQuiet("$CP -p $kf $dbdir/")) {
+	    print STDERR "WARNING: could not install ssh_host_${kt}_key\n";
+	}
+    }
+
+    return 0;
+}
+
+#
 # Localize a Linux MFS
 #
 sub LocalizeLinux($)
@@ -599,6 +628,8 @@ sub LocalizeLinux($)
 	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* etc/ssh")
+	== 0 or goto bad;
+    UpdateDropBear()
 	== 0 or goto bad;
     ExecQuiet("$CHOWN root:wheel etc/ssh/ssh_host*")
 	== 0 or goto bad;
