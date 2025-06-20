@@ -1,6 +1,6 @@
 diff -rcN tftp-hpa-5.2.orig/MCONFIG.in tftp-hpa-5.2/MCONFIG.in
 *** tftp-hpa-5.2.orig/MCONFIG.in	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/MCONFIG.in	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/MCONFIG.in	Fri Jun 20 10:37:38 2025
 ***************
 *** 31,36 ****
 --- 31,45 ----
@@ -45,7 +45,7 @@ diff -rcN tftp-hpa-5.2.orig/MCONFIG.in tftp-hpa-5.2/MCONFIG.in
   LDFLAGS = @LDFLAGS@
 diff -rcN tftp-hpa-5.2.orig/tftp/tftp.c tftp-hpa-5.2/tftp/tftp.c
 *** tftp-hpa-5.2.orig/tftp/tftp.c	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftp/tftp.c	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftp/tftp.c	Fri Jun 20 10:37:38 2025
 ***************
 *** 48,54 ****
   #define PKTSIZE    SEGSIZE+4
@@ -65,7 +65,7 @@ diff -rcN tftp-hpa-5.2.orig/tftp/tftp.c tftp-hpa-5.2/tftp/tftp.c
   static void nak(int, const char *);
 diff -rcN tftp-hpa-5.2.orig/tftpd/Makefile tftp-hpa-5.2/tftpd/Makefile
 *** tftp-hpa-5.2.orig/tftpd/Makefile	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftpd/Makefile	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/Makefile	Fri Jun 20 10:37:38 2025
 ***************
 *** 17,26 ****
   	sed -e 's/@@VERSION@@/$(VERSION)/g' < $< > $@
@@ -92,7 +92,7 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/Makefile tftp-hpa-5.2/tftpd/Makefile
   	rm -f *.o *.obj *.exe tftpd tftpsubs.c tftpsubs.h tftpd.8
 diff -rcN tftp-hpa-5.2.orig/tftpd/remap.c tftp-hpa-5.2/tftpd/remap.c
 *** tftp-hpa-5.2.orig/tftpd/remap.c	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftpd/remap.c	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/remap.c	Fri Jun 20 10:37:38 2025
 ***************
 *** 340,346 ****
       /* Default error */
@@ -194,21 +194,18 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/remap.c tftp-hpa-5.2/tftpd/remap.c
       return current;
 diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd-hpa.sh tftp-hpa-5.2/tftpd/tftpd-hpa.sh
 *** tftp-hpa-5.2.orig/tftpd/tftpd-hpa.sh	Wed Dec 31 17:00:00 1969
---- tftp-hpa-5.2/tftpd/tftpd-hpa.sh	Sat Apr 20 16:18:50 2024
+--- tftp-hpa-5.2/tftpd/tftpd-hpa.sh	Fri Jun 20 10:39:58 2025
 ***************
 *** 0 ****
---- 1,47 ----
+--- 1,44 ----
 + #!/bin/sh
 + 
 + # PROVIDE: tftpd
-+ # REQUIRE: NETWORKING
++ # REQUIRE: DAEMON
 + # KEYWORD: shutdown
 + #
 + 
-+ if ! PREFIX=$(expr $0 : "\(/.*\)/etc/rc\.d/$(basename $0)\$"); then
-+     echo "$0: Cannot determine the PREFIX" >&2
-+     exit 1
-+ fi
++ PREFIX=/usr/local
 + 
 + tftpd_flags="-l"
 + 
@@ -247,7 +244,7 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd-hpa.sh tftp-hpa-5.2/tftpd/tftpd-hpa.sh
 + exit 0
 diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.c tftp-hpa-5.2/tftpd/tftpd.c
 *** tftp-hpa-5.2.orig/tftpd/tftpd.c	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftpd/tftpd.c	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/tftpd.c	Fri Jun 20 10:37:38 2025
 ***************
 *** 48,53 ****
 --- 48,54 ----
@@ -793,7 +790,7 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.c tftp-hpa-5.2/tftpd/tftpd.c
       if (send(peer, buf, length, 0) != length)
 diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.rules tftp-hpa-5.2/tftpd/tftpd.rules
 *** tftp-hpa-5.2.orig/tftpd/tftpd.rules	Wed Dec 31 17:00:00 1969
---- tftp-hpa-5.2/tftpd/tftpd.rules	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/tftpd.rules	Fri Jun 20 10:37:38 2025
 ***************
 *** 0 ****
 --- 1,37 ----
