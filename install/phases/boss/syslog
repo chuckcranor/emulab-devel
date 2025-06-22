@@ -208,6 +208,8 @@ sub Install($$$)
 		"/var/run/httpd.pid",
 		"$LOGDIR/apache_ssl_access_log  644  7   10000  *    BZ ".
 		"/var/run/httpd.pid",
+		"$LOGDIR/apache_ssl_error_log   644  7   10000  *    BZ ".
+		"/var/run/httpd.pid",
 		"$LOGDIR/portal_monitor.log     644  7    1000  *     Z ".
 		"/var/run/portal_monitor.pid",
                 "$LOGDIR/apt_daemon.log         644  7    1000  *     Z ".
