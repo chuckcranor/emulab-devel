@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -454,6 +454,10 @@ EOF8
 
 dofreebsd() {
 	pchar=$freebsd_pchar
+
+	if [ -n "$SLICEFIX_CLOUDINIT" -a "$SLICEFIX_CLOUDINIT" != "0" ]; then
+	    echo "WARNING: cloud-init not supported for FreeBSD images yet!"
+	fi
 
 	if [ $OS = FreeBSD ]; then
 		vers=`uname -v | sed -e 's/FreeBSD \([0-9]\).*/\1/'`
