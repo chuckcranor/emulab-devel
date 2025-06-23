@@ -772,6 +772,7 @@ fixone() {
     export SLICEFIX_BIOSDISK=`getvar BIOSDISK "$iline"`
     export SLICEFIX_DOM0MEM=`getvar DOM0MEM "$iline" unknown`
     export SLICEFIX_DISABLEIF=`getvar DISABLEIF "$iline"`
+    export SLICEFIX_CLOUDINIT=`getvar CLOUDINIT "$iline"`
 
     $BINDIR/slicefix $PART $DISK
     return $?

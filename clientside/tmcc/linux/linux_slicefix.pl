@@ -1647,6 +1647,11 @@ sub main
 	my $lilo_default;
 	my $lilo_commandline = 0;
 
+	my $cloudinit = $ENV{"SLICEFIX_CLOUDINIT"};
+	if ($cloudinit) {
+	    print STDERR "WARNING: woulda, coulda, shoulda done the cloud-init thing!\n";
+	}
+	
 	my $old_uuid = get_uuid($root);
 	#
 	# Currently this break our UEFI images where the UUID is embedded
