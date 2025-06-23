@@ -6078,12 +6078,13 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 		  int *disknump, int *biosdisknump, int *dotrimp,
 		  char **useacpip, char **useasfp, char **noclflushp,
 		  char **vgaonlyp, char **consoletypep, char **dom0memp,
-		  char **disableifp)
+		  char **disableifp, char **diskserialp)
 {
 	MYSQL_RES	*res2;
 	MYSQL_ROW	row2;
 	char		*disktype, *useacpi, *useasf, *noclflush, *dom0mem;
 	char		*vgaonly, *consoletype, *disableif, *attrclause;
+	char		*diskserial;
 	int		disknum, biosdisknum, dotrim;
 	unsigned int	trimiv, trimtime;
 
@@ -6113,6 +6114,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 	 */
 	disktype = NULL;
 	disknum = DISKNUM;
+	diskserial = NULL;
 	biosdisknum = -1;
 	dotrim = 0;
 	trimiv = 0;
@@ -6148,6 +6150,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 	attrclause =
 		"(attrkey='bootdisk_unit' or "
 		" attrkey='bootdisk_bios_id' or "
+		" attrkey='bootdisk_serial' or "
 		" attrkey='bootdisk_trim' or "
 		" attrkey='bootdisk_trim_interval' or "
 		" attrkey='bootdisk_lasttrim' or "
@@ -6204,6 +6207,10 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 					dotrim = atoi(attrstr);
 					free(attrstr);
 				}
+				else if (strcmp(row2[0], "bootdisk_serial") == 0) {
+					if (diskserial) free(diskserial);
+					diskserial = attrstr;
+				}
 				else if (strcmp(row2[0], "bootdisk_trim_interval") == 0) {
 					trimiv = (unsigned int)atoi(attrstr);
 					free(attrstr);
@@ -6252,6 +6259,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 	*disktypep = disktype ? disktype : strdup(DISKTYPE);
 	*disknump = disknum;
 	*biosdisknump = biosdisknum;
+	*diskserialp = diskserial;
 	*useacpip = useacpi ? useacpi : strdup("unknown");
 	*useasfp = useasf ? useasf : strdup("unknown");
 	*noclflushp = noclflush ? noclflush : strdup("unknown");
@@ -6357,6 +6365,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 	int		nrows, zfill;
 	char		*server, *disktype, *useacpi, *useasf, *noclflush;
 	char		*vgaonly, *consoletype, *dom0mem, *disableif;
+	char		*diskserial;
 	int		disknum, biosdisknum, dotrim, heartbeat;
 
 	/*
@@ -6368,7 +6377,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "   ov.version,pa.`partition`,iv.size,"
 			 "   iv.lba_low,iv.lba_high,iv.lba_size,iv.relocatable,"
 			 "   UNIX_TIMESTAMP(iv.updated),r.imageid_version,"
-			 "   iv.format "
+			 "   iv.format,"
+			 "   FIND_IN_SET('cloud-init',ov.osfeatures) as canci "
 			 "from current_reloads as r "
 			 "left join images as i on i.imageid=r.image_id "
 			 "left join image_versions as iv on "
@@ -6384,7 +6394,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "     pa.node_id=r.node_id and "
 			 "     pa.osid=iv.default_osid and loadpart=0 "
 			 "where r.node_id='%s' order by r.idx",
-			 21, reqp->nodeid);
+			 22, reqp->nodeid);
 
 	if (!res) {
 		error("doloadinfo: %s: DB Error getting loading address!\n",
@@ -6432,7 +6442,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 	 */
 	if (get_node_loadinfo(reqp, &server, &disktype, &disknum, &biosdisknum,
 			      &dotrim, &useacpi, &useasf, &noclflush,
-			      &vgaonly, &consoletype, &dom0mem, &disableif)) {
+			      &vgaonly, &consoletype, &dom0mem, &disableif,
+			      &diskserial)) {
 		mysql_free_result(res);
 		return 1;
 	}
@@ -6732,6 +6743,30 @@ COMMAND_PROTOTYPE(doloadinfo)
 				bufp += OUTPUT(bufp,ebufp - bufp," PATH=");
 		}
 
+		/*
+		 * Two unrelated features added at the same time.
+		 */
+		if (vers >= 45) {
+			/*
+			 * Bootdisk serial number.
+			 */
+			if (diskserial && strcmp(diskserial, "none") != 0) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " BOOTSERIAL=%s", diskserial);
+			}
+			
+			/*
+			 * Image is cloudinit aware.
+			 */
+			if (row[21] && row[21][0] && atoi(row[21]) > 0) {
+				/* XXX right now there is only 1. */
+				int ci = 1;
+
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " CLOUDINIT=%d", ci);
+			}
+		}
+		
 		/* Tack on the newline, finally */
 		bufp += OUTPUT(bufp, ebufp - bufp, "\n");
 
@@ -6750,6 +6785,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 		free(server);
 	if (disktype)
 		free(disktype);
+	if (diskserial)
+		free(diskserial);
 	if (useacpi)
 		free(useacpi);
 	if (useasf)

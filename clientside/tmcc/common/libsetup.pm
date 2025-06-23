@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,7 +85,7 @@ use librc;
 # IMPORTANT NOTE: if you change the version here, you must also change it
 # in clientside/lib/tmcd/tmcd.h!
 #
-sub TMCD_VERSION()	{ 44; };
+sub TMCD_VERSION()	{ 45; };
 libtmcc::configtmcc("version", TMCD_VERSION());
 
 # Control tmcc timeout.
