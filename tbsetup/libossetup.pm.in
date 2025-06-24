@@ -2639,7 +2639,7 @@ sub LightUpNodes($@)
     }
     #
     # If the eventstate somewhow managed to get out of ISUP, send it, unless
-    # something told us not to.
+    # something told us to skip this action.
     #
     foreach my $node (@nodelist) {
 	next
@@ -2737,8 +2737,23 @@ sub New($$) {
 }
 
 #
+# Need to adjust maxwait time for Benetel RUs (which is long...)
+#
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    $self->SUPER::AddNode($node);
+
+    # Benetel RUs take a loooong time to get to their "up" state.
+    $node->_maxwait(360);
+
+    return 0;
+}
+
+#
 # Light up nodes as with SDRs, and then conjure and send the
-# configuration to the RU devices.
+# configuration to the RU devices. Reboot them as well afterward.
 #
 sub LightUpNodes($@)
 {
@@ -2817,20 +2832,96 @@ sub LightUpNodes($@)
 
 	# Finally, apply the configuration for the RU and reboot it.
 	my $json_config = to_json(\%ru_params);
-	tbnotice("Configuring COTS RU $node_id\n");
+	tbnotice("Configuring Benetel COTS RU $node_id\n");
 	system("echo '$json_config' | $BENESHELL $node_id -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
 	    goto bad;
 	}
 
-	return 0;
-
-      bad:
-	$parent->noretry(1);
-	return -1;	
+	# Tell Stated that the RU is booting.
+	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
+	    or goto bad;
     }
 
+    return 0;
+
+  bad:
+    $parent->noretry(1);
+    return -1;	
+}
+
+#
+# Wait for Benetel RU to get to "radio bringup complete" state.
+#
+sub WaitForNode($$)
+{
+    my ($self, $node) = @_;
+    my $parent = $self->parent();
+    my $node_id = $node->node_id();
+
+    #
+    # No need to wait if cancelation has occured.
+    #
+    if ($parent->canceled()) {
+	$node->_maxwait(0);
+    }
+
+    # See if the radio has made it to the "Radio Bringup Complete" state.
+    system("$BENESHELL $node_id -w 0");
+    if (! $?) {
+	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+	    $parent->noretry(1);
+	    return -1;
+	}
+    }
+
+    return $self->SUPER::WaitForNode($node);
+}
+
+#
+# Pared down version of libossetup_pc WaitDone() function for Benetel RUs.
+#
+sub WaitDone($@)
+{
+    my ($self, @nodelist) = @_;
+    my $parent     = $self->parent();
+
+    #
+    # Must call the generic WaitDone handler too.
+    #
+    $self->SUPER::WaitDone(@nodelist);
+
+    #
+    # Then per node processing.
+    #
+    foreach my $node (@nodelist) {
+	my $node_id     = $node->node_id();
+	my $setupstatus = $node->_setupstatus();
+	my $eventstate  = $node->eventstate();
+
+	if ($eventstate eq TBDB_NODESTATE_ISUP()) {
+	    print "$node_id is alive and well\n";
+	    $node->SetBootStatus(NODEBOOTSTATUS_OKAY);
+	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_READY());
+
+	    # Set this so we know a successful reboot was done.
+	    $node->_rebooted(1)
+		if ($node->_setupoperation() != $libossetup::NOSTATE);
+
+	    next;
+	}
+	# Fall through on failure.
+	if ($eventstate eq TBDB_NODESTATE_TBFAILED()) {
+	    tbwarn("$node_id reported a TBFAILED event\n");
+	}
+	else {
+	    tbwarn("$node_id failed to boot\n");
+	}
+	$node->SetBootStatus(NODEBOOTSTATUS_FAILED);
+    }
+
+    return 0;
 }
 
 package libossetup_bt_ru650;
