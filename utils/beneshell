@@ -28,6 +28,7 @@
 #       this is insane, but true).
 #
 
+import os
 import sys
 import time
 import logging
@@ -50,8 +51,15 @@ def _mk_logger(name, def_lvl = logging.INFO):
     return lgr
 
 def _ping(host, count=1):
-    arg = "-n" if sys.platform.lower() in ('windows', 'cygwin') else "-c"
-    cmd = ['ping', arg, str(count), host]
+    #arg = "-n" if sys.platform.lower() in ('windows', 'cygwin') else "-c"
+    ping = None
+    ping_paths = ("/sbin/ping", "/bin/ping", "/usr/bin/ping")
+    for path in ping_paths:
+        if os.path.exists(path):
+            ping = path
+    if not ping:
+        raise RuntimeError("Could not find ping binary!")
+    cmd = [ping, "-c", str(count), host]
     return subprocess.run(cmd, capture_output=True).returncode
 
 def _whoami(obj):
