@@ -2537,7 +2537,6 @@ sub New($$) {
 
     my $self = $class->SUPER::New("sdr", $parent);
     bless($self, $class);
-    $self->_skipisup(0); # Do not skip forced ISUP in base SDR class.
     return $self;
 }
 
@@ -2626,9 +2625,8 @@ sub LightUpNodes($@)
 	}
     }
     if (@cycles) {
-	my $evtarg = $self->_skipisup() ? "" : "-e";
 	tbnotice("Power cycling radios: @cycles\n");
-	system("$POWER $evtarg cycle @cycles");
+	system("$POWER -e cycle @cycles");
 	my $exitval = $?;
 
 	if ($exitval) {
@@ -2643,8 +2641,7 @@ sub LightUpNodes($@)
     #
     foreach my $node (@nodelist) {
 	next
-	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY() ||
-		$self->_skipisup());
+	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 	
 	if (!$node->IsUp()) {
 	    if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
@@ -2712,7 +2709,7 @@ use English;
 use Data::Dumper;
 
 package libossetup_bt_ru550;
-use base qw(libossetup_sdr);
+use base qw(libossetup_handler);
 
 use libdb;
 use libtestbed;
@@ -2732,7 +2729,6 @@ sub New($$) {
 
     my $self = $class->SUPER::New("bt_ru550", $parent);
     bless($self, $class);
-    $self->_skipisup(1); # Inhibit sending the ISUP state in parent methods.
     return $self;
 }
 
@@ -2743,6 +2739,7 @@ sub AddNode($$)
 {
     my ($self, $node) = @_;
 
+    # Do super class stuff for adding the node.
     $self->SUPER::AddNode($node);
 
     # Benetel RUs take a loooong time to get to their "up" state.
@@ -2762,9 +2759,63 @@ sub LightUpNodes($@)
     my $experiment = $parent->experiment();
     my @pfields = ('center_frequency', 'bandwidth', 'mimo_mode');
 
-    # Power on / cycle and do RF Switcher stuff in base SDR class.
-    self->SUPER::LightUpNodes(@nodelist) == 0
-	or goto bad;
+    my @cycles     = ();
+    my @ons        = ();
+    my $count      = 0;
+
+    #
+    # We want to this before powering on the radio to make sure it has an
+    # antenna load before it tries to transmit anything (says Alex).
+    #
+    foreach my $node (@nodelist) {
+	my $node_id = $node->node_id();
+	my $rfswitch_port = $node->rfswitch_port();
+	next
+	    if (!defined($rfswitch_port));
+
+	tbnotice("Setting the RF Switch for $node_id (to port $rfswitch_port)\n");
+	system("$RFSWITCHER -d $node_id");
+	goto bad
+	    if ($?);
+	$count++;
+    }
+    #
+    # Sam/Alex say we need a small delay after the rfswitcher runs.
+    #
+    if ($count) {
+	sleep(1);
+    }
+
+    foreach my $node (@nodelist) {
+	next
+	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
+
+	if (!$node->HasOutlet()) {
+	    my $node_id = $node->node_id();
+	    tbnotice("Radio $node_id does not have a power outlet, skipping\n");
+	    next;
+	}
+
+	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+	    push(@ons, $node->node_id())
+	}
+	else {
+	    push(@cycles, $node->node_id())
+	}
+    }
+    if (@ons) {
+	tbnotice("Power on radios: @ons\n");
+	# We need the event state change here.
+	system("$POWER on @ons");
+	goto bad
+	    if ($?);
+    }
+    if (@cycles) {
+	tbnotice("Power cycling radios: @cycles\n");
+	system("$POWER cycle @cycles");
+	goto bad
+	    if (@?);
+    }
 
     # Get info about the companion DU nodes and the Vlans that connect them.
     foreach my $node (@nodelist) {
