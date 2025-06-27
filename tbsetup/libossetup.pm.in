@@ -2730,7 +2730,7 @@ use Data::Dumper;
 sub New($$) {
     my ($class, $parent) = @_;
 
-    my $self = $class->SUPER::New("bt_ru", $parent);
+    my $self = $class->SUPER::New("bt_ru550", $parent);
     bless($self, $class);
     $self->_skipisup(1); # Inhibit sending the ISUP state in parent methods.
     return $self;
@@ -2767,7 +2767,7 @@ sub LightUpNodes($@)
 	or goto bad;
 
     # Get info about the companion DU nodes and the Vlans that connect them.
-    foreach $node (@nodelist) {
+    foreach my $node (@nodelist) {
 	my $node_id = $node->node_id();
 	my $vname   = $node->vname();
 	my %ru_params = ();
@@ -2779,7 +2779,8 @@ sub LightUpNodes($@)
 	$experiment->GetVirtNodeAttribute($vname, 'bandwidth', \$attr);
 	$ru_params{'bandwidth'} = $attr * 1000 * 1000; # convert MHz to Hz
 	$experiment->GetVirtNodeAttribute($vname, 'mimo_mode', \$attr);
-	$ru_params{'mimo_mode'} = $attr;
+	$ru_params{'mimo_mode'} = $attr
+	    if defined($attr);
 
 	# We assume that the RU connects to its DU via its 'eth0' interface.
 	my $iface;
