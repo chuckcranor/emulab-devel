@@ -2238,7 +2238,7 @@ sub GetTicketAuxAux($)
 		if ( $v !~ $ru_param_checks{$k} ) {
 		    $response = GeniResponse->Create(
 			GENIRESPONSE_BADARGS, undef,
-			"COTS RU parameter $k invalid" );
+			"COTS RU parameter '$k' invalid: $v" );
 		    goto bad;
 		}	    
 		$virtexperiment->NewTableRow( "virt_node_attributes",

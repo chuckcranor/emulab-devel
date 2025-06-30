@@ -2145,7 +2145,7 @@ sub GetCOTSRUParameters($)
     my @fields = ("center_frequency", "bandwidth", "mimo_mode");
 
     my $params = FindNodesNS( "n:cotsru_params", $ref, $EMULAB_NS )->pop();
-    if ($params) {
+    if (defined($params)) {
 	foreach my $field (@fields) {
 	    my $val = GetText($field, $params);
 	    $result{$field} = $val
