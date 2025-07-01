@@ -2743,7 +2743,8 @@ sub AddNode($$)
     $self->SUPER::AddNode($node);
 
     # Benetel RUs take a loooong time to get to their "up" state.
-    $node->_maxwait(360);
+    $node->_maxwait(600);
+    $node->_retrycount(0); # no retries.
 
     return 0;
 }
@@ -2921,7 +2922,7 @@ sub WaitForNode($$)
     }
 
     # See if the radio has made it to the "Radio Bringup Complete" state.
-    system("$BENESHELL $node_id -w 0");
+    system("$BENESHELL $node_id -q -w 0");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
