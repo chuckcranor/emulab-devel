@@ -1585,7 +1585,7 @@ sub ActionStart($$;$@)
     if (! $snmpitafterossetup) {
 	$snmpit_child = &$dosnmpit();
     }
-    if ($snmpitbeforeossetup && definined($snmpit_child)) {
+    if ($snmpitbeforeossetup && defined($snmpit_child)) {
 	print STDERR "Waiting for snmpit process to finish before os_setup\n";
 
 	my $kid = waitpid($snmpit_child, 0);
