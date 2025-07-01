@@ -41,9 +41,9 @@ from paramiko.client import SSHClient, AutoAddPolicy
 
 ### Global utility functions
 
-def _mk_logger(name, def_lvl = logging.INFO):
+def _mk_logger(name, log_level = logging.INFO):
     lgr = logging.getLogger(name)
-    lgr.setLevel(def_lvl)
+    lgr.setLevel(log_level)
     ch = logging.StreamHandler()
     fmt = logging.Formatter('{asctime}: {name}.{funcName}: [{levelname}]: {message}', style='{')
     ch.setFormatter(fmt)
@@ -72,15 +72,16 @@ def _whoami(obj):
 # SSHWrapper class definition
 #
 class SSHWrapper(object):
+    DEF_LOG_LEVEL = logging.INFO
     DEF_USER = "root"
     DEF_TIMEOUT = 30 # 30 seconds
 
     def __init__(self, device_addr, default_user = DEF_USER,
-                 default_keyfile = None):
+                 default_keyfile = None, log_level = DEF_LOG_LEVEL):
         self.daddr = device_addr
         self.default_username = default_user
         self.default_keyfile = default_keyfile
-        self.lgr = _mk_logger(self.__class__.__name__)
+        self.lgr = _mk_logger(self.__class__.__name__, log_level)
         self.pcli = SSHClient()
         self.pcli.load_system_host_keys()
         self.pcli.set_missing_host_key_policy(AutoAddPolicy)
@@ -368,6 +369,7 @@ class BenetelConfig(object):
 # BenetelWrapper class definition
 #
 class BenetelWrapper(object):
+    DEF_LOG_LEVEL = logging.INFO
     DEF_SSH_USER = "root"
     DEF_SSH_PASSWD = ""
     DEF_BOOT_TIMEOUT = 120
@@ -397,12 +399,12 @@ class BenetelWrapper(object):
          'compression', 'lf_prach_compression_enable',
          'flexran_prach_workaround')
 
-    def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None):
+    def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None, log_level = DEF_LOG_LEVEL):
         self.addr = mgmt_addr
-        self.lgr = _mk_logger(self.__class__.__name__)
+        self.lgr = _mk_logger(self.__class__.__name__, log_level)
         self.fwversion = self.FW_VERSION_UNKNOWN
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
-                               default_keyfile=keyfile)
+                               default_keyfile=keyfile, log_level = log_level)
 
     def connect_session(self, password = DEF_SSH_PASSWD, retries = 0, ping_timeout = DEF_PING_TIMEOUT):
         self.wait_for_ping(timeout = ping_timeout)
@@ -567,8 +569,8 @@ class BenetelWrapper(object):
 #
 # Top-level code (main script entry point and helpers)
 #
-def connect(args):
-    bw = BenetelWrapper(args.address, args.username)
+def connect(args, loglvl):
+    bw = BenetelWrapper(args.address, args.username, log_level = loglvl)
     passwd = getpass() if args.password else ""
     bw.connect_session(password=passwd, ping_timeout=args.ping_timeout)
     passwd = None
@@ -604,12 +606,11 @@ def parse_args():
    
 def main():
     args = parse_args()
-    lgr = _mk_logger("beneshell")
-    if args.quiet:
-        lgr.setLevel(logger.ERROR)
+    loglvl = logging.ERROR if args.quiet else logging.INFO
+    lgr = _mk_logger("beneshell", loglvl)
     bw = None
     try:
-        bw = connect(args)
+        bw = connect(args, loglvl)
         if not args.get_config:
             lgr.info(f"Connected to {args.address}. Firmware: {bw.get_firmware_version()}")
     except:
