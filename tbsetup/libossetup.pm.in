@@ -2745,6 +2745,7 @@ sub AddNode($$)
     # Benetel RUs take a loooong time to get to their "up" state.
     $node->_maxwait(600);
     $node->_retrycount(0); # no retries.
+    $node->_pingwait(60); # Higher initial ping wait time (account for boot).
 
     return 0;
 }
@@ -2922,13 +2923,15 @@ sub WaitForNode($$)
     }
 
     # See if the radio has made it to the "Radio Bringup Complete" state.
-    system("$BENESHELL $node_id -q -w 0");
+    my $pingwait = $node->_pingwait();
+    system("$BENESHELL $node_id -q -P $pingwait -w 0");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
 	    return -1;
 	}
     }
+    $node->_pingwait(5); # Reset pingwait to default after first call.
 
     return $self->SUPER::WaitForNode($node);
 }
