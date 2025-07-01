@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2022 University of Utah and the Flux Group.
+# Copyright (c) 2017-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -249,7 +249,6 @@ if (TBGetSiteVar($svar, \$tmp)) {
     } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
-
 }
 $svar = "cnetwatch/bps_threshold";
 if (TBGetSiteVar($svar, \$tmp)) {
@@ -258,7 +257,6 @@ if (TBGetSiteVar($svar, \$tmp)) {
     } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
-
 }
 $svar = "cnetwatch/mail_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
@@ -270,7 +268,6 @@ if (TBGetSiteVar($svar, \$tmp)) {
     } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
-
 }
 $svar = "cnetwatch/mail_max";
 if (TBGetSiteVar($svar, \$tmp)) {
@@ -279,7 +276,14 @@ if (TBGetSiteVar($svar, \$tmp)) {
     } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
-
+}
+$svar = "cnetwatch/use_node_metrics";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp >= 0 && $tmp <= 2) {
+	$nodemetrics = $tmp;
+    } elsif (!$forcerun) {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
 }
 
 # XXX testing
@@ -421,6 +425,10 @@ if ($interval >= $alertinterval) {
 }
 
 logit("cnetwatch starting:");
+logit("  using ".
+      ($nodemetrics == 0 ? "switch-based" :
+       ($nodemetrics == 1 ? "switch and node-based" : "node-based")).
+      " metrics\n");
 logit("  check=${interval}s, alert=${alertinterval}s, ".
       "pps=$MAX_PPS, bps=$MAX_BPS");
 if ($sendmail) {
