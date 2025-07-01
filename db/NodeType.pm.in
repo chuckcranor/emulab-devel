@@ -520,6 +520,12 @@ sub reservable($;$) {
 sub stated_noreboot($;$) {
     return GetAttribute($_[0], "stated_noreboot", $_[1]);
 }
+sub snmpitafterossetup($;$) {
+    return GetAttribute($_[0], "snmpitafterossetup", $_[1]);
+}
+sub snmpitbeforeossetup($;$) {
+    return GetAttribute($_[0], "snmpitafterossetup", $_[1]);
+}
 sub control_interface($;$) { return control_iface($_[0], $_[1]); }
 
 #
