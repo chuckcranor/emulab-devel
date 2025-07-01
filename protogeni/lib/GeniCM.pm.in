@@ -2240,7 +2240,7 @@ sub GetTicketAuxAux($)
 			GENIRESPONSE_BADARGS, undef,
 			"COTS RU parameter '$k' invalid: $v" );
 		    goto bad;
-		}	    
+		}
 		$virtexperiment->NewTableRow( "virt_node_attributes",
 					      { "vname"     => $node_nickname,
 						"attrkey"   => $k,

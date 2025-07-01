@@ -404,8 +404,8 @@ class BenetelWrapper(object):
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile)
 
-    def connect_session(self, password = DEF_SSH_PASSWD, retries = 0):
-        self.wait_for_ping()
+    def connect_session(self, password = DEF_SSH_PASSWD, retries = 0, ping_timeout = DEF_PING_TIMEOUT):
+        self.wait_for_ping(timeout = ping_timeout)
         self._ssh.connect(password = password)
         try:
             contents = self._ssh.read_remote_file(self.FW_VERSION_FILE)
@@ -565,12 +565,12 @@ class BenetelWrapper(object):
 
 ##############################################################################
 #
-# Top-level code (main script entry point)
+# Top-level code (main script entry point and helpers)
 #
 def connect(args):
     bw = BenetelWrapper(args.address, args.username)
     passwd = getpass() if args.password else ""
-    bw.connect_session(password=passwd)
+    bw.connect_session(password=passwd, ping_timeout=args.ping_timeout)
     passwd = None
     return bw
 
@@ -582,7 +582,9 @@ def update_config(args, bw):
     else:
         with open(args.json_config, "r") as cfg_f:
             json_data = cfg_f.read()
+    print(f"Input json:\n{json_data}", file=sys.stderr)
     cfg = json.loads(json_data)
+    print(f"json config after parsing:\n{cfg}", file=sys.stderr)
     dcfg = bw.fetch_settings()
     dcfg.update(cfg)
     bw.push_settings(dcfg)
@@ -594,6 +596,7 @@ def parse_args():
     parser.add_argument("-p", "--password", action="store_true", help="Read password from command line.")
     parser.add_argument("-g", "--get-config", action="store_true", help="Get configuration from device and print to stdout in JSON format.")
     parser.add_argument("-j", "--json-config", help="Apply configuration, specified in a JSON file, to the device (specify '-' to read config from stdin). Does NOT imply the `reboot` argument.")
+    parser.add_argument("-P", "--ping-timeout", type=int, default=BenetelWrapper.DEF_PING_TIMEOUT, help="Number of seconds to wait for the device to respond to pings when connecting initially before timing out.")
     parser.add_argument("-r", "--reboot", action="store_true", help="Reboot the RU (via `reboot` over SSH session). Performed after most other actions (see `--wait` argument).")
     parser.add_argument("-w", "--wait", type=int, default=-1, help="Wait for the radio on the device to become active, timing out after WAIT seconds. Does NOT imply the `reboot` argument. This action is performed last (after all other actions complete).")
     return parser.parse_args()

@@ -2875,17 +2875,18 @@ sub LightUpNodes($@)
 	    goto bad;
 	}
 
-	# Add info about the vlan and DU interface to the RU
-	# parameters and fire off a config operation.
+	# Add info about the vlan and DU interface to the RU parameters.
 	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
 	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
 	$ru_params{'du_cplane_mac'} = $du_iface->mac();
 	$ru_params{'du_uplane_mac'} = $du_iface->mac();
 
 	# Finally, apply the configuration for the RU and reboot it.
+	# Adjust the ping timeout to account for the radio just powering on.
 	my $json_config = to_json(\%ru_params);
 	tbnotice("Configuring Benetel COTS RU $node_id\n");
-	system("echo '$json_config' | $BENESHELL $node_id -j - -r");
+	print STDERR "COTS RU JSON config: $json_config\n";
+	system("echo '$json_config' | $BENESHELL $node_id -P 120 -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
 	    goto bad;

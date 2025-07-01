@@ -524,7 +524,7 @@ sub snmpitafterossetup($;$) {
     return GetAttribute($_[0], "snmpitafterossetup", $_[1]);
 }
 sub snmpitbeforeossetup($;$) {
-    return GetAttribute($_[0], "snmpitafterossetup", $_[1]);
+    return GetAttribute($_[0], "snmpitbeforeossetup", $_[1]);
 }
 sub noidle_detection($;$) {
     return GetAttribute($_[0], "noidle_detection", $_[1]);
