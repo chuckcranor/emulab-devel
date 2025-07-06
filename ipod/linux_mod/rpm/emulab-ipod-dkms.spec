@@ -2,7 +2,7 @@
 
 Summary: Emulab IPOD ping-of-death DKMS kernel module
 Name: %{module}
-Version: 3.4.0
+Version: 3.5.0
 License: GPL
 Release: 0
 BuildArch: noarch
@@ -39,6 +39,9 @@ exit 0
 exit 0
 
 %changelog
+* Sun Jul 06 2025 David M. Johnson <johnsond@flux.utah.edu> 3.5.0-0
+- Minor changes to support >=6.11 sysctl interface change (3.5.0).
+
 * Wed Apr 26 2023 David M. Johnson <johnsond@flux.utah.edu> 3.4.0-0
 - Default to workqueue restart on x86 if EFI enabled; make it dynamically configurable (3.4.0).
 

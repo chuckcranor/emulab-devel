@@ -1,3 +1,9 @@
+emulab-ipod-dkms (3.5.0-0) unstable; urgency=medium
+
+  * Minor changes to support >=6.11 sysctl interface change.
+
+ -- David M. Johnson <johnsond@flux.utah.edu>  Sun, 06 Jul 2025 06:43:12 -0600
+
 emulab-ipod-dkms (3.4.0-0) unstable; urgency=medium
 
   * Default to workqueue restart on x86 if EFI enabled; make it dynamically configurable (3.4.0).

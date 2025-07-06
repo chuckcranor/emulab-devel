@@ -1,5 +1,7 @@
 Source: emulab-ipod-dkms
-Maintainer: Testbed Operations <testbed-ops@flux.utah.edu>
+Section: main
+Priority: optional
+Maintainer: Emulab Testbed Operators <testbed-ops@flux.utah.edu>
 Build-Depends: debhelper (>= 9), dkms
 
 Package: emulab-ipod-dkms

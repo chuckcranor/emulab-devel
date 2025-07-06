@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,7 +21,7 @@
 # }}}
 #
 
-VERSION ?= 3.4.0-0
+VERSION ?= 3.5.0-0
 
 obj-m += ipod.o
 

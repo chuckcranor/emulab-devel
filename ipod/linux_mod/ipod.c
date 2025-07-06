@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2019 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -43,7 +43,7 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Flux Research Group");
-MODULE_VERSION("3.4.0");
+MODULE_VERSION("3.5.0");
 
 #define IPOD_ICMP_TYPE 6
 #define IPOD_ICMP_CODE 6
@@ -93,7 +93,13 @@ static void ipod_restart(void) {
 #define IPOD_VALID_KEY(d) \
         (strncmp(sysctl_ipod_key,(char *)(d),sizeof(sysctl_ipod_key) - 1) == 0)
 
-static int ipod_wq_proc(struct ctl_table *table, int write,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,11,0)
+#define __CONSTSC const
+#else
+#define __CONSTSC
+#endif
+
+static int ipod_wq_proc(__CONSTSC struct ctl_table *table, int write,
 			 void __user *buffer, size_t *lenp, loff_t *ppos) {
     int err = proc_dointvec(table, write, buffer, lenp, ppos);
     if (err < 0)
