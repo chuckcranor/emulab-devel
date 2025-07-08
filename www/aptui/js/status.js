@@ -5910,6 +5910,12 @@ $(function ()
     
     function Modify()
     {
+        if (!jacksManifest) {
+            sup.SpitOops("oops", "Uh oh, there is no manifest for this " +
+                         "experiment, so Modify could fail badly. Please " +
+                         "contact support so that we can help you fix this.")
+            return;
+        }
 	// Need to fix this global.
 	window.EXPMODIFY = true;
 	newrspec = null;

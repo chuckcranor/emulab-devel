@@ -879,10 +879,16 @@ window.instantiateCommon = (function () {
 	    var manager_id   = $(this).attr("component_manager_id");
 	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
 
-	    if (manager_id || !site.length) {
+	    if (manager_id) {
 		return;
 	    }
-	    siteid = $(site).attr("id");
+            if (!site.length) {
+                // Case when there are no site tags and one cluster.
+                siteid = "nosite_selector";
+            }
+            else {
+	        siteid = $(site).attr("id");
+            }
 	    if (!_.has(sites, siteid)) {
 		console.info("setSites, no cluster for " + siteid);
 		return;
