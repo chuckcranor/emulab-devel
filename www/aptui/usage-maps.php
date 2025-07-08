@@ -65,7 +65,8 @@ REQUIRE_UNDERSCORE();
 AddLibrary("js/quickvm_sup.js");
 REQUIRE_MOMENT();
 AddLibrary("js/lib/d3.v5.js");
-if ($whichmap == "cities" || $whichmap == "industry") {
+if (isset($whichmap) &&
+    ($whichmap == "cities" || $whichmap == "industry")) {
     SPITREQUIRE("js/usage-map-powder.js");
 }
 else {
