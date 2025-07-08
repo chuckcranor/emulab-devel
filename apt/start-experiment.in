@@ -453,7 +453,7 @@ if (defined($bindings)) {
     close($sfp);
 
     my $opts = "-b $paramfile";
-    $opts .= " -r " . $profile->reponame();
+    $opts .= " -r " . $profile->reponame() if ($profile->IsRepoBased());
     $opts .= " -h '" . $reporef . "'" if (defined($reporef));
 
     my $output = emutil::ExecQuiet("$RUNGENILIB $opts $scriptfile");
