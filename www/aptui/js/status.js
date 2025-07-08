@@ -1897,6 +1897,10 @@ $(function ()
 		      "while it is in recovery mode");
 		return;
 	    }
+            if (! _.has(imageablenodes, node)) {
+		alert(node + " is not a node that can be reloaded");
+		return;
+            }
 	}
 	DoRebootReload("reload", nodeList);
     }
@@ -2840,6 +2844,10 @@ $(function ()
 			if (available === "true") {
 			    imageablenodes[node] = node_id;
 			}
+                        else {
+			    // Context menu option
+			    CMclone.find("li[id=reload]").addClass("hidden");
+                        }
 		    }
 		    else {
 			// All other named nodes are imageable
