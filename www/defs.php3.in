@@ -872,6 +872,9 @@ function RedirectHTTPS() {
 #
 function CleanString($string)
 {
+    if ($string == null) {
+        return "";
+    }
     return htmlspecialchars($string, ENT_QUOTES);
 }
 
