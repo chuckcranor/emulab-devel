@@ -869,7 +869,7 @@ sub CheckAdmissionControl($$$$)
 	if ($debug) {
 	    print $details;
 	}
-	my $res = Reservation->Create( $pid, undef, $start, $end, $type,
+	my $res = Reservation->Create( $pid, $uid, $start, $end, $type,
 				       $nodetypes{ $type } );
 	push( @$reservations, $res );
 	my $error;
