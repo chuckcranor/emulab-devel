@@ -171,7 +171,7 @@ case $os in
 	    $(dmidecode -t processor > $ttf)
 
 	    # sockets = count # Version lines
-	    sockets=$(grep 'Version:' $ttf | wc -l)
+	    sockets=$(grep 'Version:' $ttf | grep -v "Not Specified" | wc -l)
 
 	    # cores_socket = Core Count
 	    x=$(grep "Core Count" $ttf)

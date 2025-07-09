@@ -36,6 +36,7 @@ source hbis.sh
 x=$(caller)
 [[ "${x/NULL}" = "$x" ]] && declare -ri diskcheck_standalone=0 || declare -ri diskcheck_standalone=1
 
+declare failed=""
 ## declare -p todo_exit
 
 main_diskcheck() {

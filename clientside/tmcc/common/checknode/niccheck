@@ -29,6 +29,8 @@ source checkutils.sh
 x=$(caller)
 [[ "${x/NULL}" = "$x" ]] && declare -ri niccheck_standalone=0 || declare -ri niccheck_standalone=1
 
+declare failed=""
+
 initialize $@
 cp /dev/null $tmplog
 
@@ -50,9 +52,9 @@ rm -f ${tmplog2}
 unset -v ifinfo ; declare -a ifinfo=()
 case $os in
     Linux )
-	delimiter="HWaddr" ;;
+	;;
     FreeBSD )
-	delimiter="ether" ;;
+	;;
     * )
 	failed="os $os unknown"
 	finished
@@ -62,11 +64,11 @@ esac
 # Ignore virtual devices that won't be in the DB
 badboys="(ifb|xenbr|vlan|AMPR)"
 
-unset -v d ; declare -a d=($(ifconfig -a | grep $delimiter | grep -Ev $badboys))
+unset -v d ; declare -a d=($(ifconfig -a | grep -e 'ether' -e 'HWaddr' | grep -Ev $badboys))
 declare -i cnt=0;
 ifinfo[0]=''
 for ((idx=0; idx<${#d[*]};idx++)) ; do
-    [[ "${d[idx]}" == "${delimiter}" ]] || continue
+    [[ "${d[idx]}" == "ether" || "${d[idx]}" == "HWaddr" ]] || continue
     ((++idx))
     y=${d[idx]}
     y=${y,,} #lowercase
