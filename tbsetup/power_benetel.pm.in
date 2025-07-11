@@ -1,0 +1,95 @@
+#!/usr/bin/perl -wT
+
+#
+# Copyright (c) 2004 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+# Perl module to power cycle Benetel RU devices, handling node event state
+# machine transitions from the server side.
+
+package power_benetel;
+
+use lib "@prefix@/lib";
+use EmulabConstants;
+use Node;
+use strict;
+
+#
+# Commands we run
+#
+my $TBROOT = '@prefix@';
+my $BENESHELL = "$TBROOT/sbin/beneshell";
+
+# Turn off line buffering on output
+$| = 1;
+
+#
+# Create new Benetel power control object using wacky perl OO syntax.
+# We store a reference to the node object passed in.
+#
+sub new($$) {
+    my($class, $node) = @_;
+    my $obj = {};
+
+    $class = ref($class) if (ref($class));      # save class for blessing
+
+    $obj->{'NODE'} = $node;
+
+    bless($obj, $class);
+    return($obj);
+}
+
+sub DESTROY($) {
+    my $self = shift;
+
+    $self->{'NODE'} = undef;
+}
+
+sub node($) { return $_[0]->{'NODE'}; }
+
+# Do any required post-power operations.
+sub DoPowerPostOp($$) {
+    my ($self, $op) = @_;
+    my $node = $self->node();
+    my $nodeid = $node->node_id();
+
+    if ($op eq "on" || $op eq "cycle") {
+	# Give a bit of time for SHUTDOWN state to propagate.
+	sleep(1);
+	# Send fake booting event (we assume the RU is booting).
+	$node->SetEventState(TBDB_NODESTATE_BOOTING());
+	# Wait for a while for the RU to ping, after which we consider it up.
+	# Takes about a minute.
+	system("$BENESHELL $nodeid -q -P 70");
+	if (! $?) {
+	    $node->SetEventState(TBDB_NODESTATE_ISUP());
+	} else {
+	    $node->SetEventState(TBDB_NODESTATE_TBFAILED());
+	}
+    }
+    elsif ($op eq "off") {
+	# Nothing to do for the "off" operation.
+    }
+}
+
+# Needed at end of perl modules...
+1;
