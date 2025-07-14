@@ -79,7 +79,7 @@ sub DoPowerPostOp($$) {
 	$node->SetEventState(TBDB_NODESTATE_BOOTING());
 	# Wait for a while for the RU to ping, after which we consider it up.
 	# Takes about a minute.
-	system("$BENESHELL $nodeid -q -P 70");
+	system("$BENESHELL $nodeid -q -P 80");
 	if (! $?) {
 	    $node->SetEventState(TBDB_NODESTATE_ISUP());
 	} else {
