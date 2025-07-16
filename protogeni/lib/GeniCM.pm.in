@@ -8315,7 +8315,7 @@ sub GeniExperiment($;$)
 #
 # Given slice and user, flip to the proper user to operate as.
 #
-sub FlipToUser($$)
+sub FlipToUser($;$)
 {
     my ($object, $user) = @_;
     my ($project,$group,$creator, $experiment, $image);
