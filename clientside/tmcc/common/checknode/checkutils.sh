@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023 University of Utah and the Flux Group.
+# Copyright (c) 2013-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,17 +78,18 @@ initialize () {
     if [ -z "${BINDIR-""}" ] ; then 
 	if [ -f "/etc/emulab/paths.sh" ]; then
 	    source /etc/emulab/paths.sh
-	    # XXX paths.sh resets PATH so we need to re-add any special bindir
-	    ldir=`$BINDIR/tmcc hwinfo | grep LOGDIR= | \
-                  sed -e 's/.*LOGDIR="\(.*\)".*/\1/'`
-	    bdir=$ldir/`uname -s`/bin-`uname -m`
-	    if [ -d $bdir ] ; then
-		export PATH="$PATH:$bdir"
-	    fi
 	else
 	    export BINDIR=/usr/local/etc/emulab
 	    export LOGDIR=/var/tmp
 	fi
+    fi
+    # Make sure path includes OS/architecture specific bindir
+    ldir=`$BINDIR/tmcc hwinfo | grep LOGDIR= | \
+                  sed -e 's/.*LOGDIR="\(.*\)".*/\1/'`
+    bdir=$ldir/`uname -s`/bin-`uname -m`
+    inpath=`echo $PATH | grep "$bdir"`
+    if [ -z "$inpath" -a -d $bdir ] ; then
+	export PATH="$PATH:$bdir"
     fi
     
     bitsize=$(uname -m)
@@ -792,7 +793,15 @@ getdrivenames() {
 
     case $os in
 	Linux )
-	    list="a b c d e f g h i j k l m n o p q r s t u v w x y z aa ab ac ad ae af ai ag ah ai aj ak al am an ao ap aq ar as at au av aw"
+	    # XXX there appear to be static entries in the MFS's /dev
+	    # including /dev/sda, so for sda, we ensure there is really
+	    # something there. This only comes up when you have an all
+	    # NVMe machine.
+	    list=""
+	    if grep -q 'sda$' /proc/partitions; then
+		list+="a "
+	    fi
+	    list+="b c d e f g h i j k l m n o p q r s t u v w x y z aa ab ac ad ae af ai ag ah ai aj ak al am an ao ap aq ar as at au av aw"
 	    for i in $list
 	    do
 		if [ -b /dev/sd${i} ] ; then
