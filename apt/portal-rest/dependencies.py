@@ -29,6 +29,7 @@
 from . import config
 
 import subprocess, shlex
+import time
 from datetime import datetime, timezone
 import logging
 from typing import Annotated
@@ -41,6 +42,7 @@ from cryptography.hazmat.primitives import serialization
 # Emulab
 import AccessCheck
 import emutil
+from libdb import DBQueryWarn, DBQuoteSpecial
 
 LOG = logging.getLogger("uvicorn.error")
 
@@ -77,15 +79,39 @@ def get_current_user(x_api_token: Annotated[str, Header()]):
     try:
         claims = DecodeToken(x_api_token)
     except Exception as exc:
-        print(str(exc))
-        raise HTTPException(status_code=400, detail="X-API-Token header invalid")
+        raise HTTPException(status_code=400,
+                            detail="Token invalid: " + str(exc))
     LOG.info("Current user claims: %r", claims)
-    role = "user"
-    if "role" in claims and claims["role"] == "admin":
-        role = "admin"
-        pass
-    user = AccessCheck.User(claims["sub"], role=role)
-    #LOG.info("Current user: %r", user)
+
+    #
+    # We store the token data in the DB, so for now we actually
+    # do not bother with what is in the token.
+    #
+    qres = DBQueryWarn("select *,UNIX_TIMESTAMP(expires) as unixexp " +
+                       "  from user_jwt_tokens " +
+                       "where uuid=%s",
+                       (DBQuoteSpecial(claims["jti"]),), asDict=True)
+    if not qres or len(qres) != 1:
+        raise HTTPException(status_code=401,
+                            detail="Token has been revoked")
+    token = qres[0]
+    expires = token["unixexp"]
+    if expires < time.time():
+        raise HTTPException(status_code=401,
+                            detail="Token has expired")
+
+    role        = token["role"]
+    uid_idx     = token["uid_idx"]
+    scope_type  = token["scope_type"]
+    scope_value = token["scope_value"]
+
+    try:
+        user = AccessCheck.User(
+            uid_idx, role=role, scope=scope_type, scope_value=scope_value)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    
+    LOG.info("Current user: %r", user)
     return user
 
 #
@@ -94,6 +120,10 @@ def get_current_user(x_api_token: Annotated[str, Header()]):
 def TBDatetimeGMT(dtstr):
     if dtstr == None or dtstr == "":
         return None
+
+    if dtstr == "now":
+        dt = datetime.now()
+        return dt.astimezone(timezone.utc)
 
     dtstr = str(dtstr)
     dt = datetime.fromisoformat(dtstr)
@@ -108,10 +138,11 @@ def DecodeToken(token):
         certbytes = cert.public_key().public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo)
-        claims = jwt.decode(token, certbytes, algorithms=["RS256"],
-                            options={"verify_signature" : True,
-                                     "verify_exp" : True})
-        return claims
+
+        # This will raise an exception.
+        return jwt.decode(token, certbytes, algorithms=["RS256"],
+                          options={"verify_signature" : True,
+                                   "verify_exp" : True})
     pass
 
 #
@@ -147,19 +178,37 @@ def PortalValidate(instance, validation, strict=True):
                 "Validation error for field '%s' - %s" % (key, validator.lastError))
         pass
     pass
+
+def PortalValidateOne(field, value, table, column):
+    validator  = emutil.ValidateSlots()
+    if not validator.validate(value, table, column):
+        raise RequestValidationError(
+            "Validation error for field '%s' - %s" % (field, validator.lastError))
+    return True
     
 #
 # Return errors from shell commands.
 # Positive error code goes to the user, negative error code goes to us.
 #
-def HandleShellError(completed):
+def HandleShellError(completed, code = None, message = None):
+    LOG.info("FOO: %r %r %r", completed, code, message)
     if completed.returncode > 0:
-        raise PortalException(
-            status.HTTP_400_BAD_REQUEST, completed.stdout)
+        if code == None:
+            code = status.HTTP_400_BAD_REQUEST
+            pass
+        if message == None:
+            message = completed.stdout
+            pass
+        raise PortalException(code, message)
     else:
+        if message:
+            LOG.info(message)
+            pass
         LOG.info(completed.stdout)
-        raise PortalException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+        if code == None:
+            code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            pass
+        raise PortalException(code, "Internal server error")
     pass
 
 #

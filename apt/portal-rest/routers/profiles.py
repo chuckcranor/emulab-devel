@@ -52,7 +52,12 @@ from sqlalchemy.orm import Session
 from ..database import get_DB
 from ..dependencies import get_current_user, get_elaborate_header
 from ..dependencies import TBDatetimeGMT, SUEXEC
-from ..dependencies import PortalException, PortalValidate, HandleShellError
+from ..dependencies import (
+    PortalException,
+    PortalValidate,
+    PortalValidateOne,
+    HandleShellError
+)
 from ..api.models import (
     Error,
     Profile,
@@ -77,8 +82,6 @@ ProfileValidation = {
 }
 
 ProfileModifyValidation = {
-    "public"           : "default:boolean:optional",
-    "project_writable" : "default:boolean:optional",
     "script"           : None,
 }
 
@@ -135,7 +138,13 @@ def check_profile_version(profile_id, version_id):
             status.HTTP_404_NOTFOUND, "No such profile version")
 
     return True
-    
+
+# Need to generalize this stuff better.
+def check_profile_name(profile_name):
+    LOG.info("check_profile_name %r", profile_name)
+    # This will raise an error
+    PortalValidateOne("profile_name", profile_name, "apt_profiles", "name")
+    return profile_name
 
 LOG = logging.getLogger("uvicorn.error")
 
@@ -144,15 +153,22 @@ router = APIRouter(
     tags=["profiles"]
 )
 
+#
+# This needs more work.
+#
 @router.get("/")
 def get_profiles(
         current_user: Annotated[str, Depends(get_current_user)],
-        profile_id: UUID = None,
+        profile_name: Annotated[str, Query()] = None,
         elaborate: bool = Depends(get_elaborate_header),
         DB: Session = Depends(get_DB)) -> ProfileList:
-    LOG.info("get_profiles: args: %r", profile_id)
+    LOG.info("get_profiles: args: %r", profile_name)
     result = []
     clause = "";
+
+    if profile_name:
+        check_profile_name(profile_name)
+        pass
 
     #
     # Easy thing to do here is just find all the matching profiles and then
@@ -160,7 +176,7 @@ def get_profiles(
     #
     # At the moment, just the current user profiles
     #
-    qres = DBQueryFatal("select p.uuid from apt_profiles as p " +
+    qres = DBQueryFatal("select p.uuid,p.name from apt_profiles as p " +
                         "left join apt_profile_versions as v on " +
                         "   v.profileid=p.profileid and " +
                         "   v.version=p.version " +
@@ -168,7 +184,15 @@ def get_profiles(
 
     for row in qres:
         uuid = row[0];
-        result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+        name = row[1];
+        
+        if profile_name:
+            if name == profile_name:
+                result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+                pass
+        else:
+            result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+            pass
         pass
     
     return ProfileList(profiles = result)
@@ -194,6 +218,7 @@ def get_profile_version(
         current_user: Annotated[object, Depends(get_current_user)],
         profile_id: Annotated[str, Depends(check_profile_id)],
         version_id: UUID,
+        elaborate: bool = Depends(get_elaborate_header),
         profile_access = Depends(get_profile_access),
         DB: Session = Depends(get_DB)) -> Profile:
 
@@ -204,7 +229,8 @@ def get_profile_version(
     # Does this profile version actually exist, this will raise an Exception.
     check_profile_version(profile_id, version_id);
 
-    return ConstructProfile(DB, profile_id, version_id=version_id)
+    return ConstructProfile(
+        DB, profile_id, version_id=version_id, elaborate=elaborate)
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -222,7 +248,8 @@ def create_profile(
     if not group.AccessCheck(current_user, AccessCheck.TB_PROJECT_CREATEPROFILE):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
-    return create_profile(current_user, group, createargs)
+    profile_id = create_profile(current_user, group, createargs)
+    return ConstructProfile(DB, profile_id)
 
 #
 # Initial create. 
@@ -261,10 +288,14 @@ def create_profile(user, group, args):
             fp.write("</attribute>\n");
             pass
         if args.public:
-            fp.write("<attribute name='profile_shared'>1</attribute>\n");
+            fp.write("<attribute name='profile_public'><value>")
+            fp.write("1")
+            fp.write("</value></attribute>\n")
             pass
         if args.project_writable:
-            fp.write("<attribute name='profile_write'>1</attribute>\n");
+            fp.write("<attribute name='profile_shared'><value>")
+            fp.write("1")
+            fp.write("</value></attribute>\n")
             pass
         
         fp.write("</profile>\n");
@@ -281,17 +312,22 @@ def create_profile(user, group, args):
 
     completed = SUEXEC(user, group, command);
     if completed.returncode != 0:
+        # manage_profile has a goofy error output approach.
+        message = None
+        webtask.Refresh()
+        if webtask.HasAttribute("output"):
+            message = webtask["output"]
+            pass
         webtask.Delete()
         os.unlink(xmlFile)
-        return HandleShellError(completed)
+        return HandleShellError(completed, message=message)
 
     os.unlink(xmlFile)
     webtask.Refresh()
-    results = webtask["results"];
-    profile_id = results["uuid"]
+    # This is uuid of the profile, not the first version
+    profile_id = webtask["profile_uuid"]
     webtask.Delete()
-    return ConstructProfile(DB, profile_id)
-
+    return profile_id
 
 #
 # Modify
@@ -309,33 +345,43 @@ def modify_profile(
             current_user, AccessCheck.TB_PROFILE_MODIFY):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
-    return modify_profile(current_user, profile_access.group, modifyargs, profile_id)
-
-def modify_profile(user, group, args, profile_id):
-    xmlFile = None
-
     # This will raise a validation error
-    PortalValidate(args, ProfileModifyValidation, strict=False);
+    PortalValidate(modifyargs, ProfileModifyValidation, strict=False);
 
     #
     # manage_profile takes a simple xml file.
     #
+    xmlFile = None
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as fp:
         fp.write("<profile>\n");
-        if args.script:
+
+        # Something to do with XML::Simple ForceArray, not fixed yet.
+        fp.write("<attribute name='ignore'>");
+        fp.write("  <value></value>");
+        fp.write("</attribute>\n");
+        
+        if modifyargs.script:
             fp.write("<attribute name='script'>")
             fp.write("   <value>" +
-                     html.escape(args.script, quote=True)  + "</value>")
+                     html.escape(modifyargs.script, quote=True)  + "</value>")
             fp.write("</attribute>\n")
-        if args.public:
-            fp.write("<attribute name='profile_shared'>")
-            fp.write(str(int(args.public)))
-            fp.write("</attribute>\n")
+        if modifyargs.public != None:
+            fp.write("<attribute name='profile_public'><value>")
+            if modifyargs.public:
+                fp.write("1")
+            else:
+                fp.write("0")
+                pass
+            fp.write("</value></attribute>\n")
             pass
-        if args.project_writable:
-            fp.write("<attribute name='profile_write'>")
-            fp.write(str(int(args.project_writable)))
-            fp.write("</attribute>\n")
+        if modifyargs.project_writable != None:
+            fp.write("<attribute name='profile_shared'><value>")
+            if modifyargs.project_writable:
+                fp.write("1")
+            else:
+                fp.write("0")
+                pass
+            fp.write("</value></attribute>\n")
             pass
         
         fp.write("</profile>\n")
@@ -348,23 +394,30 @@ def modify_profile(user, group, args, profile_id):
     # Need a WebTask here, for the returning uuid and for errors.
     #
     webtask = WebTask.CreateAnonymous()
-    command = MANAGEPROFILE + " -t " + webtask.task_id + " modify " + xmlFile
+    command = MANAGEPROFILE + " -t " + webtask.task_id + " "
+    command = command + "update " + str(profile_id) + " " + xmlFile
 
-    completed = SUEXEC(user, group, command);
+    completed = SUEXEC(current_user, profile_access.group, command);
     if completed.returncode != 0:
+        # manage_profile has a goofy error output approach.
+        message = None
+        webtask.Refresh()
+        if webtask.HasAttribute("output"):
+            message = webtask["output"]
+            pass
         webtask.Delete()
         os.unlink(xmlFile)
-        return HandleShellError(completed)
+        return HandleShellError(completed, message=message)
 
     os.unlink(xmlFile)
     webtask.Refresh()
-    results = webtask["results"]
+
     #
     # Not every update results in a new profile version. 
     #
     version_id = None
-    if "newProfile" in results:
-        version_id = results["newProfile"]
+    if webtask.HasAttribute("newProfile"):
+        version_id = webtask["newProfile"]
         pass
     webtask.Delete()
     return ConstructProfile(DB, profile_id, version_id=version_id)
@@ -422,7 +475,7 @@ def delete_profile(
             current_user, AccessCheck.TB_PROFILE_MODIFY):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
-    command = MANAGEPROFILE + " delete " + str(profile_id)
+    command = MANAGEPROFILE + " delete -a " + str(profile_id)
     completed = SUEXEC(current_user, profile_access.group, command)
 
     if completed.returncode != 0:
@@ -462,13 +515,13 @@ def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=True):
     row = DB.execute(stmt, {'id': profile_id}).first()
     if not row:
         raise HTTPException(
-            status_code=404, detail="No such profile"
+            status_code=404, detail="No such profile " + str(profile_id)
         )            
     #print(str(row))
     profile = row.AptProfiles
 
     versions = {}
-    if elaborate or version_id:
+    if elaborate:
         for version in profile.versions:
             uuid = version.uuid
             #print(str(uuid))
@@ -487,6 +540,8 @@ def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=True):
                 created_at = TBDatetimeGMT(version.created),
                 deleted_at = TBDatetimeGMT(version.deleted),
                 parameters = paramdefs,
+                script = version.script,
+                rspec = version.rspec,
             )
             pass
         pass
@@ -497,10 +552,14 @@ def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=True):
         version = current.version,
         updater = current.updater,
         created_at = TBDatetimeGMT(current.created),
-        parameters = None
+        parameters = None,
+        rspec = current.rspec
     )
-    if current.paramdefs != None:
-        current_version.parameters = json.loads(current.paramdefs)
+    if current.script:
+        current_version.script = current.script
+        if current.paramdefs != None:
+            current_version.parameters = json.loads(current.paramdefs)
+            pass
         pass
 
     #
