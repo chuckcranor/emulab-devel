@@ -74,45 +74,51 @@ sub node($) { return $_[0]->{'NODE'}; }
 # Do any required post-power operations.
 sub DoPowerPostOp($$) {
     my ($self, $op) = @_;
-    my $node = $self->node();
-    my $node_id = $node->node_id();
-    my $waittime = $node->NodeTypeInfo()->power_delay();
 
     if ($op eq "on" || $op eq "cycle") {
-	# Fork and go into the background to proxy events for device.
-	my $tmpfile = TBMakeTempFile("benetel-watcher");
-	my $chpid = TBBackGround($tmpfile);
-	if ($chpid) {
-	    $self->log("Benetel radio background event proxy launched (PID $chpid). Logging to file: $tmpfile");
-	    return;
-	}
-	TBdbfork();
-	my $ecode = 0;
-	# Send booting event (we assume the RU is now on and booting).
-	print "Benetel event proxy sending `BOOTING` event for $node_id\n";
-	$node->SetEventState(TBDB_NODESTATE_BOOTING());
-	# Wait for a while for the RU to ping, after which we consider it up.
-	# Takes about a minute.
-	$self->log("Waiting for device to become responsive.");
-	system("$BENESHELL $node_id -q -P $waittime");
-	if (! $?) {
-	    $self->log("Device is up. Sending `ISUP` event.");
-	    $node->SetEventState(TBDB_NODESTATE_ISUP());
-	    sleep(60);
-	    unlink $tmpfile;
-	} else {
-	    $self->log("Timeout waiting for device. Sending `TBFAILED` event.");
-	    $node->SetEventState(TBDB_NODESTATE_TBFAILED());
-	    $ecode = 1;
-	}
-
-	exit $ecode;
+	$self->launchEventSender();
     }
     elsif ($op eq "off") {
 	# Nothing to do for the "off" operation.
     }
     
     return;
+}
+
+sub launchEventSender($) {
+    my $self = shift;
+    my $node = $self->node();
+    my $node_id = $node->node_id();
+    my $waittime = $node->NodeTypeInfo()->power_delay();
+
+    # Fork and go into the background to proxy events for device.
+    my $tmpfile = TBMakeTempFile("benetel-watcher");
+    my $chpid = TBBackGround($tmpfile);
+    if ($chpid) {
+	$self->log("Benetel radio background event proxy launched (PID $chpid). Logging to file: $tmpfile");
+	return;
+    }
+    TBdbfork();
+    my $ecode = 0;
+    # Send booting event (we assume the RU is now on and booting).
+    $self->log("Benetel event proxy sending `BOOTING` event.");
+    $node->SetEventState(TBDB_NODESTATE_BOOTING());
+    # Wait for a while for the RU to ping, after which we consider it up.
+    # Takes about a minute.
+    $self->log("Waiting for device to become responsive.");
+    system("$BENESHELL $node_id -q -P $waittime");
+    if (! $?) {
+	$self->log("Device is up. Sending `ISUP` event.");
+	$node->SetEventState(TBDB_NODESTATE_ISUP());
+	sleep(60);
+	unlink $tmpfile;
+    } else {
+	$self->log("Timeout waiting for device. Sending `TBFAILED` event.");
+	$node->SetEventState(TBDB_NODESTATE_TBFAILED());
+	$ecode = 1;
+    }
+
+    exit $ecode;
 }
 
 sub log($$) {
