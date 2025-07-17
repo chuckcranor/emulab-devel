@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2004 University of Utah and the Flux Group.
+# Copyright (c) 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,10 +29,14 @@
 package power_benetel;
 
 use lib "@prefix@/lib";
+use libdb;
 use EmulabConstants;
 use Node;
+use NodeType;
 use strict;
-
+use POSIX qw(strftime);
+use English;
+    
 #
 # Commands we run
 #
@@ -71,24 +75,49 @@ sub DoPowerPostOp($$) {
     my ($self, $op) = @_;
     my $node = $self->node();
     my $nodeid = $node->node_id();
+    my $waittime = $node->NodeTypeInfo()->power_delay();
 
     if ($op eq "on" || $op eq "cycle") {
-	# Give a bit of time for SHUTDOWN state to propagate.
-	sleep(1);
-	# Send fake booting event (we assume the RU is booting).
+	# Fork and go into the background to proxy events for device.
+	my $tmpfile = TBMakeTempFile("benetel-watcher");
+	if(TBBackGround($tmpfile)) {
+	    $self->log("Benetel radio background event proxy launched. Logging to file: $tmpfile");
+	    return;
+	}
+	TBdbFork();
+	my $ecode = 0;
+	# Send booting event (we assume the RU is now on and booting).
+	print "Benetel event proxy sending `BOOTING` event for $node_id\n";
 	$node->SetEventState(TBDB_NODESTATE_BOOTING());
 	# Wait for a while for the RU to ping, after which we consider it up.
 	# Takes about a minute.
-	system("$BENESHELL $nodeid -q -P 80");
+	$self->log("Waiting for device to become responsive.");
+	system("$BENESHELL $nodeid -q -P $waittime");
 	if (! $?) {
+	    $self->log("Device is up. Sending `ISUP` event.");
 	    $node->SetEventState(TBDB_NODESTATE_ISUP());
+	    sleep(60);
+	    unlink $tmpfile;
 	} else {
+	    $self->log("Timeout waiting for device. Sending `TBFAILED` event.")
 	    $node->SetEventState(TBDB_NODESTATE_TBFAILED());
+	    $ecode = 1;
 	}
+
+	exit $ecode;
     }
     elsif ($op eq "off") {
 	# Nothing to do for the "off" operation.
     }
+    
+    return;
+}
+
+sub log($$) {
+    my ($self, $msg) = @_;
+    my $node_id = $self->node()->node_id();
+    my $tstamp = strftime("%F %T", localtime());
+    print "[$tstamp][$node_id]: $msg\n";
 }
 
 # Needed at end of perl modules...

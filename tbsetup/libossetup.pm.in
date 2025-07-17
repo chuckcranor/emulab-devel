@@ -2549,7 +2549,6 @@ sub AddNode($$)
     # Need something, should be in ISUP by the time we get there
     # but stated might be delayed.
     $node->_maxwait(60);
-    
     return 0;
 }
 
@@ -2636,8 +2635,7 @@ sub LightUpNodes($@)
 	}
     }
     #
-    # If the eventstate somewhow managed to get out of ISUP, send it, unless
-    # something told us to skip this action.
+    # If the eventstate somewhow managed to get out of ISUP, send it.
     #
     foreach my $node (@nodelist) {
 	next
@@ -2717,6 +2715,7 @@ use libossetup;
 use libtblog_simple;
 use Node;
 use Lan;
+use StateWait;
 use English;
 use JSON;
 use Data::Dumper;
@@ -2763,6 +2762,7 @@ sub LightUpNodes($@)
 
     my @cycles     = ();
     my @ons        = ();
+    my @nidlist    = ();
     my $count      = 0;
 
     #
@@ -2804,6 +2804,8 @@ sub LightUpNodes($@)
 	else {
 	    push(@cycles, $node->node_id())
 	}
+
+	@nidlist = (@ons, @cycles);
     }
     if (@ons) {
 	tbnotice("Power on radios: @ons\n");
@@ -2817,6 +2819,20 @@ sub LightUpNodes($@)
 	system("$POWER cycle @cycles");
 	goto bad
 	    if (@?);
+    }
+
+    # Wait for the devices (event sender proxies) to report state ISUP.
+    my @finished = ();
+    my @failed = ();
+    if (initStateWait([TBDB_NODESTATE_ISUP(),], @nidlist) != 0) ||
+	waitForState(\@finished, \@failed, 80) != 0 ||
+	endStateWait() != 0) {
+	print STDERR "Benetel ossetup: Failed during StateWait operations!";
+	goto bad;
+    }
+    if (@failed) {
+	print STDERR "RU devices '". join(", ", @failed) ."' failed to boot!";
+	goto bad;
     }
 
     # Get info about the companion DU nodes and the Vlans that connect them.
@@ -2877,24 +2893,25 @@ sub LightUpNodes($@)
 	    goto bad;
 	}
 
-	# Add info about the vlan and DU interface to the RU parameters.
+	# Add info about the vlan and DU interface to the RU parameters
+	# and apply the configuration for the RU and reboot it.
 	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
 	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
 	$ru_params{'du_cplane_mac'} = $du_iface->mac();
 	$ru_params{'du_uplane_mac'} = $du_iface->mac();
 
-	# Finally, apply the configuration for the RU and reboot it.
-	# Adjust the ping timeout to account for the radio just powering on.
 	my $json_config = to_json(\%ru_params);
 	tbnotice("Configuring Benetel COTS RU $node_id\n");
-	print STDERR "COTS RU JSON config: $json_config\n";
-	system("echo '$json_config' | $BENESHELL $node_id -P 120 -j - -r");
+	system("echo '$json_config' | $BENESHELL $node_id -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
 	    goto bad;
 	}
 
-	# Tell Stated that the RU is booting.
+	# Tell Stated that the RU is rebooting.
+	$node->SetEventState(TBDB_NODESTATE_SHUTDOWN(), 0) == 0
+	    or goto bad;
+	sleep(1);
 	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
 	    or goto bad;
     }
@@ -2990,6 +3007,7 @@ use libossetup;
 use libtblog_simple;
 use Node;
 use Lan;
+use StateWait;
 use English;
 use JSON;
 use Data::Dumper;
