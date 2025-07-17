@@ -479,6 +479,7 @@ sub DoSnapshot($)
 	$swebtask->client_id($node_id);
 	$swebtask->operation($operation) if (defined($operation));
 	$swebtask->imagename($imagename);
+	$swebtask->snapshot_id(NewUUID());
 	
 	$instance->SetStatus("imaging");
 	$aggregate->SetStatus("imaging");
