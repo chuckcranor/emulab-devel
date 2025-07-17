@@ -2762,7 +2762,6 @@ sub LightUpNodes($@)
 
     my @cycles     = ();
     my @ons        = ();
-    my @nidlist    = ();
     my $count      = 0;
 
     #
@@ -2804,8 +2803,6 @@ sub LightUpNodes($@)
 	else {
 	    push(@cycles, $node->node_id())
 	}
-
-	@nidlist = (@ons, @cycles);
     }
     if (@ons) {
 	tbnotice("Power on radios: @ons\n");
@@ -2822,9 +2819,11 @@ sub LightUpNodes($@)
     }
 
     # Wait for the devices (event sender proxies) to report state ISUP.
+    my @nidlist = (@ons, @cycles);
     my @finished = ();
     my @failed = ();
-    if (initStateWait([TBDB_NODESTATE_ISUP(),], @nidlist) != 0) ||
+    tbnotice("Benetel ossetup: Waiting for radios to boot: @nidlist\n");
+    if (initStateWait([TBDB_NODESTATE_ISUP(),], @nidlist) != 0 ||
 	waitForState(\@finished, \@failed, 80) != 0 ||
 	endStateWait() != 0) {
 	print STDERR "Benetel ossetup: Failed during StateWait operations!";

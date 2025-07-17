@@ -584,9 +584,7 @@ def update_config(args, bw):
     else:
         with open(args.json_config, "r") as cfg_f:
             json_data = cfg_f.read()
-    print(f"Input json:\n{json_data}", file=sys.stderr)
     cfg = json.loads(json_data)
-    print(f"json config after parsing:\n{cfg}", file=sys.stderr)
     dcfg = bw.fetch_settings()
     dcfg.update(cfg)
     bw.push_settings(dcfg)

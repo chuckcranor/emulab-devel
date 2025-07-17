@@ -30,6 +30,7 @@ package power_benetel;
 
 use lib "@prefix@/lib";
 use libdb;
+use libtestbed;
 use EmulabConstants;
 use Node;
 use NodeType;
@@ -74,17 +75,18 @@ sub node($) { return $_[0]->{'NODE'}; }
 sub DoPowerPostOp($$) {
     my ($self, $op) = @_;
     my $node = $self->node();
-    my $nodeid = $node->node_id();
+    my $node_id = $node->node_id();
     my $waittime = $node->NodeTypeInfo()->power_delay();
 
     if ($op eq "on" || $op eq "cycle") {
 	# Fork and go into the background to proxy events for device.
 	my $tmpfile = TBMakeTempFile("benetel-watcher");
-	if(TBBackGround($tmpfile)) {
-	    $self->log("Benetel radio background event proxy launched. Logging to file: $tmpfile");
+	my $chpid = TBBackGround($tmpfile);
+	if ($chpid) {
+	    $self->log("Benetel radio background event proxy launched (PID $chpid). Logging to file: $tmpfile");
 	    return;
 	}
-	TBdbFork();
+	TBdbfork();
 	my $ecode = 0;
 	# Send booting event (we assume the RU is now on and booting).
 	print "Benetel event proxy sending `BOOTING` event for $node_id\n";
@@ -92,14 +94,14 @@ sub DoPowerPostOp($$) {
 	# Wait for a while for the RU to ping, after which we consider it up.
 	# Takes about a minute.
 	$self->log("Waiting for device to become responsive.");
-	system("$BENESHELL $nodeid -q -P $waittime");
+	system("$BENESHELL $node_id -q -P $waittime");
 	if (! $?) {
 	    $self->log("Device is up. Sending `ISUP` event.");
 	    $node->SetEventState(TBDB_NODESTATE_ISUP());
 	    sleep(60);
 	    unlink $tmpfile;
 	} else {
-	    $self->log("Timeout waiting for device. Sending `TBFAILED` event.")
+	    $self->log("Timeout waiting for device. Sending `TBFAILED` event.");
 	    $node->SetEventState(TBDB_NODESTATE_TBFAILED());
 	    $ecode = 1;
 	}
@@ -117,7 +119,7 @@ sub log($$) {
     my ($self, $msg) = @_;
     my $node_id = $self->node()->node_id();
     my $tstamp = strftime("%F %T", localtime());
-    print "[$tstamp][$node_id]: $msg\n";
+    print "[$tstamp][$PID][$node_id]: $msg\n";
 }
 
 # Needed at end of perl modules...
