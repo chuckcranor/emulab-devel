@@ -85,41 +85,38 @@ def TBMinTrust(trust_value, minimum):
 #
 # Raise an exception if no such ...
 #
-class NoSuchUser(Exception):
-    def __init__(self, msg):
-        self.msg=msg
-        pass
-
-class NoSuchProject(Exception):
-    def __init__(self, msg):
-        self.msg=msg
-        pass
-
-class NoSuchExperiment(Exception):
-    def __init__(self, msg):
-        self.msg=msg
-        pass
-
-class NoSuchResGroup(Exception):
-    def __init__(self, msg):
-        self.msg=msg
-        pass
-
-class NoSuchProfile(Exception):
-    def __init__(self, msg):
-        self.msg=msg
-        pass
-
 class AccessCheckError(Exception):
     def __init__(self, msg):
         self.msg=msg
         pass
+    def __str__(self):
+        return self.msg
+    pass
+    
+class NoSuchUser(AccessCheckError):
+    pass
+
+class NoSuchProject(AccessCheckError):
+    pass
+
+class NoSuchExperiment(AccessCheckError):
+    pass
+
+class NoSuchResGroup(AccessCheckError):
+    pass
+
+class NoSuchProfile(AccessCheckError):
+    pass
+
+class AccessCheckError(AccessCheckError):
+    pass
 
 #
 # Collect user access in their project membership.
 #
 class UserAccess:
-    def __init__(self, user, role = "user"):
+    def __init__(self, user, role = "user",
+                 scope = None, scope_value = None):
         self.membership = {}
         self.mapping = {}
         self.role = role
@@ -137,8 +134,7 @@ class UserAccess:
             pass
         elif type(user) == int:
             qres = DBQueryWarn("select uid,uid_idx,admin from users " +
-                               "where uid_idx=%s",
-                               (DBQuoteSpecial(user),))
+                               "where uid_idx=%s", (str(user),))
         else:
             raise NoSuchUser("No such user: %s" % (user,))
 
@@ -151,7 +147,28 @@ class UserAccess:
 
         if role == "admin" and self.isadmin == 0:
             raise AccessCheckError("%s is not allowed to be an admin" % (user,))
-            
+
+        #
+        # Record the scope, at the moment just experiments.
+        #
+        if scope != None:
+            if scope not in ["global", "experiment"]:
+                raise AccessCheckError("%s is not a valid scope" % (scope,))
+
+            if False and scope == "global":
+                scope = None
+                pass
+            if scope == "experiment":
+                qres = DBQueryWarn("select uuid from apt_instances " +
+                                   "where uuid=%s", (scope_value,))
+                if not qres or len(qres) != 1:
+                    raise NoSuchExperiment(
+                        "No such scoped experiment: %s" % (scope_value,))
+                pass
+                
+        self.scope = scope
+        self.scope_value = scope_value
+
         qresult = DBQueryWarn("select * from group_membership as g " +
                               "where g.uid_idx=%s", (self.uid_idx,),
                               asDict=True)
@@ -173,6 +190,14 @@ class UserAccess:
             pass
         pass
 
+    def __str__(self):
+        return "<UserAccess: uid:%s,role:%s,scope:%s,scope_value:%r" % (self.uid,
+                                                                        self.role,
+                                                                        self.scope,
+                                                                        self.scope_value)
+
+    def __repr__(self):
+        return str(self)
     #
     # User trust value in a Group.
     #
@@ -185,6 +210,16 @@ class UserAccess:
         
         return TBTrustConvert(self.membership[group.pidgid])
 
+    #
+    # Check for the scope and raise an exception.
+    #
+    def CheckScope(self, scope, scope_value):
+        if self.scope == "global":
+            return True
+        if self.scope == scope and self.scope_value == scope_value:
+            return True
+        return False
+
     pass
 
 #
@@ -196,16 +231,26 @@ TB_USERINFO_MIN                 = TB_USERINFO_READINFO
 TB_USERINFO_MAX                 = TB_USERINFO_MODIFYINFO
 
 class User:
-    def __init__(self, user, role = "user"):
+    def __init__(self, user, role="user", scope=None, scope_value=None):
         if isinstance(user, User):
             self.access = user.access
         else:
-            self.access = UserAccess(user, role=role)
+            self.access = UserAccess(user, role=role,
+                                     scope=scope, scope_value=scope_value )
             pass
         pass
 
+    def __str__(self):
+        return str(self.access)
+   
+    def __repr__(self):
+        return repr(self.access)
+   
     def GroupTrust(self, group):
         return self.access.GroupTrust(group)
+
+    def CheckScope(self, scope, scope_value):
+        return self.access.CheckScope(scope, scope_value)
 
     @property
     def uid(self):
@@ -346,6 +391,12 @@ class ProjectGroup:
             self.user = User(user)
             pass
 
+        #
+        # Check for scoped access.
+        #
+        if not user.CheckScope("project", self.pid):
+            return False
+
         user_trust = self.user.GroupTrust(self)
         project_trust = self.user.GroupTrust(self.project)
         
@@ -471,13 +522,13 @@ class Experiment:
         
         if type(arg1) == str:
             if re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", arg1):
-                qres = DBQueryWarn("select pid,pid_idx,gid,gid_idx," +
+                qres = DBQueryWarn("select uuid,pid,pid_idx,gid,gid_idx," +
                                    "    creator,creator_idx,name " +
                                    " from apt_instances " +
                                    "where uuid=%s", (arg1,), asDict=True)
                 pass
             elif matched := re.match("^([\-\w]+),([\-\w]+)$", arg1):
-                qres = DBQueryWarn("select pid,pid_idx,gid,gid_idx," +
+                qres = DBQueryWarn("select uuid,pid,pid_idx,gid,gid_idx," +
                                    "    creator,creator_idx,name " +
                                    " from apt_instances " +
                                    "where pid=%s and name=%s",
@@ -485,7 +536,7 @@ class Experiment:
                 pass
             elif (arg2 and re.match("^[\-\w]+$", arg1) and
                   re.match("^[\-\w]+$", arg2)):
-                qres = DBQueryWarn("select pid,pid_idx,gid,gid_idx," +
+                qres = DBQueryWarn("select uuid,pid,pid_idx,gid,gid_idx," +
                                    "    creator,creator_idx,name " +
                                    " from apt_instances " +
                                    "where pid=%s and name=%s", (arg1,arg2),
@@ -499,6 +550,7 @@ class Experiment:
             raise NoSuchExperiment("No such experiment: %s:%s" % (arg1,arg2))
 
         row = qres[0]
+        self.uuid        = row["uuid"]
         self.name        = row["name"]
         self.pid         = row["pid"]
         self.pid_idx     = row["pid_idx"]
@@ -520,9 +572,15 @@ class Experiment:
             user = User(user)
             pass
 
+        #
+        # Check for scoped access.
+        #
+        if not user.CheckScope("experiment", self.uuid):
+            return False
+
         if (access_type < TB_EXPT_MIN or
 	    access_type > TB_EXPT_MAX):
-            raise AccessCheckError("*** Invalid access type: %r" % (access_type,))
+            raise AccessCheckError("Invalid access type: %r" % (access_type,))
 
         # User can muck with his own stuff.
         if self.creator_idx == user.uid_idx:
@@ -561,7 +619,7 @@ class ResGroup:
         
         if type(arg1) == str:
             if re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", arg1):
-                qres = DBQueryWarn("select pid,pid_idx,gid,gid_idx," +
+                qres = DBQueryWarn("select uuid,pid,pid_idx,gid,gid_idx," +
                                    "    creator_uid,creator_idx " +
                                    " from apt_reservation_groups " +
                                    "where uuid=%s", (arg1,), asDict=True)
@@ -574,6 +632,7 @@ class ResGroup:
             raise NoSuchResGroup("No such resgroup: %s" % (arg1,))
 
         row = qres[0]
+        self.uuid        = row["uuid"]
         self.pid         = row["pid"]
         self.pid_idx     = row["pid_idx"]
         self.gid         = row["gid"]
@@ -593,6 +652,12 @@ class ResGroup:
         else:
             user = User(user)
             pass
+
+        #
+        # Check for scoped access.
+        #
+        if not user.CheckScope("resgroup", self.uuid):
+            return False
 
         if (access_type < TB_RESGROUP_MIN or
 	    access_type > TB_RESGROUP_MAX):
@@ -710,6 +775,12 @@ class Profile:
         else:
             user = User(user)
             pass
+
+        #
+        # Check for scoped access.
+        #
+        if not user.CheckScope("profile", self.uuid):
+            return False
 
         if (access_type < TB_PROFILE_MIN or
 	    access_type > TB_PROFILE_MAX):

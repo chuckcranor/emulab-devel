@@ -94,6 +94,11 @@ class WebTask:
                     (task_id, task_id))
         return cls(task_id)
 
+    def HasAttribute(self, name):
+        if name in self.data:
+            return True
+        return False
+
     def Delete(self):
         DBQueryWarn("delete from web_tasks where task_id=%s", (self.task_id,))
         return 0
