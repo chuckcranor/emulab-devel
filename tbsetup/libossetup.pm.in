@@ -2516,9 +2516,9 @@ sub LightUpNodes($@) {
 
 #####################################################################
 #
-# sdr
+# Base SDR/radio class, similar to libossetup_virtnode
 #
-package libossetup_sdr;
+package libossetup_basesdr;
 use base qw(libossetup_handler);
 
 use libdb;
@@ -2532,10 +2532,10 @@ use Data::Dumper;
 #
 # A constructor for an object to handle all nodes of this type.
 #
-sub New($$) {
-    my ($class, $parent) = @_;
+sub New($$$) {
+    my ($class, $type, $parent) = @_;
 
-    my $self = $class->SUPER::New("sdr", $parent);
+    my $self = $class->SUPER::New($type, $parent);
     bless($self, $class);
     return $self;
 }
@@ -2549,6 +2549,10 @@ sub AddNode($$)
     # Need something, should be in ISUP by the time we get there
     # but stated might be delayed.
     $node->_maxwait(60);
+    # By default, send "ISUP" at the end of LightUpNodes()
+    $self->_doisup(1);
+    # By default, do not sent events from `power` when power cycling.
+    $self->_doevents(0);
     return 0;
 }
 
@@ -2624,8 +2628,9 @@ sub LightUpNodes($@)
 	}
     }
     if (@cycles) {
+	my $evt_flag = $self->_doevents() ? "" : "-e";
 	tbnotice("Power cycling radios: @cycles\n");
-	system("$POWER -e cycle @cycles");
+	system("$POWER $evt_flag cycle @cycles");
 	my $exitval = $?;
 
 	if ($exitval) {
@@ -2637,18 +2642,39 @@ sub LightUpNodes($@)
     #
     # If the eventstate somewhow managed to get out of ISUP, send it.
     #
-    foreach my $node (@nodelist) {
-	next
-	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
+    if ($self->_doisup()) {
+	foreach my $node (@nodelist) {
+	    next
+		if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 	
-	if (!$node->IsUp()) {
-	    if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
-		$parent->noretry(1);
-		return -1;
+	    if (!$node->IsUp()) {
+		if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+		    $parent->noretry(1);
+		    return -1;
+		}
 	    }
 	}
     }
     return 0;
+}
+
+package libossetup_sdr;
+use base qw(libossetup_basesdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("sdr", $parent);
+    bless($self, $class);
+    return $self;
 }
 
 package libossetup_x310;
@@ -2707,7 +2733,7 @@ use English;
 use Data::Dumper;
 
 package libossetup_bt_ru550;
-use base qw(libossetup_handler);
+use base qw(libossetup_basesdr);
 
 use libdb;
 use libtestbed;
@@ -2738,13 +2764,15 @@ sub AddNode($$)
 {
     my ($self, $node) = @_;
 
-    # Do super class stuff for adding the node.
+    # Do super class stuff first for adding the node.
     $self->SUPER::AddNode($node);
 
-    # Benetel RUs take a loooong time to get to their "up" state.
-    $node->_maxwait(600);
+    # Set up our overrides.
+    $node->_maxwait(600);  # Benetel RUs take a loooong time...
     $node->_retrycount(0); # no retries.
-    $node->_pingwait(60); # Higher initial ping wait time (account for boot).
+    $node->_doisup(0);     # Don't send compulsory ISUP in base class.
+    $node->_doevents(1);   # DO have `power` send events in base class.
+    $node->_pingwait(60);  # Higher initial ping wait time (account for boot).
 
     return 0;
 }
@@ -2764,62 +2792,11 @@ sub LightUpNodes($@)
     my @ons        = ();
     my $count      = 0;
 
-    #
-    # We want to this before powering on the radio to make sure it has an
-    # antenna load before it tries to transmit anything (says Alex).
-    #
-    foreach my $node (@nodelist) {
-	my $node_id = $node->node_id();
-	my $rfswitch_port = $node->rfswitch_port();
-	next
-	    if (!defined($rfswitch_port));
-
-	tbnotice("Setting the RF Switch for $node_id (to port $rfswitch_port)\n");
-	system("$RFSWITCHER -d $node_id");
-	goto bad
-	    if ($?);
-	$count++;
-    }
-    #
-    # Sam/Alex say we need a small delay after the rfswitcher runs.
-    #
-    if ($count) {
-	sleep(1);
-    }
-
-    foreach my $node (@nodelist) {
-	next
-	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
-
-	if (!$node->HasOutlet()) {
-	    my $node_id = $node->node_id();
-	    tbnotice("Radio $node_id does not have a power outlet, skipping\n");
-	    next;
-	}
-
-	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
-	    push(@ons, $node->node_id())
-	}
-	else {
-	    push(@cycles, $node->node_id())
-	}
-    }
-    if (@ons) {
-	tbnotice("Power on radios: @ons\n");
-	# We need the event state change here.
-	system("$POWER on @ons");
-	goto bad
-	    if ($?);
-    }
-    if (@cycles) {
-	tbnotice("Power cycling radios: @cycles\n");
-	system("$POWER cycle @cycles");
-	goto bad
-	    if (@?);
-    }
+    # Call LightUpNodes() in libossetup_basesdr class first to do common stuff.
+    $self->SUPER::LightUpNodes(@nodelist);
 
     # Wait for the devices (event sender proxies) to report state ISUP.
-    my @nidlist = (@ons, @cycles);
+    my @nidlist = map { $_->node_id() } @nodelist;
     my @finished = ();
     my @failed = ();
     tbnotice("Benetel ossetup: Waiting for radios to boot: @nidlist\n");
@@ -2874,7 +2851,7 @@ sub LightUpNodes($@)
 	# Get handle on the adjacent DU node.
 	my ($du_member, $du_node_id);
 	foreach my $m (@members) {
-	    if ($m->GetAttribute("node_id", \$du_node_id) == 0 and
+	    if ($m->GetAttribute("node_id", \$du_node_id) == 0 &&
 		$du_node_id ne $node_id) {
 		$du_member = $m;
 		last;
@@ -2893,12 +2870,17 @@ sub LightUpNodes($@)
 	}
 
 	# Add info about the vlan and DU interface to the RU parameters
-	# and apply the configuration for the RU and reboot it.
 	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
 	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
 	$ru_params{'du_cplane_mac'} = $du_iface->mac();
 	$ru_params{'du_uplane_mac'} = $du_iface->mac();
 
+	# Apply the configuration for the RU and reboot it. Note that
+	# we are rebooting the RU "on the sly" here, so must handle
+	# state transitions ourselves. We do this because we want an
+	# alternate interpretation of "ISUP" when starting an
+	# experiment; we want the device to get all the way to "Radio
+	# bringup complete" vs. just responding to pings.
 	my $json_config = to_json(\%ru_params);
 	tbnotice("Configuring Benetel COTS RU $node_id\n");
 	system("echo '$json_config' | $BENESHELL $node_id -j - -r");
