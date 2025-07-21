@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021, 2023 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,14 +115,40 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
 	print " *** No Documents for $uid, $scopus_id\n";
 	next;
     }
+
+    #
+    # Watch for users that match too many. We will get more next time.
+    # Grab the latest.
+    #
+    if (scalar(@$documents) > 5) {
+	sub bydate($$) {
+	    my ($a, $b) = @_;
+	    my $dateA = str2time($a->{'prism:coverDate'});
+	    my $dateB = str2time($b->{'prism:coverDate'});
+
+	    return $dateB <=> $dateA;
+	}
+	my @sorted = sort bydate @$documents;
+	
+	my @tmp = ();
+	for (my $i = 0; $i < 5; $i++) {
+	    push(@tmp, $sorted[$i]);
+	}
+	$documents = \@tmp;
+    }
     foreach my $document (@$documents) {
 	my $dcid = $document->{'dc:identifier'};
 	my $date = $document->{'prism:coverDate'};
 	my $type = $document->{'prism:aggregationType'};
+	my $title= $document->{'dc:title'};
 
 	# Preprint
 	next
 	    if ($type eq "x");
+
+	# Skip if non ascii titles. Do not like this, but no time at the moment
+	next
+	    if ($title !~ /^[\x20-\x7E]+$/);
 
 	if ($dcid =~ /^SCOPUS_ID:(\d+)$/) {
 	    $dcid = $1;
