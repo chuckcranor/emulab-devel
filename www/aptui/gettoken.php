@@ -48,26 +48,37 @@ $target_uid = $target_user->uid();
 $target_idx = $target_user->uid_idx();
 
 #
-# For now, short lived tokens until we are storing them in the DB.
+# See if the user has a token already, that is not expired.
+# Just return that.
 #
-$webtask = WebTask::CreateAnonymous();
-if (!$webtask) {
-    SPITUSERERROR("Internal webtask Error");
-    return;
+$token = $target_user->GetRestToken();
+if ($token && $token["expires"] > time()) {
+    #
+    # Return this if not expired
+    #
+    $token = $token["token"];
 }
-$retval = SUEXEC($this_user, "nobody",
-                 "webmanage_tokens -t " . $webtask->task_id() .
-                 " create -s $target_uid",
-                 SUEXEC_ACTION_IGNORE);
+else {
+    $webtask = WebTask::CreateAnonymous();
+    if (!$webtask) {
+        SPITUSERERROR("Internal webtask Error");
+        return;
+    }
+    # For now, short lived tokens
+    $retval = SUEXEC($this_user, "nobody",
+                     "webmanage_tokens -t " . $webtask->task_id() .
+                     " create -s $target_uid",
+                     SUEXEC_ACTION_CONTINUE);
 
-if ($retval != 0) {
-    SPITUSERERROR("Internal Error");
-    $webtask->Delete();
-    return;
+    if ($retval != 0) {
+        SPITUSERERROR("Internal Error");
+        $webtask->Delete();
+        return;
+    }
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    $webtask->Refresh();
+    $token = $webtask->TaskValue("result");
 }
-$webtask->Refresh();
-$token = $webtask->TaskValue("result");
-
 header("Content-Type: text/plain");
 header("Content-Disposition: attachment; filename=\"${FILENAME}.jwt\"");
 echo $token;
