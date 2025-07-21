@@ -675,7 +675,6 @@ while (1) {
 if ($instance->status() eq "pending" ||
     $instance->status() eq "deferred") {
     unlink($logfile) if (defined($logfile));
-    $webtask->Delete();
     exit(0);
 }
 
@@ -705,7 +704,6 @@ if (!$noemail) {
 			$project->OpsEmailAddress());
 }
 unlink($logfile) if (defined($logfile));
-$webtask->Delete();
 exit(0);
 
 sub fatal($)
