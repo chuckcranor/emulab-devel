@@ -1867,9 +1867,11 @@ function Do_ExpInfo()
     # If we have params (bindings), then we want to provide the paramdefs too.
     if ($instance->paramdefs()) {
         $blob["paramdefs"] = json_decode($instance->paramdefs());
+        $blob["script"] = $instance->script();
     }
     elseif (isset($profile) && $profile->paramdefs()) {
         $blob["paramdefs"] = json_decode($profile->paramdefs());
+        $blob["script"] = $instance->script();
     }
     else {
         $blob["paramdefs"] = null;

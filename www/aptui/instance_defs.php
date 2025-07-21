@@ -157,6 +157,7 @@ class Instance
     function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
     function rspec()	    { return $this->field('rspec'); }
+    function script()	    { return $this->field('script'); }
     function admin_notes()  { return $this->field('admin_notes'); }
     function isopenstack()  { return $this->field('isopenstack'); }
     function params()       { return $this->field('params'); }
