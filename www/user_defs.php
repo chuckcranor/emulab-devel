@@ -2052,5 +2052,21 @@ class User
         return $url;
     }
     
+    #
+    # JWT token. For the moment, users have only one token in the DB.
+    #
+    function GetRestToken()
+    {
+        $uid_idx = $this->uid_idx();
+
+        $query_result = DBQueryFatal(
+            "select *,UNIX_TIMESTAMP(expires) as expires from user_jwt_tokens ".
+            "where uid_idx='$uid_idx'");
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        $row = mysql_fetch_array($query_result);
+        return $row;
+    }
 }
 ?>
