@@ -864,8 +864,9 @@ $(function ()
 	var nickname = amlist[selected_cluster].nickname;
 	var id       = "resgraph-" + nickname;
 
-	_.each(typelist, function(details, type) {
-	    var count = details.count;
+	_.each(_.keys(typelist).sort(), function(type) {
+            var details = typelist[type];
+	    var count   = details.count;
 	    
 	    options = options +
 		"<option value='" + type + "' >" +
