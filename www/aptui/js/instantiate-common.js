@@ -245,6 +245,15 @@ window.instantiateCommon = (function () {
                     return;
                 }
             }
+
+            // blockstore node should not cause a cluster selector.
+	    if (stype.length) {
+		var type = $(stype).attr("name");
+                if (type && type == "emulab-blockstore") {
+                    //console.info("Skipping emulab-blockstore");
+                    return;
+                }
+            }
 	    // Keep track of how many bound nodes, of the total.
 	    count++;
 
