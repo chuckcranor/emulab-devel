@@ -1,9 +1,12 @@
 import argparse
 import traceback
 import sys
+from os import getenv
+
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 
 FABRIC_RC = "./fabric_rc"
+LOG_FILE  = getenv("FABRIC_LOG_FILE")
 
 #
 # The argument is a slice name.
@@ -21,7 +24,8 @@ args = parser.parse_args()
 
 try:
     # Hardwired in the code.
-    fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False)
+    fablib = FablibManager(
+        fabric_rc=FABRIC_RC, log_file=LOG_FILE, auto_token_refresh=False)
     fablib.show_config()
     slices = fablib.get_slices()
     for slice in slices:

@@ -1,9 +1,12 @@
 import argparse
 import traceback
 import sys
+from os import getenv
+
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 
 FABRIC_RC = "./fabric_rc"
+LOG_FILE  = getenv("FABRIC_LOG_FILE")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-j', '--json', action='store_true')
@@ -21,7 +24,8 @@ else:
     pass
 
 try:
-    fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False)
+    fablib = FablibManager(
+        fabric_rc=FABRIC_RC, log_file=LOG_FILE, auto_token_refresh=False)
     fablib.list_slices(output=output, fields=['id','name','state','lease_end'])
 
 except Exception as e:
