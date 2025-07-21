@@ -942,7 +942,6 @@ class Instance
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
                            "cellsdr1-ustar"     => true,
-                           "cellsdr1-meb"       => true,
                            "mmimo-ac"           => true,
                            "n310-ustar"         => true,
                            "cap-ustar"          => true,
