@@ -33,6 +33,8 @@ import tempfile
 import os
 import re
 import json
+import time
+import shlex
 from enum import Enum
 
 from typing import Annotated, Text, Union
@@ -41,6 +43,7 @@ from uuid import UUID
 from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Response, status
+from fastapi import status as FStatus
 from fastapi import Query, Path, Body
 from fastapi.exceptions import RequestValidationError
 
@@ -49,12 +52,26 @@ from sqlalchemy.orm import Session
 
 from ..database import get_DB
 from ..dependencies import get_current_user, TBDatetimeGMT, SUEXEC
-from ..dependencies import PortalException, PortalValidate, HandleShellError
-from ..api.models import Error
-from ..api.models import Experiment, ExperimentList, ManifestArray
-from ..api.models import ExperimentModify, ExperimentCreate
-from ..api.models import AggregateStatus
-from ..api.models import AggregateNode
+from ..dependencies import (
+    PortalException,
+    PortalValidate,
+    PortalValidateOne,
+    HandleShellError
+)
+from ..api.models import (
+    Error,
+    Experiment,
+    ExperimentList,
+    ManifestArray,
+    ExperimentModify,
+    ExperimentCreate,
+    AggregateStatus,
+    AggregateNode,
+    SnapshotRequest,
+    SnapshotStatus,
+)
+
+LOG = logging.getLogger("uvicorn.error")
 
 # Testbed DB access lib
 from libdb import *
@@ -96,13 +113,14 @@ def get_experiment_access(experiment_id):
     try:
         experiment_access = AccessCheck.Experiment(str(experiment_id))
     except Exception as ex:
-        raise PortalException(status.HTTP_404_NOT_FOUND, str(ex))
+        raise PortalException(FStatus.HTTP_404_NOT_FOUND, str(ex))
     
     LOG.info("get_experiment_access: %r: %r", str(experiment_id), experiment_access)
     return experiment_access
 
 #
-# As a Depends() parameter below, validate that experiment_id is a UUID or pid,name
+# As a Depends() parameter below, validate that experiment_id is a
+# UUID or pid,name and a current experiment.
 #
 def check_experiment_id(experiment_id):
     LOG.info("check_experiment_id %r", str(experiment_id))
@@ -113,7 +131,7 @@ def check_experiment_id(experiment_id):
                            (match[1], match[2]))
         if qres == None or len(qres) != 1:
             raise PortalException(
-                status.HTTP_404_NOTFOUND, "No such experiment")
+                FStatus.HTTP_404_NOT_FOUND, "No such experiment")
         row = qres[0]
         return row[0]
 
@@ -122,8 +140,36 @@ def check_experiment_id(experiment_id):
     except Exception as ex:
         raise RequestValidationError(
             "Validation error for experiment_id, not a valid UUID")
+
+    qres = DBQueryWarn("select uuid from apt_instances "+
+                       "where uuid=%s",(experiment_id,))
+    if qres == None or len(qres) != 1:
+        raise PortalException(
+            FStatus.HTTP_404_NOT_FOUND, "No such experiment")
     
     return experiment_id
+
+#
+# Check validity of an experiment node.
+# This is an inefficient way to do this, change later.
+#
+def check_experiment_node(DB: Session, experiment_id, client_id):
+    stmt = select(AptInstances).where(text("uuid = :id"))
+    row = DB.execute(stmt, {'id': experiment_id}).first()
+    if not row:
+        raise PortalException(FStatus.HTTP_404_NOT_FOUND,
+                              "%r is not a node in this experiment" % client_id)
+    instance = row.AptInstances
+
+    for aggregate in instance.aggregates:
+        for sliver in aggregate.slivers:
+            if sliver.client_id == client_id:
+                return sliver
+            pass
+        pass
+    
+    raise PortalException(FStatus.HTTP_404_NOT_FOUND,
+                          "%r is not a node in this experiment" % client_id)
 
 #
 # Check admission control (load average, too many waiting)
@@ -132,7 +178,7 @@ def checkAdmissionControl():
     load1,load5,load15 = os.getloadavg()
     if load1 > 15:
         raise PortalException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
+            FStatus.HTTP_429_TOO_MANY_REQUESTS,
             "Load average to high: " + str(load1))
 
     qres = DBQueryFatal("select value from emulab_locks " +
@@ -140,28 +186,89 @@ def checkAdmissionControl():
 
     if qres == None or len(qres) != 1:
         raise PortalException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+            FStatus.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
     row = qres[0]
     count = row[0]
     if count > 10:
         raise PortalException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
+            FStatus.HTTP_429_TOO_MANY_REQUESTS,
             "Too many experiments waiting: " + str(count))
     pass
 
+#
+# Grab the webtask for an instance
+#
+def get_apt_instance_webtask(experiment_id):
+    qres = DBQueryWarn("select webtask_id from apt_instances "+
+                       "where uuid=%s",(experiment_id,))
+    if qres == None or len(qres) != 1:
+        raise PortalException(
+            FStatus.HTTP_404_NOT_FOUND, "No such experiment")
+
+    row = qres[0]
+    # There is a short time when the webtask_id of a new instance is not set.
+    if not row[0]:
+        return None
+    
+    return WebTask(row[0])
 
 #
-# This needs to be configured.
+# Create a SnapshotStatus for an instance,
 #
+def get_apt_instance_snapshot_status(experiment_id):
+    webtask = get_apt_instance_webtask(experiment_id)
+    if not webtask:
+        return None
+
+    if not webtask.HasAttribute("snapshot_id"):
+        return None
+    snapshot_id = webtask["snapshot_id"]
+
+    # Strip off the units, that was a bad idea a long time ago.
+    # Might not have an image size yet.
+    image_size = 0
+    if webtask.HasAttribute("image_size"):
+        image_size = webtask["image_size"]
+        if type(image_size) == str:
+            if image_size[-2:] == "KB":
+                image_size = image_size[:-2]
+                pass
+            pass
+        pass
+
+    image_status = "unknown"
+    if webtask.HasAttribute("image_status"):
+        image_status = webtask["image_status"]
+        pass
+    
+    status = SnapshotStatus(
+        id = snapshot_id,
+        status = image_status,
+        image_size = image_size,
+        image_urn = webtask["image_urn"],
+    )
+    if webtask.HasAttribute("image_stamp"):
+        status.status_timestamp = TBDatetimeGMT(
+            datetime.fromtimestamp(int(webtask["image_stamp"])))
+        pass
+    
+    if webtask.HasExited():
+        if webtask.exitcode:
+            status.error_message = webtask["output"]
+            pass
+        pass
+    
+    return status
+
+
 STARTEXPT      = "webstart-experiment "
 MODIFYEXPT     = "webmodify-experiment "
 MANAGEINSTANCE = "webmanage_instance "
 EXTENDEXPT     = MANAGEINSTANCE + " extend "
 STOPEXPT       = MANAGEINSTANCE + " terminate "
 CONNECTLAN     = MANAGEINSTANCE + " connectsharedlan "
-
-LOG = logging.getLogger("uvicorn.error")
+SNAPSHOT       = MANAGEINSTANCE + " snapshot "
 
 router = APIRouter(
     prefix="/experiments",
@@ -206,10 +313,9 @@ def get_experiment(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
     
     return ConstructExperiment(DB, experiment_id)
-
 
 #
 # At the moment, the only update is "extend"
@@ -219,18 +325,31 @@ def get_experiment(
 def update_experiment(
         current_user: Annotated[str, Depends(get_current_user)],
         experiment_id: Annotated[str, Depends(check_experiment_id)],
-        expires_at: Annotated[datetime, Query()],
+        expires_at: Annotated[datetime, Query()] = None,
+        duration: Annotated[int, Query(ge=1)] = None,
         experiment_access = Depends(get_experiment_access),
         DB: Session = Depends(get_DB)) -> Experiment:
-    LOG.info("update_experiment: args: %r, %r", experiment_id, expires_at)
+    LOG.info("update_experiment: args: %r, %r %r", experiment_id, expires_at, duration)
+
+    if not expires_at and not duration:
+        raise RequestValidationError("Must provide expires_at or duration")
+
+    if expires_at and duration:
+        raise RequestValidationError("Must provide only one of expires_at or duration")
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     command = EXTENDEXPT + " " + str(experiment_id)
     command += " -m '" + "Experiment extended via the REST API" + "'"
-    command += " '" + str(expires_at) + "'"
+
+    # Either way is fine.
+    if expires_at:
+        command += " '" + str(expires_at) + "'"
+    else:
+        command += " '" + str(duration) + "'"
+        pass
 
     completed = SUEXEC(current_user, experiment_access.group, command)
     LOG.info(completed)
@@ -241,7 +360,7 @@ def update_experiment(
 
 
 @router.post("/experiments/{experiment_id}/vlan/{source_lan}/connect",
-             status_code=status.HTTP_204_NO_CONTENT)
+             status_code=FStatus.HTTP_204_NO_CONTENT)
 def connect_experiment_vlan(
         current_user: Annotated[str, Depends(get_current_user)],
         experiment_id: Annotated[str, Depends(check_experiment_id)],
@@ -253,12 +372,9 @@ def connect_experiment_vlan(
     LOG.info("connect_experiment_vlan: args: %r,%r %r,%r",
              experiment_id, source_lan, target_id, target_lan)
 
-    # This will throw a validation error.
-    check_experiment_id(target_id)
-
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_MODIFY):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     command = CONNECTLAN + " " + str(experiment_id) + " " + str(source_lan) + " "
     command += str(target_id) + " " + str(target_lan) + " "
@@ -272,7 +388,7 @@ def connect_experiment_vlan(
 
 
 @router.post("/experiments/{experiment_id}/vlan/{source_lan}/disconnect",
-             status_code=status.HTTP_204_NO_CONTENT)
+             status_code=FStatus.HTTP_204_NO_CONTENT)
 def disconnect_experiment_vlan(
         current_user: Annotated[str, Depends(get_current_user)],
         experiment_id: Annotated[str, Depends(check_experiment_id)],
@@ -283,7 +399,7 @@ def disconnect_experiment_vlan(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_MODIFY):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     command = CONNECTLAN + " " + str(experiment_id) + " -r " + str(source_lan)
     
@@ -295,7 +411,7 @@ def disconnect_experiment_vlan(
     pass
 
 
-@router.delete("/{experiment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{experiment_id}", status_code=FStatus.HTTP_204_NO_CONTENT)
 def delete_experiment(
         current_user: Annotated[str, Depends(get_current_user)],
         experiment_id: Annotated[str, Depends(check_experiment_id)],
@@ -304,7 +420,7 @@ def delete_experiment(
     
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
     
     command = STOPEXPT + " " + str(experiment_id);
     completed = SUEXEC(current_user, experiment_access.group, command)
@@ -315,7 +431,7 @@ def delete_experiment(
     pass
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=FStatus.HTTP_201_CREATED)
 def create_experiment(
         current_user: Annotated[str, Depends(get_current_user)],
         create: ExperimentCreate = None,
@@ -324,10 +440,10 @@ def create_experiment(
     try:
         group = AccessCheck.ProjectGroup(create.project, create.group)
     except Exception as ex:
-        raise PortalException(status.HTTP_404_NOT_FOUND, str(ex))
+        raise PortalException(FStatus.HTTP_404_NOT_FOUND, str(ex))
 
     if not group.AccessCheck(current_user, AccessCheck.TB_PROJECT_CREATEEXPT):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     # This will raise a validation error
     PortalValidate(create, ExperimentValidation);
@@ -359,9 +475,12 @@ def create_experiment(
 
     bindingsFile = None
     if create.bindings:
+        bindings_json = create.bindings.model_dump_json()
+        LOG.info("Bindings: %r", bindings_json)
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as fp:
-            fp.write(json.dumps(create.bindings))
+            fp.write(bindings_json)
             fp.flush()
+            os.chmod(fp.name, 0o644)
             bindingsFile = fp.name
             pass
         command += "--bindings " + bindingsFile + " "
@@ -385,7 +504,7 @@ def create_experiment(
                        "where pid=%s and name=%s",
                        (create.project, create.name))
     if not qres or len(qres) != 1:
-        raise PortalException(status.HTTP_404_NOT_FOUND,
+        raise PortalException(FStatus.HTTP_404_NOT_FOUND,
                               "Experiment not found after creating")
     uuid = qres[0][0]
     return ConstructExperiment(DB, uuid, elaborate=False)
@@ -403,19 +522,22 @@ def update_experiment(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     # This will raise a TOO_MANY_REQUESTS error.
     checkAdmissionControl()
 
-    if True:
+    if False:
         return ConstructExperiment(DB, experiment_id)
+
+    bindings_json = modify_info.bindings.model_dump_json()
 
     # Boss runs an old version of python, missing delete_on_close, hence the
     # flush instead of close. But as long as the file is deleted when it goes
     # out of scope, we are good.
     with tempfile.NamedTemporaryFile(mode='w+') as fp:
-        fp.write(modify_info.bindings)
+        fp.write(bindings_json)
+        os.chmod(fp.name, 0o644)
         fp.flush()
 
         command = MODIFYEXPT + " --bindings %s %s " % (fp.name, str(experiment_id))
@@ -439,7 +561,7 @@ def get_experiment_node(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     return ConstructExperimentNode(DB, experiment_id, client_id)
 
@@ -454,7 +576,7 @@ def get_experiment_manifests(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     return ConstructExperimentManifests(DB, experiment_id)
 
@@ -470,9 +592,9 @@ def update_experiment_nodes(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_UPDATE):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
-    command = "%s %s %s -b " % (MANAGEINSTANCE, operation, str(experiment_id))
+    command = "%s %s %s -b " % (MANAGEINSTANCE, operation.name, str(experiment_id))
 
     completed = SUEXEC(current_user, experiment_access.group, command)
     if completed.returncode != 0:
@@ -480,6 +602,77 @@ def update_experiment_nodes(
 
     return ConstructExperiment(DB, experiment_id)
 
+
+@router.post("/{experiment_id}/snapshot/{client_id}")
+def snapshot_experiment_node(
+        current_user: Annotated[str, Depends(get_current_user)],
+        experiment_id: Annotated[str, Depends(check_experiment_id)],
+        client_id: Annotated[str, Path(pattern="^[-\w]+$")],
+        snapshotReq: SnapshotRequest,
+        experiment_access = Depends(get_experiment_access),
+        DB: Session = Depends(get_DB)) -> SnapshotStatus:
+    LOG.info("snapshot_experiment_node: args: %r %r %r",
+             experiment_id, client_id, snapshotReq)
+
+    if not experiment_access.AccessCheck(
+            current_user, AccessCheck.TB_EXPT_UPDATE):
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
+
+    # This will raise an error
+    check_experiment_node(DB, experiment_id, client_id)
+    # Ditto
+    PortalValidateOne("image_name", snapshotReq.image_name, "images", "imagename")
+
+    command = "%s %s -n %s -i %s -O image-only" % (
+        SNAPSHOT, str(experiment_id), client_id, snapshotReq.image_name)
+    LOG.info(command)
+
+    # We need to clear the instance webtask since that is where the status
+    # goes, including the snapshot_id
+    webtask = get_apt_instance_webtask(experiment_id);
+    LOG.info("webtask %r", webtask)
+    webtask.Reset()
+
+    completed = SUEXEC(current_user, experiment_access.group, command)
+    if completed.returncode != 0:
+        return HandleShellError(completed)
+
+    webtask.Refresh();
+
+    return SnapshotStatus(
+        id = webtask["snapshot_id"],
+        status = "started",
+        status_timestamp = TBDatetimeGMT("now"),
+        image_size = 0,
+        image_urn = webtask["image_urn"],
+    )
+
+@router.get("/{experiment_id}/snapshot/{snapshot_id}")
+def get_experiment_snapshot_status(
+        current_user: Annotated[str, Depends(get_current_user)],
+        experiment_id: Annotated[str, Depends(check_experiment_id)],
+        snapshot_id: UUID,
+        experiment_access = Depends(get_experiment_access),
+        DB: Session = Depends(get_DB)) -> SnapshotStatus:
+    LOG.info("get_experiment_snapshot_status: args: %r %r",
+             experiment_id, snapshot_id)
+
+    if not experiment_access.AccessCheck(
+            current_user, AccessCheck.TB_EXPT_READINFO):
+        raise PortalException(
+            FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
+
+    webtask = get_apt_instance_webtask(experiment_id)
+    LOG.info("webtask %r %r", webtask["snapshot_id"], str(snapshot_id))
+    try:
+        if str(snapshot_id) != webtask["snapshot_id"]:
+            raise PortalException(
+                FStatus.HTTP_404_NOT_FOUND, "Snapshot ID is invalid")
+    except:
+        raise PortalException(
+            FStatus.HTTP_404_NOT_FOUND, "Snapshot ID is invalid")
+
+    return get_apt_instance_snapshot_status(experiment_id)
 
 @router.post("/{experiment_id}/node/{client_id}/{operation:str}")
 def update_experiment_node(
@@ -494,14 +687,13 @@ def update_experiment_node(
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_UPDATE):
-        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+        raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
-    # Simple way to make sure its a node in the experiment.
-    # This will raise an exception.
-    ignored = ConstructExperimentNode(DB, experiment_id, client_id)
-    
+    # This will raise an error
+    check_experiment_node(DB, experiment_id, client_id)
+
     command = "%s %s %s -b %s" % (
-        MANAGEINSTANCE, operation, str(experiment_id), client_id)
+        MANAGEINSTANCE, operation.name, str(experiment_id), client_id)
 
     completed = SUEXEC(current_user, experiment_access.group, command)
     if completed.returncode != 0:
@@ -522,6 +714,7 @@ def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
             )            
         #print(str(row))
         instance = row.AptInstances
+        
         #
         # Generate the list of status objects
         #
@@ -597,6 +790,11 @@ def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
             exp.repository_refspec = instance.reporef
             exp.repository_hash = instance.repohash
             pass
+
+        snapshot_status = get_apt_instance_snapshot_status(experiment_id)
+        if snapshot_status:
+            exp.last_snapshot_status = snapshot_status
+            pass
             
         return exp
     pass
@@ -636,7 +834,7 @@ def ConstructExperimentNode(DB: Session,
             break
         pass
     if node == None:
-        raise PortalException(status.HTTP_404_NOT_FOUND,
+        raise PortalException(FStatus.HTTP_404_NOT_FOUND,
                               "%r is not a node in this experiment" % client_id)
     return node
 
