@@ -235,8 +235,8 @@ class BenetelConfig(object):
             'allowed_ranges': ((3358.0,3600.0),)
         },
         'bandwidth': {
-            'def': 20000000,
-            'allowed_values': (20000000, 40000000)
+            'def': 20.0,
+            'allowed_values': (20.0, 40.0)
         },
         'gain': {
             'def': 37.0,
@@ -378,8 +378,9 @@ class BenetelWrapper(object):
     DEF_PING_TIMEOUT = 5
     WAIT_PING_SLEEP = 1
     WAIT_LOG_SLEEP = 1
-    FW_VERSION_UNKNOWN = "*UNKNOWN*"
+    FW_VERSION_UNKNOWN = {'major':'X', 'minor':'Y', 'revision':'Z'}
     FW_VERSION_FILE = "/etc/benetel-rootfs-version"
+    HW_MODEL_UNKNOWN = "*UNKNOWN-HW-TYPE*"
     RADIO_BOOT_LOG = "/tmp/logs/radio_status"
     RADIO_ONLINE_STATUS_PATTERN = r'^\[INFO\] Radio bringup complete'
     RADIO_SETUP_SCRIPT = "/usr/sbin/radio_setup_a.sh"
@@ -394,15 +395,28 @@ class BenetelWrapper(object):
     RADIO_SETUP_SCRIPT_SETTINGS = \
         ('fh_cplane_vlan', 'fh_uplane_vlan', 'du_cplane_mac',
          'du_uplane_mac')
-    RADIO_CONFIG_FILE_SETTINGS = \
-        ('mimo_mode', 'downlink_scaling', 'prach_format',
-         'compression', 'lf_prach_compression_enable',
-         'flexran_prach_workaround')
+    RADIO_CONFIG_FILE_MAP = {
+        'mimo_mode': 'mimo_mode',
+        'downlink_scaling': 'downlink_scaling',
+        'prach_format': 'prach_format',
+        'compression': 'compression',
+        'lf_prach_compression_enable': 'lf_prach_compression_enable',
+        'flexran_prach_workaround': 'flexran_prach_workaround',
+        'bandwidth_hz': 'bandwidth',
+        'centre_frequency_hz': 'center_frequency',
+        'tx_power_dbm': 'gain',
+        'c_plane_du_mac': 'du_cplane_mac',
+        'u_plane_du_mac': 'du_uplane_mac',
+        'c_plane_du_vlan': 'fh_cplane_vlan',
+        'u_plane_du_vlan_downlink': 'fh_uplane_vlan',
+        'u_plane_du_vlan_uplink': 'fh_uplane_vlan'
+    }
 
     def __init__(self, mgmt_addr, username=DEF_SSH_USER, keyfile=None, log_level = DEF_LOG_LEVEL):
         self.addr = mgmt_addr
         self.lgr = _mk_logger(self.__class__.__name__, log_level)
-        self.fwversion = self.FW_VERSION_UNKNOWN
+        self._hardware = self.HW_MODEL_UNKNOWN
+        self._fwversion = self.FW_VERSION_UNKNOWN
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile, log_level = log_level)
 
@@ -415,7 +429,7 @@ class BenetelWrapper(object):
             self._ssh.close()
             self.lgr.warning("Remote host is not a Benetel RU?")
             raise
-        self.fwversion = contents[0].strip()
+        self._parse_fwversion(contents[0].strip())
 
     def get_session(self):
         if not self.is_connected():
@@ -428,8 +442,15 @@ class BenetelWrapper(object):
     def is_connected(self):
         return self._ssh.is_connected()
 
-    def get_firmware_version(self):
-        return self.fwversion
+    def _parse_fwversion(self, fwstr):
+        hw, version, hsh = fwstr.split("-")
+        major, minor, rev = version.split(".")
+        major = major.split("v")[1]
+        self._hardware = hw
+        self._fwversion = { 'major': int(major), 'minor': int(minor), 'revision': int(rev) }
+
+    def get_firmware_string(self):
+        return ".".join([str(self._fwversion[x]) for x in ("major", "minor", "revision")])
 
     def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
         ctime = time.time()
@@ -471,10 +492,15 @@ class BenetelWrapper(object):
 
     def _fetch_single_file_setting(self, setting):
         rfile = self.SINGLE_FILE_SETTINGS_MAP[setting]
-        return self.get_session().read_remote_file(rfile)[0].strip()
+        value = self.get_session().read_remote_file(rfile)[0].strip()
+        if setting in ("bandwidth",):
+            value = float(value) / 1e6 # Convert to MHz for these.
+        return value
 
     def _push_single_file_setting(self, setting, value):
         rfile = self.SINGLE_FILE_SETTINGS_MAP[setting]
+        if setting in ("bandwidth",):
+            value *= 1e6  # Convert to Hz for these settings.
         outlines = (str(value),)
         self.get_session().write_remote_file(rfile, outlines, overwrite=True)
 
@@ -526,23 +552,42 @@ class BenetelWrapper(object):
 
     def _fetch_radio_config_file_settings(self):
         settings = {}
+        mapkeys = self.RADIO_CONFIG_FILE_MAP.keys()
         for ln in self.get_session().\
                 read_remote_file(self.RADIO_CONFIG_FILE):
             m = re.search(self.RADIO_CONFIG_FILE_PATTERN, ln)
-            if m and m[1] in self.RADIO_CONFIG_FILE_SETTINGS:
-                settings[m[1]] = m[2]
+            if m and m[1] in mapkeys:
+                key, val = m[1], m[2]
+                if key in ("centre_frequency_hz", "bandwidth_hz"):
+                    val = float(val) / 1e6  # We handle these settings in MHz.
+                elif key in ("c_plane_du_vlan", "u_plane_du_vlan_downlink",
+                             "u_plane_du_vlan_downlink"):
+                    val = int(val, base = 16) # Benetel keeps these in hex...
+                elif key in ("c_plane_du_mac", "u_plane_du_mac"):
+                    val = val.replace(":", "") # Emulab convention.
+                settings[self.RADIO_CONFIG_FILE_MAP[key]] = val
         return settings
 
     def _push_radio_config_file_settings(self, settings):
         outlines = []
+        mapkeys = self.RADIO_CONFIG_FILE_MAP.keys()
         for ln in self.get_session().\
                 read_remote_file(self.RADIO_CONFIG_FILE):
             ln = ln.rstrip()
             m = re.search(self.RADIO_CONFIG_FILE_PATTERN, ln)
-            if m and m[1] in self.RADIO_CONFIG_FILE_SETTINGS:
+            if m and m[1] in mapkeys:
+                key = m[1]
+                val = settings[self.RADIO_CONFIG_FILE_MAP[key]]
+                if key in ("centre_frequency_hz", "bandwidth_hz"):
+                    val *= 1e6  # Convert these to Hz for radio config file
+                elif key in ("c_plane_du_vlan", "u_plane_du_vlan_downlink",
+                             "u_plane_du_vlan_downlink"):
+                    val = format(val, "x")  # Convert to hex for Benetel...
+                elif key in ("c_plane_du_mac", "u_plane_du_mac"):
+                    val = ":".join(re.findall("..", val)) # "Normal" mac string
                 outlines.append(
                     re.sub(self.RADIO_CONFIG_FILE_PATTERN,
-                           r'\1=' + str(settings[m[1]]), ln))
+                           r'\1=' + str(val), ln))
             else:
                 outlines.append(ln)
         outlines.append("") # Add final newline since this is a script...
@@ -560,9 +605,10 @@ class BenetelWrapper(object):
     def push_settings(self, settings):
         if not type(settings) == BenetelConfig:
             raise ValueError(f"{_whoami(self)}: 'settings' argument must be a BenetelConfig object!")
-        for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
-            self._push_single_file_setting(stg, settings[stg])
-        self._push_radio_setup_script_settings(settings)
+        if self._fwversion['major'] == 0 or self._fwversion['major'] == 1 and self._fwversion['minor'] < 4:
+            for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
+                self._push_single_file_setting(stg, settings[stg])
+            self._push_radio_setup_script_settings(settings)
         self._push_radio_config_file_settings(settings)
 
 ##############################################################################
@@ -610,7 +656,7 @@ def main():
     try:
         bw = connect(args, loglvl)
         if not args.get_config:
-            lgr.info(f"Connected to {args.address}. Firmware: {bw.get_firmware_version()}")
+            lgr.info(f"Connected to {args.address}. Firmware: {bw.get_firmware_string()}")
     except:
         lgr.exception("Failed to connect to the device:")
         return 1

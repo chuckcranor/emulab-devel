@@ -2820,9 +2820,9 @@ sub LightUpNodes($@)
 	# Extract parameters set for node in profile script.
 	my $attr;
 	$experiment->GetVirtNodeAttribute($vname, 'center_frequency', \$attr);
-	$ru_params{'center_frequency'} = $attr + 0; # store as number
+	$ru_params{'center_frequency'} = $attr + 0; # store as number for JSON
 	$experiment->GetVirtNodeAttribute($vname, 'bandwidth', \$attr);
-	$ru_params{'bandwidth'} = $attr * 1000 * 1000; # convert MHz to Hz
+	$ru_params{'bandwidth'} = $attr + 0; # store as number for JSON
 	$experiment->GetVirtNodeAttribute($vname, 'mimo_mode', \$attr);
 	$ru_params{'mimo_mode'} = $attr
 	    if defined($attr);
