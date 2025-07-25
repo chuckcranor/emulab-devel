@@ -1007,6 +1007,53 @@ while read line; do
 	    LDISK=${LDISK%% *}
 	    ;;
     esac
+
+    #
+    # XXX attempt to detect non-deterministic naming of NVMe drives in Linux.
+    # If we have multiple NVMe drives, we might load the wrong one here which
+    # is bad if the last load used a different disk. Then we wind up with
+    # multiple drives with a bootable OS leading to confusion.
+    #
+    # So before doing anything, we attempt to locate an existing Emulab-style
+    # bootdisk:
+    #
+    # If we don't find one, all is well.
+    # Otherwise, if we find one and it matches LDISK, all is well.
+    # Otherwise, if we find one and it does not match, use the existing one.
+    # Otherwise, we found multiple OS disk, just plow ahead with LDISK.
+    #
+    if [ -x "$BINDIR/findbootdisk.pl" ]; then
+	echo "Identifying boot disk ..."
+	fbdarg=
+	BOOTSERIAL=`getvar BOOTSERIAL "$line" none`
+	if [ "$BOOTSERIAL" != "none" ]; then
+	    fbdarg="serial=$BOOTSERIAL"
+	fi
+
+	bdisks=`$BINDIR/findbootdisk.pl $fbdarg`
+	bdisk=${bdisks%% *}
+	if [ -z "$bdisk" ]; then
+	    true
+	elif [ "$bdisk" = "$bdisks" ]; then
+	    if [ "$bdisk" = "$LDISK" ]; then
+		true
+	    else
+		echo "Boot disk appears to be $bdisk NOT $LDISK, imaging $bdisk..."
+		LDISK=$bdisk
+		# Ick, we have to regenerate a new BSD disk name.
+		# XXX probably only needed for FreeBSD images.
+		if [ -x "$BINDIR/linux_to_freebsd_disk" ]; then
+		    DISK=`$BINDIR/linux_to_freebsd_disk $bdisk`
+		else
+		    DISK=$bdisk
+		fi
+	    fi
+	else
+	    echo "WARNING: found more than one potential boot disk, imaging $LDISK"
+	    echo "         but might boot from any one of: $bdisks"
+	fi
+    fi
+
     line="$line LDISK=$LDISK"
 
     PART=`getvar PART "$line" 0`

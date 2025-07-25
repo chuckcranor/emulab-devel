@@ -502,17 +502,19 @@ sub DoListTokens()
 		print "scope_value: " . $row->{'scope_value'} . " ";
 		
 	    	if ($row->{'scope_type'} eq "experiment") {
-		my $instance = APT_Instance->Lookup($row->{'scope_value'});
-		if (!defined($instance)) {
-		    print "\n";
-		    print("No such experiment: " . $row->{'scope_value'}
-
+		    my $instance = APT_Instance->Lookup($row->{'scope_value'});
+		    if (!defined($instance)) {
+			print "\n";
+			print("No such experiment: " . $row->{'scope_value'});
+		    }
+		    else {
+			my $pid = $instance->pid();
+			my $eid = $instance->eid();
+			print " ($pid/$eid)\n";
+		    }
 		}
-		my $pid = $instance->pid();
-		my $eid = $instance->eid();
-		print " ($pid/$eid)\n";
+		print $row->{"token"} . "\n\n";
 	    }
-	    print $row->{"token"} . "\n\n";
 	}
     }
     return 0;

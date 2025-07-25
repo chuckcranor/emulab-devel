@@ -42,6 +42,6 @@
 <attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU22-64-STD</value></attribute>
 <attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD135-64-STD</value></attribute>
 <attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-LINUX</value></attribute>
-<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU22-64-UHD-STD</value></attribute>
+<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU22-64-STD</value></attribute>
 <attribute name="attr_string_recoverymfs_osid">  <value>emulab-ops,RECOVERY-LINUX</value></attribute>
 </nodetype>

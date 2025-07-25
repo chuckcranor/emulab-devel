@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -160,6 +160,7 @@ sub map_diskname($)
 {
     my ($dev) = @_;
     my ($dtype, $dunit);
+    my $devname = undef;
 
     #
     # When called on XEN, the diskname is correct, and in fact we will
@@ -174,7 +175,7 @@ sub map_diskname($)
     if ($dev =~ /^([-a-zA-Z_]+)(\d+)$/) {
 	($dtype,$dunit) = ($1,$2);
     } else {
-	return undef;
+	goto verify;
     }
 
     # Hack for the Linux MFS: we still use the BSD device
@@ -185,7 +186,8 @@ sub map_diskname($)
     if ($^O eq 'linux') {
 	# XXX hack for NVMe
 	if ($dtype eq "nvd") {
-	    return "/dev/nvme${dunit}n1";
+	    $devname = "/dev/nvme${dunit}n1";
+	    goto verify;
 	}
 	# XXX hack for FreeBSD SATA
 	if ($dtype eq 'ad' && $dunit > 3) {
@@ -207,8 +209,40 @@ sub map_diskname($)
 	    }
 	}
     }
+    $devname = "/dev/$dtype$dunit";
 
-    return "/dev/$dtype$dunit";
+  verify:
+
+    #
+    # XXX the Linux kernel has a non-deterministic way of naming at least
+    # NVMe devices. So we independently determine what we think the boot
+    # disk should be based on what is on all of the disks. If our heuristics
+    # don't find any disk or we find more than one possible disk, then
+    # we just stick with the specified disk. Only if we find exactly one
+    # disk that is different than the specified disk, do we change it.
+    #
+    if (-x "$BINDIR/findbootdisk.pl") {
+	my $sdev = $devname;
+	$sdev =~ s/^\/dev\///;
+	my $devstr = `$sudo $BINDIR/findbootdisk.pl`;
+	chomp($devstr);
+	@devs = split(' ', $devstr);
+	if (@devs == 0) {
+	    print STDERR "WARNING: found no partitioned disk, ".
+		"using $sdev anyway.\n";
+	} elsif (@devs > 1) {
+	    print STDERR "WARNING: found multiple partitioned disks (".
+		join(", ", @devs),
+		"), using specified disk ($sdev).\n";
+	} elsif ($sdev ne $devs[0]) {
+	    print STDERR "WARNING: found partitioned disk ($devs[0]) ".
+		"different than specified disk ($sdev), ".
+		"using $devs[0] instead.\n";
+	    $devname = "/dev/$devs[0]";
+	}
+    }
+
+    return $devname;
 }
 
 #

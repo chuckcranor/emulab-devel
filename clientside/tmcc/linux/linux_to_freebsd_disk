@@ -1,0 +1,48 @@
+#! /bin/sh
+
+ldisk=$1
+if [ -z "$ldisk" ]; then
+	echo "Usage: ${0##*/} linux_disk_name"
+	exit 1
+fi
+
+# figure out the freebsd device name
+# XXX we cannot do this unambiguously since Linux "sd" could map to a lot
+# of different BSD names (e.g., "da", "ada", various raid controllers).
+# However, it is almost always the case that "nvme" is "nvd" and "sd" is "da".
+# So we do that.
+case $ldisk in
+    nvme*)
+	dunit=`echo $ldisk | sed -e 's/nvme\([0-9][0-9]*\)n1/\1/'`
+	dtype="nvd"
+	;;
+
+    # XXX we only handle the first 26 units
+    sd[a-z])
+	dlet=`echo $ldisk | sed -e 's/sd\([a-z]\)/\1/'`
+	dtype="da"
+	case $dlet in
+	    [a-j])
+		dunit=`echo $dlet | sed -e 'y/abcdefghij/0123456789/'`
+		;;
+	    [k-t])
+		dunit=`echo $dlet | sed -e 'y/klmnopqrst/0123456789/'`
+		dunit=`expr $dunit \+ 10`
+		;;
+	    [u-z])
+		dunit=`echo $dlet | sed -e 'y/uvwxyz/012345/'`
+		dunit=`expr $dunit \+ 20`
+		;;
+	esac
+	;;
+    *)
+	dtype="unknown"
+	dunit=0
+	;;
+esac
+
+if [ "$dtype" = "unknown" ]; then
+    echo $ldisk
+else
+    echo "$dtype$dunit"
+fi
