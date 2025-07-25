@@ -449,8 +449,8 @@ def update_profile(
     # Always profile zero ...
     current = profile.versions[profile.version]
     if not current.repourl:
-        raise PortalException(status.HTTP_404_BAD_REQUEST,
-                              "Not a repository backed profile ")
+        raise PortalException(status.HTTP_400_BAD_REQUEST,
+                              "Not a repository backed profile")
 
     command = MANAGEPROFILE + " updatefromrepo " + profile_id
 

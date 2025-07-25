@@ -54,6 +54,7 @@ from ..dependencies import PortalException, PortalValidate, HandleShellError
 from ..api.models import Error
 from ..api.models import (
     ResGroup,
+    ResGroupReservation,
     ResGroupError,
     ResGroupNodeType,
     ResGroupRange,
@@ -77,7 +78,6 @@ ResGroupValidation = {
     "project"      : "projects:pid:required",
     "group"        : "groups:gid:optional",
     "reason"       : "projects:why:required",
-    "powder_zones" : "default:tinytext:optional",
 }
 
 ResGroupResValidation = {
@@ -100,6 +100,30 @@ def get_resgroup_access(resgroup_id):
     LOG.info("get_resgroup_access: %r: %r", str(resgroup_id), resgroup_access)
     return resgroup_access
 
+#
+# Verify that a supplied resgroup reservation UUID is valid
+#
+def check_resgroup_reservation(which, resgroup_id, reservation_id):
+    query = "select r.uuid from apt_reservation_groups as g "
+
+    if which == "nodetype":
+        query += "join apt_reservation_group_reservations as r "
+        query += "on r.uuid=g.uuid and r.remote_uuid=%s "
+    elif which == "range":
+        query += "join apt_reservation_group_rf_reservations as r "
+        query += "on r.uuid=g.uuid and r.freq_uuid=%s "
+    else:
+        raise PortalExceptio(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+    query += "where r.uuid=%s"
+
+    qres = DBQueryWarn(query, (str(reservation_id), str(resgroup_id)))
+    if qres == None or len(qres) != 1:
+        raise PortalException(
+            status.HTTP_404_NOT_FOUND,
+            "No such resgroup reservation_id: " + str(reservation_id))
+
+    return True
+
 LOG = logging.getLogger("uvicorn.error")
 
 router = APIRouter(
@@ -107,6 +131,9 @@ router = APIRouter(
     tags=["resgroups"]
 )
 
+#
+# This needs more work
+#
 @router.get("/")
 def get_resgroups(
         current_user: Annotated[str, Depends(get_current_user)],
@@ -152,11 +179,10 @@ def get_resgroup(
              summary="Search for an available time slot to reserve a group of resources.")
 def search_resgroup(
         current_user: Annotated[str, Depends(get_current_user)],
-        hours: int,
+        duration: Annotated[int, Query(ge=1)],
         resgroup: ResGroupSearch,
-        response: Response,
         DB: Session = Depends(get_DB)) -> Union[ResGroupSearchResult, ResGroupError]:
-    LOG.info("search_resgroup: args: %r", resgroup)
+    LOG.info("search_resgroup: args: %r %r", duration, resgroup)
     try:
         group = AccessCheck.ProjectGroup(resgroup.project, resgroup.group)
     except Exception as ex:
@@ -164,6 +190,10 @@ def search_resgroup(
 
     if not group.AccessCheck(current_user, AccessCheck.TB_PROJECT_CREATEEXPT):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+
+    if not (resgroup.nodetypes or resgroup.ranges):
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Must supply something to reserve")
 
     #
     # manage_resgroups gets 3 dicts, one for each of clusters,ranges,routes
@@ -181,14 +211,14 @@ def search_resgroup(
     routes   = {}
 
     #
-    # On this path, fill in uuids. 
+    # On this path, fill in uuids.
     #
     if resgroup.nodetypes:
-        for res in resgroup.nodetypes.items:
+        for res in resgroup.nodetypes.nodetypes:
             # This will raise a validation error
             PortalValidate(res, ResGroupResValidation, strict=False);
-        
-            id = str(uuid4())
+
+            id = str(uuid4())            
             blob["clusters"][id] = {
                 "uuid"    : id,
                 "count"   : res.count,
@@ -200,8 +230,9 @@ def search_resgroup(
         pass
 
     if resgroup.ranges:
-        for res in resgroup.ranges.items:
+        for res in resgroup.ranges.ranges:
             # No validation is needed, pydantic handles this one.
+
             id = str(uuid4())
             blob["ranges"][id] = {
                 "uuid"      : id,
@@ -228,7 +259,7 @@ def search_resgroup(
     #
     webtask = WebTask.CreateAnonymous()
     command = MANAGERESGROUP + " -t " + webtask.task_id + " findfirstfit "
-    command += "-d " + str(hours) + " "
+    command += "-d " + str(duration) + " "
     command += group.pid + "/" + group.gid + " " + jsonFile
 
     completed = SUEXEC(current_user, group, command);
@@ -257,6 +288,8 @@ def create_resgroup(
         current_user: Annotated[str, Depends(get_current_user)],
         resgroup: ResGroup,
         response: Response,
+        duration: Annotated[int, Query(ge=1)] = None,
+        noautoapprove: Annotated[bool, Query()] = False,
         DB: Session = Depends(get_DB)) -> Union[ResGroup, ResGroupError]:
     LOG.info("create_resgroup: args: %r", resgroup)
     try:
@@ -267,14 +300,20 @@ def create_resgroup(
     if not group.AccessCheck(current_user, AccessCheck.TB_PROJECT_CREATEEXPT):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
+    if not (resgroup.nodetypes or resgroup.ranges):
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Must supply something to reserve")
+
     # Start and expires are optional to support search.
     if not resgroup.start_at:
         raise RequestValidationError("Required field 'start_at' not provided")
     
-    if not resgroup.expires_at and not resgroup.duration:
+    if not resgroup.expires_at and not duration:
         raise RequestValidationError("Must provide 'expires_at' or 'duration'")
 
-    resgroup_id = create_resgroup_shared(current_user, group, resgroup)
+    resgroup_id = create_resgroup_shared(
+        DB, current_user, group, resgroup, duration=duration, noautoapprove=noautoapprove)
+    
     # Status contained in the object sent by the caller.
     if isinstance(resgroup_id, ResGroupError):
         response.status_code = status.HTTP_406_NOT_ACCEPTABLE
@@ -285,9 +324,22 @@ def create_resgroup(
 #
 # This code is shared with .patch (modify)
 #
-def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
-    # This will raise a validation errora
+def create_resgroup_shared(DB, user, group, resgroup,
+                           resgroup_id = None, duration = None,
+                           noautoapprove = False):
+    # This will raise a validation error
     PortalValidate(resgroup, ResGroupValidation, strict=False);
+
+    current = None
+    if resgroup_id:
+        stmt = select(AptReservationGroups).where(text("uuid = :id"))
+        row = DB.execute(stmt, {'id': resgroup_id}).first()
+        if not row:
+            raise HTTPException(
+                status_code=404, detail="No such resgroup"
+            )            
+        current = row.AptReservationGroups
+        pass
 
     #
     # manage_resgroups gets 3 dicts, one for each of clusters,ranges,routes
@@ -303,16 +355,25 @@ def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
     clusters = {}
     ranges   = {}
     routes   = {}
+    approved = 0
 
-    #
-    # On this path, fill in uuids. 
-    #
     if resgroup.nodetypes:
-        for res in resgroup.nodetypes.items:
+        for res in resgroup.nodetypes.nodetypes:
             # This will raise a validation error
             PortalValidate(res, ResGroupResValidation, strict=False);
-        
-            id = str(uuid4())
+
+            if not resgroup_id or not res.reservation_id:
+                id = str(uuid4())
+            elif res.reservation_id:
+                curres = current.Reservation(res.reservation_id)
+                if not curres:
+                    raise PortalException(
+                        status.HTTP_404_NOT_FOUND,
+                        "No such resgroup reservation: " + str(res.reservation_id))
+                
+                id = str(res.reservation_id)
+                pass
+            
             blob["clusters"][id] = {
                 "uuid"    : id,
                 "count"   : res.count,
@@ -324,9 +385,21 @@ def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
         pass
 
     if resgroup.ranges:
-        for res in resgroup.ranges.items:
+        for res in resgroup.ranges.ranges:
             # No validation is needed, pydantic handles this one.
-            id = str(uuid4())
+
+            if not resgroup_id or not res.reservation_id:
+                id = str(uuid4())
+            elif res.reservation_id:
+                curres = current.Range(res.reservation_id)
+                if not curres:
+                    raise PortalException(
+                        status.HTTP_404_NOT_FOUND,
+                        "No such resgroup reservation: " + str(res.reservation_id))
+                
+                id = str(res.reservation_id)
+                pass
+
             blob["ranges"][id] = {
                 "uuid"      : id,
                 "freq_low"  : res.min_freq,
@@ -346,6 +419,12 @@ def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
     webtask = WebTask.CreateAnonymous()
     command = MANAGERESGROUP + " -t " + webtask.task_id + " reserve "
     options = ""
+    if resgroup_id:
+        options = "-u " + str(resgroup_id)
+        pass
+    if noautoapprove:
+        options += " -P "
+        pass
 
     # Start can be null, means start now.
     if resgroup.start_at:
@@ -353,21 +432,20 @@ def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
         pass
 
     expires = None
-    if resgroup.expires_at:
-        expires = int(resgroup.expires_at.timestamp())
-    elif resgroup.duration:
+    if duration:
         if resgroup.start_at:
-            expires = (int(resgroup.start_at.timestamp()) +
-                       (3600 * resgroup.duration))
+            expires = (int(resgroup.start_at.timestamp()) + (3600 * duration))
         else:
-            expires = time.time() + (3600 * resgroup.duration)
+            expires = time.time() + (3600 * duration)
             pass
+    elif resgroup.expires_at:
+        expires = int(resgroup.expires_at.timestamp())
     else:
         raise RequestValidationError("Must provide an expiration or duration")
     options += " -e " + str(expires)
 
     if resgroup.powder_zones:
-        options += " -Z '" + resgroup.powder_zones + "'"
+        options += " -Z '" + str(resgroup.powder_zones) + "'"
         pass
 
     reasonFile = None
@@ -395,12 +473,17 @@ def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
     # return results
     completed = SUEXEC(user, group, checkonly);
     if completed.returncode != 0:
+        message = None
+        webtask.Refresh()
+        if webtask.HasAttribute("output"):
+            message = webtask["output"]
+            pass
         webtask.Delete()
         if reasonFile:
             os.unlink(reasonFile)
             pass
-        #os.unlink(jsonFile)
-        return HandleShellError(completed)
+        os.unlink(jsonFile)
+        return HandleShellError(completed, message=message)
 
     webtask.Refresh()
     results = webtask["results"];
@@ -437,9 +520,9 @@ def create_resgroup_shared(user, group, resgroup, resgroup_id = None):
         return ResGroupError(
             error = "There are %d issues with this reservation group" % errors,
             errorCode = 1,
-            clusters = ResGroupNodeTypes(items=list(clusters.values())),
-            ranges = ResGroupRanges(items=list(ranges.values())),
-            routes = ResGroupRoutes(items=list(routes.values())))
+            clusters = ResGroupNodeTypes(nodetypes=list(clusters.values())),
+            ranges = ResGroupRanges(ranges=list(ranges.values())),
+            routes = ResGroupRoutes(routes=list(routes.values())))
 
     #
     # OK, do it for real. 
@@ -467,6 +550,8 @@ def update_resgroup(
         current_user: Annotated[str, Depends(get_current_user)],
         resgroup_id: UUID,
         resgroup: ResGroup,
+        duration: Annotated[int, Query(ge=1)] = None,
+        noautoapprove: Annotated[bool, Query()] = False,
         resgroup_access = Depends(get_resgroup_access),
         DB: Session = Depends(get_DB)) -> ResGroup:
     LOG.info("update_resgroup: args: %r, %r", resgroup_id, resgroup)
@@ -475,19 +560,104 @@ def update_resgroup(
             current_user, AccessCheck.TB_RESGROUP_MODIFY):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
-    create_resgroup_shared(current_user,
-                           resgroup_access.group, resgroup, resgroup_id)
+    if not (resgroup.nodetypes or resgroup.ranges):
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Must supply something to reserve")
+
+    create_resgroup_shared(DB, current_user,
+                           resgroup_access.group, resgroup,
+                           resgroup_id=resgroup_id,
+                           duration=duration, noautoapprove=noautoapprove)
     return ConstructResGroup(DB, resgroup_id)
 
 @router.post("/{resgroup_id}/reservations", status_code=status.HTTP_201_CREATED)
 def add_resgroup_reservation(
         current_user: Annotated[str, Depends(get_current_user)],
         resgroup_id: UUID,
-        reservation: Union[ResGroupNodeType, ResGroupRange],
+        reservation: ResGroupReservation,
+        noautoapprove: Annotated[bool, Query()] = False,
         resgroup_access = Depends(get_resgroup_access),
         DB: Session = Depends(get_DB)) -> ResGroup:
     LOG.info("add_resgroup_reservation: args: %r %r", resgroup_id, reservation)
     
+    if not resgroup_access.AccessCheck(
+            current_user, AccessCheck.TB_RESGROUP_MODIFY):
+        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+
+    if not (reservation.nodetype or reservation.range or reservation.route):
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Must supply something to reserve")
+
+    if ((reservation.nodetype and (reservation.range or reservation.route)) or
+        (reservation.range and (reservation.nodetype or reservation.route)) or
+        (reservation.route and (reservation.nodetype or reservation.range))):
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST,
+            "Must supply only one of nodetype, range, or route")
+
+    if reservation.nodetype:
+        reservation = reservation.nodetype
+    elif reservation.range:
+        reservation = reservation.range
+    else:
+        reservation = reservation.route
+        pass
+
+    # Reject if it has a UUID.
+    if reservation.reservation_id:
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST,
+            "reservation_id should not be set when adding a NEW reservation")
+
+    stmt = select(AptReservationGroups).where(text("uuid = :id"))
+    row = DB.execute(stmt, {'id': resgroup_id}).first()
+    if not row:
+        raise HTTPException(
+            status_code=404, detail="No such resgroup")
+    aptresgroup = row.AptReservationGroups
+
+    #
+    # Grab the current reservation and create a request.
+    # Then add the new reservation to the request. Then do the modify.
+    #
+    newresgroup = ConstructResGroup(DB, resgroup_id)
+
+    if isinstance(reservation, ResGroupNodeType):
+        nodetype = reservation.nodetype
+        aggregate_urn = reservation.urn
+
+        #
+        # Do not allow adding a duplicate urn/nodetype
+        #
+        if aptresgroup.reservations:
+            for res in aptresgroup.reservations:
+                if res.type == nodetype and res.urn == aggregate_urn:
+                    raise()
+                pass
+            pass
+        newresgroup.nodetypes.nodetypes.append(reservation)
+    else:
+        min_freq = reservation.min_freq
+        max_freq = reservation.max_freq
+
+        #
+        # Do not allow adding a duplicate range. 
+        #
+        if aptresgroup.ranges:
+            for res in aptresgroup.ranges:
+                if res.min_freq == min_freq and res.max_freq == max_freq:
+                    raise()
+                pass
+            pass
+        newresgroup.ranges.ranges.append(reservation)
+        pass
+
+    create_resgroup_shared(DB, current_user,
+                           resgroup_access.group, newresgroup,
+                           resgroup_id=resgroup_id,
+                           noautoapprove=noautoapprove)
+    # Need to force this since we hare holding a stale DB object
+    DB.expire_all()
     return ConstructResGroup(DB, resgroup_id)
     pass
 
@@ -496,12 +666,16 @@ def update_resgroup_reservation(
         current_user: Annotated[str, Depends(get_current_user)],
         resgroup_id: UUID,
         reservation_id: UUID,
-        reservation: Union[ResGroupNodeType, ResGroupRange],
+        reservation: ResGroupReservation,
         resgroup_access = Depends(get_resgroup_access),
         DB: Session = Depends(get_DB)) -> ResGroup:
     LOG.info("update_resgroup_reservation: args: %r %r %r",
              resgroup_id, reservation_id, reservation)
     
+    if not resgroup_access.AccessCheck(
+            current_user, AccessCheck.TB_RESGROUP_MODIFY):
+        raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+
     return ConstructResGroup(DB, resgroup_id)
     pass
 
@@ -590,7 +764,7 @@ def ConstructResGroup(DB: Session, resgroup_id, elaborate=True):
         raise HTTPException(
             status_code=404, detail="No such resgroup"
         )            
-    print(str(row))
+    #print(str(row))
     resgroup = row.AptReservationGroups
     
     rval = ResGroup(
@@ -619,7 +793,7 @@ def ConstructResGroup(DB: Session, resgroup_id, elaborate=True):
                     deleted_at=TBDatetimeGMT(res.deleted),
                 ))
                 pass
-            rval.nodetypes = ResGroupNodeTypes(items=nodetypes)
+            rval.nodetypes = ResGroupNodeTypes(nodetypes=nodetypes)
             pass
 
         if resgroup.ranges:
@@ -635,7 +809,7 @@ def ConstructResGroup(DB: Session, resgroup_id, elaborate=True):
                     canceled_at=TBDatetimeGMT(res.canceled)
                 ))
                 pass
-            rval.ranges = ResGroupRanges(items=ranges)
+            rval.ranges = ResGroupRanges(ranges=ranges)
             pass
         pass
     print(str(rval))
