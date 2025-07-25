@@ -2053,7 +2053,7 @@ class User
     }
     
     #
-    # JWT token. For the moment, users have only one token in the DB.
+    # JWT token.
     #
     function GetRestToken()
     {
@@ -2061,7 +2061,7 @@ class User
 
         $query_result = DBQueryFatal(
             "select *,UNIX_TIMESTAMP(expires) as expires from user_jwt_tokens ".
-            "where uid_idx='$uid_idx'");
+            "where uid_idx='$uid_idx' and role='user' and scope='global'");
         if (!mysql_num_rows($query_result)) {
             return null;
         }
