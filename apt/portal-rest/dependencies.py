@@ -191,7 +191,6 @@ def PortalValidateOne(field, value, table, column):
 # Positive error code goes to the user, negative error code goes to us.
 #
 def HandleShellError(completed, code = None, message = None):
-    LOG.info("FOO: %r %r %r", completed, code, message)
     if completed.returncode > 0:
         if code == None:
             code = status.HTTP_400_BAD_REQUEST

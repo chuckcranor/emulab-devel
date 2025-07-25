@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -218,7 +218,7 @@ exit(0);
 #
 sub DoGroupReserve()
 {
-    my $optlist    = "s:e:nN:u:p:OCZ:";
+    my $optlist    = "s:e:nN:u:p:OCZ:P";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
     my $forclass   = 0;
@@ -309,6 +309,9 @@ sub DoGroupReserve()
 	    fatal("Invalid characters in reason string");
 	}
     }
+    if (defined($options{"P"})) {
+	$autoapprove = 0;
+    }
     if (defined($options{"C"})) {
 	#
 	# Only leader and managers can set this.
@@ -335,7 +338,7 @@ sub DoGroupReserve()
 
 	# XXX Needs to come from the DB.
 	if ($zoneoverride ne "Outdoor" && $zoneoverride ne "Indoor OTA Lab") {
-	    fatal("Invalid powder zone override");
+	    UserError("Invalid powder zone override");
 	}
 	# Ick
 	my @tmp = ();
@@ -455,7 +458,7 @@ sub DoGroupReserve()
 		fatal("Count is not an integer: $count");
 	    }
 	    if (!defined(APT_Aggregate->Lookup($urn))) {
-		fatal("No such aggregate: $urn");
+		UserError("No such aggregate: $urn");
 	    }
 	    if (!ValidUUID($cluster_uuid)) {
 		fatal("Invalid cluster uuid: $cluster_uuid");
@@ -567,10 +570,10 @@ sub DoGroupReserve()
 		fatal("freq_high: invalid floating point number");
 	    }
 	    elsif ($freq_low == $freq_high) {
-		fatal("freq_high: equal to freq_low");
+		UserError("freq_high: equal to freq_low");
 	    }
 	    elsif ($freq_high < $freq_low) {
-		fatal("freq_high: less then freq_low");
+		UserError("freq_high: less then freq_low");
 	    }
 	    if (!ValidUUID($range_uuid)) {
 		fatal("Invalid range uuid: $range_uuid");
@@ -585,7 +588,7 @@ sub DoGroupReserve()
 	#
 	if (!keys(%zones)) {
 	    if (!defined($zoneoverride)) {
-		fatal("Must provide a Zone (-Z) when there are no radios");
+		UserError("Must provide a powder zone when there are no radios");
 	    }
 	    $zones{$zoneoverride} = 1;
 	    $zones = $zoneoverride;
@@ -608,12 +611,12 @@ sub DoGroupReserve()
 	#
 	if ($resgroup->PartiallyApproved()) {
 	    if ($start < $current_start && !$this_user->IsAdmin()) {
-		fatal("Not allowed to move start time earlier on an ".
-		      "approved reservation");
+		UserError("Not allowed to move start time earlier on an ".
+			  "approved reservation");
 	    }
 	    if ($end > $current_end && !$this_user->IsAdmin()) {
-		fatal("Not allowed to move end time later on an ".
-		      "approved reservation");
+		UserError("Not allowed to move end time later on an ".
+			  "approved reservation");
 	    }
 	}
 	if ($current_start != $start) {
@@ -894,6 +897,10 @@ sub DoGroupReserve()
 			$i++;
 			next;
 		    }
+		}
+		elsif ($argvcopy[$i] eq "-P") {
+		    # Handled below.
+		    next;
 		}
 		push(@tmp, $argvcopy[$i])
 	    }

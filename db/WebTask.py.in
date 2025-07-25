@@ -130,7 +130,7 @@ class WebTask:
             raise RuntimeError("WebTask %s unknown!" % (self.task_id))
 
         self.dbrow = qres[0]
-        print(str(self.dbrow))
+        #print(str(self.dbrow))
         self.data  = {}
         if self.dbrow["task_data"]:
             self.data = json.loads(self.dbrow["task_data"])

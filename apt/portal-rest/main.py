@@ -58,6 +58,7 @@ def portal_exception_handler(request: Request, exc: PortalException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
+    LOG.info("validation_exception_handler %r", exc)
     return JSONResponse(
         status_code=400,
         content=Error(error = str(exc), code = 400).model_dump()

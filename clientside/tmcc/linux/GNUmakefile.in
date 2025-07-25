@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,8 +149,10 @@ frisbee-mfs-install:	destdircheck
 	$(INSTALL) -m 755 $(SRCDIR)/rc.ipod $(SYSETCDIR)/testbed
 	$(INSTALL) -m 755 $(SRCDIR)/slicefix $(SYSETCDIR)/testbed
 	$(INSTALL) -m 755 $(SRCDIR)/freebsd_to_linux_disk $(SYSETCDIR)/testbed
+	$(INSTALL) -m 755 $(SRCDIR)/linux_to_freebsd_disk $(SYSETCDIR)/testbed
 	$(INSTALL) -m 755 $(SRCDIR)/check_disklabel $(SYSETCDIR)/testbed
-	$(INSTALL) -m 755 $(SRCDIR)/linux_slicefix $(SYSETCDIR)/testbed
+	$(INSTALL) -m 755 $(SRCDIR)/findbootdisk.pl $(SYSETCDIR)/testbed
+	$(INSTALL) -m 755 $(SRCDIR)/linux_slicefix.pl $(SYSETCDIR)/testbed
 	$(INSTALL) -m 755 $(SRCDIR)/extract_kernel_info $(SYSETCDIR)/testbed
 	$(INSTALL) -m 755 $(SRCDIR)/mount_bsd_slice $(SYSETCDIR)/testbed
 	$(INSTALL) -m 755 $(SRCDIR)/extract_initrd_info $(SYSETCDIR)/testbed
@@ -358,8 +360,10 @@ script-install:	dir-install $(SCRIPTS)
 	$(INSTALL) -m 755 $(SRCDIR)/rc.frisbee $(BINDIR)/rc/rc.frisbee
 	$(INSTALL) -m 755 $(SRCDIR)/slicefix $(BINDIR)/slicefix
 	$(INSTALL) -m 755 $(SRCDIR)/freebsd_to_linux_disk $(BINDIR)/freebsd_to_linux_disk
+	$(INSTALL) -m 755 $(SRCDIR)/linux_to_freebsd_disk $(BINDIR)/linux_to_freebsd_disk
 	$(INSTALL) -m 755 $(SRCDIR)/check_disklabel $(BINDIR)/check_disklabel
-	$(INSTALL) -m 755 $(SRCDIR)/linux_slicefix $(BINDIR)
+	$(INSTALL) -m 755 $(SRCDIR)/findbootdisk.pl $(BINDIR)
+	$(INSTALL) -m 755 $(SRCDIR)/linux_slicefix.pl $(BINDIR)
 	$(INSTALL) -m 755 $(SRCDIR)/extract_kernel_info $(BINDIR)
 	$(INSTALL) -m 755 $(SRCDIR)/extract_initrd_info $(BINDIR)
 	$(INSTALL) -m 755 $(SRCDIR)/extract_image_info $(BINDIR)
