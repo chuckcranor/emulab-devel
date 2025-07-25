@@ -1065,6 +1065,23 @@ class AptReservationGroups(Base):
         "AptReservationGroupRouteReservations",
         primaryjoin="AptReservationGroups.uuid==foreign(AptReservationGroupRouteReservations.uuid)")
 
+    #
+    # I bet sqlalchemy has a builtin way to do this. :-)
+    #
+    def Reservation(self, uuid):
+        for res in self.reservations:
+            if str(res.remote_uuid) == str(uuid):
+                return res
+            pass
+        return None
+
+    def Range(self, uuid):
+        for res in self.ranges:
+            if str(res.freq_uuid) == str(uuid):
+                return res
+            pass
+        return None
+
     uuid: Mapped[str] = mapped_column(String(40), primary_key=True, server_default=text("''"))
     pid: Mapped[str] = mapped_column(String(48), server_default=text("''"))
     pid_idx: Mapped[int] = mapped_column(MEDIUMINT(8), server_default=text('0'))
