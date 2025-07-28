@@ -17,14 +17,15 @@ TBAUTOMAILEMAIL=testbed-automail@sagepoint.powderwireless.net
 TBACTIVEARCHIVE=testbed-active-users-archive@sagepoint.powderwireless.net
 TBUSERSARCHIVE=testbed-users-archive@sagepoint.powderwireless.net
 TBERRORSEMAIL=testbed-errors@sagepoint.powderwireless.net
-TBCOOKIESUFFIX="POWDERFESAGEPOINT"
+TBCOOKIESUFFIX="POWDERSAGEPOINT"
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
 DELAYCAPACITY=1
 BOSSNODE=boss.sagepoint.powderwireless.net
 USERNODE=ops.sagepoint.powderwireless.net
 FSNODE=boss.sagepoint.powderwireless.net
-MAILERNODE=boss
+# This would typically not change, is usually ops. But can be boss too.
+MAILERNODE="boss"
 OURDOMAIN=sagepoint.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
@@ -33,7 +34,7 @@ FSDIR_SHARE=/share
 FSDIR_SCRATCH=
 WWWHOST=www.sagepoint.powderwireless.net
 TBMAINSITE=0
-THISHOMEBASE=POWDERFESAGEPOINT
+THISHOMEBASE=POWDERSAGEPOINT
 PLABSUPPORT=0
 PELABSUPPORT=0
 WIKISUPPORT=0
@@ -48,20 +49,22 @@ SFSSUPPORT=0
 CVSSUPPORT=0
 NFSTRACESUPPORT=0
 ARCHIVESUPPORT=0
-NTPSERVER=boss
-EXTERNAL_NTPSERVER1=ntp1.emulab.net
-EXTERNAL_NTPSERVER2=ntp1.emulab.net
-EXTERNAL_NTPSERVER3=ntp1.emulab.net
-EXTERNAL_NTPSERVER4=ntp1.emulab.net
+NTPSERVER=ntp1.emulab.net
+#EXTERNAL_NTPSERVER1=ntp1.emulab.net
+#EXTERNAL_NTPSERVER2=ntp1.emulab.net
+#EXTERNAL_NTPSERVER3=ntp1.emulab.net
+#EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
+# For getting initial email setup
+#ELABINELAB_MAILTARGET="stoller@emulab.net"
 # If we can run old images ... depends on whther elvind is installed.
 ELVIN_COMPAT=0
 # The name of the outer boss for inner boss to request services from.
 OUTERBOSS_NODENAME=boss.emulab.net
 OUTERBOSS_SSLCERTNAME=/usr/testbed/etc/outer_emulab.pem
-TBCOOKIESUFFIX="POWDERFESAGEPOINT"
+TBCOOKIESUFFIX="POWDERSAGEPOINT"
 # XXX hack to work around perl bug
 # Start a multicast IGMP querier
 NEEDMCQUERIER=0
@@ -74,7 +77,7 @@ TBUSEDBI=1
 SSLCERT_COUNTRY="US"
 SSLCERT_STATE="Utah"
 SSLCERT_LOCALITY="Utah Powder FE"
-SSLCERT_ORGNAME="Utah Powder FE SAGEPOINT"
+SSLCERT_ORGNAME="Utah Powder FE Sagepoint"
 #
 # Network config stuff. Used to generate initial named and dhcpd config files.
 #
@@ -113,11 +116,12 @@ MIN_UNIX_GID=2000
 
 # use ZFS
 WITHZFS=1
+ZFS_NOEXPORT=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="10G"
+ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
-WITHAMD=1
+WITHAMD=0
 # This will default to /.amd_mnt/ops in configure
 AMD_ROOT=""""
 
@@ -134,10 +138,14 @@ BROWSER_CONSOLE_ENABLE=1
 
 # Do not expire passwords.
 EXPIRE_PASSWORDS=0
+
+# Collect idle statistics by default, and store in RRD files.
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1
 CONFIG_TARGETSYS=1
 TARGETSYS_TARGET="POWDER-FIXED"
 PROTOGENI_SUPPORT=1
-PROTOGENI_DOMAIN="powderfesagepoint"
+PROTOGENI_DOMAIN="powdersagepoint"
 FANCYBANNER=1
 ISOLATEADMINS=0
 PORTAL_ENABLE=1
@@ -147,15 +155,18 @@ CLUSTER_PORTAL="boss.emulab.net"
 CLUSTER_PUBSUBD_SSLPORT=16506
 CLUSTER_PUBSUBD_ALTPORT=16507
 EC2META_ENABLE=1
-# Collect idle statistics by default, and store in RRD files.
-SDCOLLECTD_DOSTATS=1
-SDCOLLECTD_USE_RRDTOOL=1
-POWDER_RFMONITOR=1
-POWDER_RFMONITOR_HOST="10.10.10.2"
-POWDER_NICKNAME="Sagepoint"
-POWDER_WBSTORE=1
+# Added by Emulab - Version: POWDER-FIXED
 PROTOGENI_NOPORTALEXPIRE=1
 PROTOGENI_PORTALONLY=1
-
 DISABLE_RESERVATION_EMAIL=1
+
+POWDER_RFMONITOR=1
+POWDER_RFMONITOR_HOST="10.10.10.2"
 POWDER_DEADMAN=1
+POWDER_WBSTORE=1
+
+ZFS_QUOTA_PROJECT="10G"
+
+POWDER_NICKNAME="Sagepoint"
+
+# End of Emulab added section
