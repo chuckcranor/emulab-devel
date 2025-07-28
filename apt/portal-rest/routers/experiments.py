@@ -62,6 +62,7 @@ from ..api.models import (
     Error,
     Experiment,
     ExperimentList,
+    ExtensionRequest,
     ManifestArray,
     ExperimentModify,
     ExperimentCreate,
@@ -324,17 +325,16 @@ def get_experiment(
             summary="Extend an experiment")
 def update_experiment(
         current_user: Annotated[str, Depends(get_current_user)],
-        experiment_id: Annotated[str, Depends(check_experiment_id)],
-        expires_at: Annotated[datetime, Query()] = None,
-        duration: Annotated[int, Query(ge=1)] = None,
+        experiment_id: Annotated[str, Path(), Depends(check_experiment_id)],
+        extension: Annotated[ExtensionRequest, Body()],
         experiment_access = Depends(get_experiment_access),
         DB: Session = Depends(get_DB)) -> Experiment:
-    LOG.info("update_experiment: args: %r, %r %r", experiment_id, expires_at, duration)
+    LOG.info("update_experiment: args: %r, %r", experiment_id, extension)
 
-    if not expires_at and not duration:
+    if not extension.expires_at and not extension.duration:
         raise RequestValidationError("Must provide expires_at or duration")
 
-    if expires_at and duration:
+    if extension.expires_at and extension.duration:
         raise RequestValidationError("Must provide only one of expires_at or duration")
 
     if not experiment_access.AccessCheck(
@@ -342,16 +342,34 @@ def update_experiment(
         raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     command = EXTENDEXPT + " " + str(experiment_id)
-    command += " -m '" + "Experiment extended via the REST API" + "'"
 
-    # Either way is fine.
-    if expires_at:
-        command += " '" + str(expires_at) + "'"
+    reasonFile = None
+    if extension.reason:
+        # This will raise an Exception
+        PortalValidateOne("reason", extension.reason, "default", "fulltext")
+        
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as fp:
+            fp.write(extension.reason)
+            fp.flush()
+            os.chmod(fp.name, 0o644)
+            reasonFile = fp.name
+            pass
+        command += " -f " + reasonFile
     else:
-        command += " '" + str(duration) + "'"
+        command += " -m '" + "Experiment extended via the REST API" + "'"
+        pass
+        
+    # Either way is fine.
+    if extension.expires_at:
+        command += " '" + str(extension.expires_at) + "'"
+    else:
+        command += " '" + str(extension.duration) + "'"
         pass
 
     completed = SUEXEC(current_user, experiment_access.group, command)
+    if reasonFile:
+        os.unlink(reasonFile)
+        pass
     LOG.info(completed)
     if completed.returncode != 0:
         return HandleShellError(completed)
