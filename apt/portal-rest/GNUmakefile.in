@@ -31,11 +31,12 @@ SYSTEM         := $(shell uname -s)
 include $(OBJDIR)/Makeconf
 
 SUBDIRS		=
-INSTALL_RESTDIR = $(TBROOT)/portal-rest
+INSTALL_RESTDIR = $(TBROOT)/portal-rest/app
 
-FILES		= config.py database.py __init__.py dependencies.py main.py
+FILES		= config.py database.py __init__.py dependencies.py main.py \
+		  pyproject.toml
 MODELFILE       = api/models.py
-ROUTERS         = __init__.py experiments.py resgroups.py profiles.py
+ROUTERS         = experiments.py resgroups.py profiles.py
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -48,6 +49,7 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 install: all install-mkdirs \
 	$(addprefix $(INSTALL_RESTDIR)/, $(FILES)) \
 	$(INSTALL_RESTDIR)/$(MODELFILE) \
+	$(INSTALL_RESTDIR)/routers/__init__.py \
 	$(addprefix $(INSTALL_RESTDIR)/routers/, $(ROUTERS))
 
 install-mkdirs:
