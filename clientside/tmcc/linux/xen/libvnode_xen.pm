@@ -2369,13 +2369,13 @@ sub vnodePreConfig($$$$$){
 	    goto bad
 		if ($?);
 	
-	my $ldisk = "da";
+	my $ldisk = "ada";
 	if ($vninfo->{'ispvdisk'}) {
 	    $ldisk = "xbd";
 	} elsif ($vninfo->{'ispvh'}) {
 	    $ldisk = "xbd";
 	} elsif ($vninfo->{'ishvm'}) {
-	    $ldisk = "ada";
+	    $ldisk = "da";
 	}
 	if (-e "$vnoderoot/etc/dumpdates") {
 	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\);/dev/$ldisk;' ".
