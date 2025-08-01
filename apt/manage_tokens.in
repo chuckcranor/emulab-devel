@@ -513,8 +513,8 @@ sub DoListTokens()
 			print " ($pid/$eid)\n";
 		    }
 		}
-		print $row->{"token"} . "\n\n";
 	    }
+	    print $row->{"token"} . "\n\n";
 	}
     }
     return 0;

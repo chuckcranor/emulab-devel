@@ -37,7 +37,7 @@ import html
 from enum import Enum
 
 from typing import Annotated, Text, Union
-from pydantic import BaseModel, Field, AnyUrl
+from pydantic import BaseModel, Field, AnyUrl, HttpUrl
 from uuid import UUID, uuid4
 from datetime import datetime, time, timedelta
 
@@ -120,8 +120,23 @@ def check_profile_id(profile_id):
     except Exception as ex:
         raise RequestValidationError(
             "Validation error for profile_id, not a valid UUID")
-    
-    return profile_id
+    #
+    # UUID of the profile or of a version?
+    #
+    qres = DBQueryWarn("select uuid from apt_profiles "+
+                       "where uuid=%s", (str(profile_id),))
+    if qres and len(qres) == 1:
+        row = qres[0]
+        return row[0]
+
+    qres = DBQueryWarn("select uuid from apt_profile_versions "+
+                       "where uuid=%s", (str(profile_id),))
+    if qres and len(qres) == 1:
+        row = qres[0]
+        return row[0]
+
+    raise PortalException(
+        status.HTTP_404_NOTFOUND, "No such profile")
 
 #
 # Check that a profile version exists,
@@ -159,16 +174,15 @@ router = APIRouter(
 @router.get("/")
 def get_profiles(
         current_user: Annotated[str, Depends(get_current_user)],
-        profile_name: Annotated[str, Query()] = None,
+        profile_id: UUID = None,
+        creator: str = None,
+        project: str = None,
+        profile_name: str = None,
         elaborate: bool = Depends(get_elaborate_header),
         DB: Session = Depends(get_DB)) -> ProfileList:
     LOG.info("get_profiles: args: %r", profile_name)
     result = []
     clause = "";
-
-    if profile_name:
-        check_profile_name(profile_name)
-        pass
 
     #
     # Easy thing to do here is just find all the matching profiles and then
@@ -176,7 +190,7 @@ def get_profiles(
     #
     # At the moment, just the current user profiles
     #
-    qres = DBQueryFatal("select p.uuid,p.name from apt_profiles as p " +
+    qres = DBQueryFatal("select p.uuid,p.pid,p.name from apt_profiles as p " +
                         "left join apt_profile_versions as v on " +
                         "   v.profileid=p.profileid and " +
                         "   v.version=p.version " +
@@ -184,12 +198,24 @@ def get_profiles(
 
     for row in qres:
         uuid = row[0];
-        name = row[1];
+        pid  = row[1];
+        name = row[2];
         
-        if profile_name:
+        if project:
+            if pid == project:
+                result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+                pass
+            pass
+        elif profile_name:
             if name == profile_name:
                 result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
                 pass
+            pass
+        elif profile_id:
+            if str(uuid) == str(profile_id):
+                result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+                pass
+            pass
         else:
             result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
             pass
@@ -210,6 +236,13 @@ def get_profile(
     if not profile_access.AccessCheck(
             current_user, AccessCheck.TB_PROFILE_READINFO):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
+
+    #
+    # Allow for either the main profile uuid or a version uuid
+    #
+    if str(profile_id) == profile_access.version_uuid:
+        return ConstructProfile(DB, profile_access.uuid,
+                                version_id=profile_id, elaborate=elaborate)
 
     return ConstructProfile(DB, profile_id, elaborate=elaborate)
 
@@ -249,7 +282,7 @@ def create_profile(
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     profile_id = create_profile(current_user, group, createargs)
-    return ConstructProfile(DB, profile_id)
+    return ConstructProfile(DB, profile_id, elaborate=True)
 
 #
 # Initial create. 
@@ -263,6 +296,16 @@ def create_profile(user, group, args):
     if not (args.script or args.repository_url):
         raise RequestValidationError(
             "Must provide a script or a repository_url")
+
+    #
+    # Use pydantic for an extra check
+    #
+    if args.repository_url:
+        try:
+            HttpUrl(args.repository_url)
+        except Exception as ex:
+            raise PortalException(status.HTTP_400_BAD_REQUEST, str(ex))
+        pass
 
     #
     # manage_profile takes a simple xml file.
@@ -437,6 +480,13 @@ def update_profile(
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     #
+    # Allow the caller to give us the version id.
+    #
+    if str(profile_id) == profile_access.version_uuid:
+        profile_id = profile_access.uuid
+        pass
+
+    #
     # Lets make sure its a repo backed profile.
     #
     stmt = select(AptProfiles).where(text("uuid = :id"))
@@ -475,6 +525,27 @@ def delete_profile(
             current_user, AccessCheck.TB_PROFILE_MODIFY):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
+    #
+    # Allow the caller to give us the version id. If there is only
+    # one version, then proceed with the delete. Otherwise, error.
+    #
+    if str(profile_id) == profile_access.version_uuid:
+        profile_id = profile_access.uuid
+
+        qres = DBQueryWarn("select v.uuid from apt_profiles as p "+
+                           "join apt_profile_versions as v on "+
+                           "  v.profileid=p.profileid "+
+                           "where p.uuid=%s and v.deleted is null",
+                           (match[1],))
+        if qres == None or len(qres) == 0:
+            raise PortalException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if len(qres) != 1:
+            raise PortalException(
+                status.HTTP_400_BAD_REQUEST,
+                "Received a profile version ID instead of a profile ID, "+
+                "and there is more then one version of this profile")
+        pass
+
     command = MANAGEPROFILE + " delete -a " + str(profile_id)
     completed = SUEXEC(current_user, profile_access.group, command)
 
@@ -510,7 +581,7 @@ def delete_profile_version(
 #
 # Construct a Profile that matches the openapi description.
 #
-def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=True):
+def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=False):
     stmt = select(AptProfiles).where(text("uuid = :id"))
     row = DB.execute(stmt, {'id': profile_id}).first()
     if not row:
