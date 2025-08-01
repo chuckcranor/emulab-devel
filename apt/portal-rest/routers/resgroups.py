@@ -49,7 +49,8 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database import get_DB
-from ..dependencies import get_current_user, TBDatetimeGMT, SUEXEC
+from ..dependencies import get_current_user, get_elaborate_header
+from ..dependencies import TBDatetimeGMT, SUEXEC
 from ..dependencies import PortalException, PortalValidate, HandleShellError
 from ..api.models import Error
 from ..api.models import (
@@ -64,7 +65,7 @@ from ..api.models import (
     ResGroupRanges,
     ResGroupRoutes,
     ResGroupSearch,
-    ResGroupSearchResult
+    ResGroupSearchResult,
 )
 
 # Testbed DB access lib
@@ -138,6 +139,9 @@ router = APIRouter(
 def get_resgroups(
         current_user: Annotated[str, Depends(get_current_user)],
         resgroup_id: UUID = None,
+        creator: str = None,
+        project: str = None,
+        elaborate: bool = Depends(get_elaborate_header),
         DB: Session = Depends(get_DB)) -> ResGroupList:
     LOG.info("get_resgroups: args: %r", resgroup_id)
     result = []
@@ -149,13 +153,26 @@ def get_resgroups(
     #
     # At the moment, just the current user experiments.
     #
-    qres = DBQueryWarn("select uuid from apt_reservation_groups "+
+    qres = DBQueryWarn("select uuid,pid from apt_reservation_groups "+
                        "where creator_idx=%s", (current_user.uid_idx,))
 
     for row in qres:
-        uuid = row[0];
-        LOG.info("get_resgroups: uuid: %r", uuid)
-        result.append(ConstructResGroup(DB, uuid))
+        uuid = row[0]
+        pid  = row[1]
+
+        if project:
+            if pid == project:
+                result.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
+                pass
+            pass
+        elif resgroup_id:
+            if str(uuid) == str(resgroup_id):
+                result.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
+                pass
+            pass
+        else:
+            result.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
+            pass
         pass
     
     return ResGroupList(resgroups = result)
@@ -165,6 +182,7 @@ def get_resgroups(
 def get_resgroup(
         current_user: Annotated[object, Depends(get_current_user)],
         resgroup_id: UUID,
+        elaborate: bool = Depends(get_elaborate_header),
         resgroup_access = Depends(get_resgroup_access),
         DB: Session = Depends(get_DB)) -> ResGroup:
 
@@ -172,7 +190,7 @@ def get_resgroup(
             current_user, AccessCheck.TB_RESGROUP_READ):
         raise PortalException(status.HTTP_401_UNAUTHORIZED, "Not enough permission")
     
-    return ConstructResGroup(DB, resgroup_id)
+    return ConstructResGroup(DB, resgroup_id, elaborate=elaborate)
 
 
 @router.post("/search",
@@ -304,10 +322,6 @@ def create_resgroup(
         raise PortalException(
             status.HTTP_400_BAD_REQUEST, "Must supply something to reserve")
 
-    # Start and expires are optional to support search.
-    if not resgroup.start_at:
-        raise RequestValidationError("Required field 'start_at' not provided")
-    
     if not resgroup.expires_at and not duration:
         raise RequestValidationError("Must provide 'expires_at' or 'duration'")
 
@@ -359,12 +373,27 @@ def create_resgroup_shared(DB, user, group, resgroup,
 
     if resgroup.nodetypes:
         for res in resgroup.nodetypes.nodetypes:
+            id = None
+            
             # This will raise a validation error
             PortalValidate(res, ResGroupResValidation, strict=False);
 
-            if not resgroup_id or not res.reservation_id:
+            if not resgroup_id:
                 id = str(uuid4())
-            elif res.reservation_id:
+            elif not res.reservation_id:
+                #
+                # The caller might not have provided the UUID, but we can
+                # find it based on the nodetype and aggregate. 
+                #
+                for curres in current.reservations:
+                    if res.urn == curres.aggregate_urn and res.nodetype == curres.type:
+                        id = str(curres.remote_uuid)
+                        break
+                    pass
+                if not id:
+                    id = str(uuid4())
+                    pass
+            else:
                 curres = current.Reservation(res.reservation_id)
                 if not curres:
                     raise PortalException(
@@ -388,9 +417,23 @@ def create_resgroup_shared(DB, user, group, resgroup,
         for res in resgroup.ranges.ranges:
             # No validation is needed, pydantic handles this one.
 
-            if not resgroup_id or not res.reservation_id:
+            if not resgroup_id:
                 id = str(uuid4())
-            elif res.reservation_id:
+            elif not res.reservation_id:
+                #
+                # The caller might not have provided the UUID, but we can
+                # find it based on the nodetype and aggregate. 
+                #
+                for curres in current.ranges:
+                    if (res.min_freq == curres.min_freq and
+                        res.max_freq == curres.max_freq):
+                        id = str(curres.freq_uuid)
+                        break
+                    pass
+                if not id:
+                    id = str(uuid4())
+                    pass
+            else:
                 curres = current.Range(res.reservation_id)
                 if not curres:
                     raise PortalException(
@@ -429,6 +472,8 @@ def create_resgroup_shared(DB, user, group, resgroup,
     # Start can be null, means start now.
     if resgroup.start_at:
         options += " -s " + str(int(resgroup.start_at.timestamp()))
+    else:
+        options += " -s " + str(int(time.time()))
         pass
 
     expires = None
@@ -436,7 +481,7 @@ def create_resgroup_shared(DB, user, group, resgroup,
         if resgroup.start_at:
             expires = (int(resgroup.start_at.timestamp()) + (3600 * duration))
         else:
-            expires = time.time() + (3600 * duration)
+            expires = int(time.time() + (3600 * duration))
             pass
     elif resgroup.expires_at:
         expires = int(resgroup.expires_at.timestamp())

@@ -49,6 +49,7 @@ my $MAXDURATION   = 16; # Hours
 ###################################################################
 package APT_Reservation::Group;
 use emdb;
+use emutil;
 use Project;
 use Brand;
 use libtestbed;
@@ -509,8 +510,8 @@ sub UpdateMeta($$$)
 		    "where uuid='$uuid'");
     }
 
-    $self->{'DBROW'}->{'start'}  = $start;
-    $self->{'DBROW'}->{'end'}    = $end;
+    $self->{'DBROW'}->{'start'}  = TBDateStringLocal($start);
+    $self->{'DBROW'}->{'end'}    = TBDateStringLocal($end);
     return 0;
 }
 

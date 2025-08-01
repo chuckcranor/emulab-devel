@@ -56,12 +56,14 @@ from ..dependencies import (
     PortalException,
     PortalValidate,
     PortalValidateOne,
-    HandleShellError
+    HandleShellError,
+    get_elaborate_header,
 )
 from ..api.models import (
     Error,
     Experiment,
     ExperimentList,
+    ExtensionRequest,
     ManifestArray,
     ExperimentModify,
     ExperimentCreate,
@@ -90,7 +92,7 @@ ExperimentValidation = {
     "paramset_owner"   : "users:uid:optional",
     "duration"         : "default:int:optional",
     "start_at"         : None,
-    "expires_at"       : None,
+    "stop_at"          : None,
     "refspec"          : "default:tinytext:optional",
     "bindings"         : None,
 }
@@ -261,6 +263,19 @@ def get_apt_instance_snapshot_status(experiment_id):
     
     return status
 
+def get_experiment_expiration(experiment_id):
+    qres = DBQueryWarn("select s.expires from apt_instances as i "+
+                       "join geni.geni_slices as s on "+
+                       "  s.uuid=i.slice_uuid "+
+                       "where i.uuid=%s",(experiment_id,))
+
+    if qres == None or len(qres) != 1:
+        raise PortalException(
+            FStatus.HTTP_404_NOT_FOUND, "No such experiment")
+
+    row = qres[0]
+    return row[0]
+
 
 STARTEXPT      = "webstart-experiment "
 MODIFYEXPT     = "webmodify-experiment "
@@ -281,6 +296,7 @@ def get_experiments(
         experiment_id: UUID = None,
         creator: str = None,
         project: str = None,
+        elaborate: bool = Depends(get_elaborate_header),
         DB: Session = Depends(get_DB)) -> ExperimentList:
     LOG.info("get_experiments: current_user: %r", current_user)
     LOG.info("get_experiments: args: %r, %r, %r", experiment_id, creator, project)
@@ -293,13 +309,26 @@ def get_experiments(
     #
     # At the moment, just the current user experiments.
     #
-    qres = DBQueryWarn("select uuid from apt_instances "+
+    qres = DBQueryWarn("select uuid,pid from apt_instances "+
                        "where creator_idx=%s", (current_user.uid_idx,))
 
     for row in qres:
-        uuid = row[0];
-        LOG.info("get_experiments: uuid: %r", uuid)
-        result.append(ConstructExperiment(DB, uuid))
+        uuid = row[0]
+        pid  = row[1]
+
+        if project:
+            if pid == project:
+                result.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
+                pass
+            pass
+        elif experiment_id:
+            if str(uuid) == str(experiment_id):
+                result.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
+                pass
+            pass
+        else:
+            result.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
+            pass
         pass
     
     return ExperimentList(experiments = result)
@@ -308,6 +337,7 @@ def get_experiments(
 def get_experiment(
         current_user: Annotated[object, Depends(get_current_user)],
         experiment_id: Annotated[str, Depends(check_experiment_id)],
+        elaborate: bool = Depends(get_elaborate_header),
         experiment_access = Depends(get_experiment_access),
         DB: Session = Depends(get_DB)) -> Experiment:
 
@@ -315,7 +345,10 @@ def get_experiment(
             current_user, AccessCheck.TB_EXPT_READINFO):
         raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
     
-    return ConstructExperiment(DB, experiment_id)
+    # Delay to cut down on tight loop polling
+    time.sleep(3)
+    
+    return ConstructExperiment(DB, experiment_id, elaborate=elaborate)
 
 #
 # At the moment, the only update is "extend"
@@ -324,34 +357,51 @@ def get_experiment(
             summary="Extend an experiment")
 def update_experiment(
         current_user: Annotated[str, Depends(get_current_user)],
-        experiment_id: Annotated[str, Depends(check_experiment_id)],
-        expires_at: Annotated[datetime, Query()] = None,
-        duration: Annotated[int, Query(ge=1)] = None,
+        experiment_id: Annotated[str, Path(), Depends(check_experiment_id)],
+        extension: Annotated[ExtensionRequest, Body()],
         experiment_access = Depends(get_experiment_access),
         DB: Session = Depends(get_DB)) -> Experiment:
-    LOG.info("update_experiment: args: %r, %r %r", experiment_id, expires_at, duration)
+    LOG.info("update_experiment: args: %r, %r", experiment_id, extension)
 
-    if not expires_at and not duration:
-        raise RequestValidationError("Must provide expires_at or duration")
+    if not (extension.expires_at or extension.extend_by):
+        raise RequestValidationError("Must provide expires_at or extend_by")
 
-    if expires_at and duration:
-        raise RequestValidationError("Must provide only one of expires_at or duration")
+    if extension.expires_at and extension.extend_by:
+        raise RequestValidationError("Must provide only one of expires_at or extend_by")
 
     if not experiment_access.AccessCheck(
             current_user, AccessCheck.TB_EXPT_READINFO):
         raise PortalException(FStatus.HTTP_401_UNAUTHORIZED, "Not enough permission")
 
     command = EXTENDEXPT + " " + str(experiment_id)
-    command += " -m '" + "Experiment extended via the REST API" + "'"
 
-    # Either way is fine.
-    if expires_at:
-        command += " '" + str(expires_at) + "'"
+    reasonFile = None
+    if extension.reason:
+        # This will raise an Exception
+        PortalValidateOne("reason", extension.reason, "default", "fulltext")
+        
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as fp:
+            fp.write(extension.reason)
+            fp.flush()
+            os.chmod(fp.name, 0o644)
+            reasonFile = fp.name
+            pass
+        command += " -f " + reasonFile
     else:
-        command += " '" + str(duration) + "'"
+        command += " -m '" + "Experiment extended via the REST API" + "'"
+        pass
+        
+    # Either way is fine.
+    if extension.expires_at:
+        command += " '" + str(extension.expires_at) + "'"
+    else:
+        command += " " + str(extension.extend_by) + " "
         pass
 
     completed = SUEXEC(current_user, experiment_access.group, command)
+    if reasonFile:
+        os.unlink(reasonFile)
+        pass
     LOG.info(completed)
     if completed.returncode != 0:
         return HandleShellError(completed)
@@ -466,11 +516,11 @@ def create_experiment(
 
     if create.duration != None:
         command += "--duration " + str(create.duration) + " "
-    elif create.expires_at != None:
-        command += "--stop " + str(create.expires_at) + " "
+    elif create.stop_at != None:
+        command += "--stop " + str(create.stop_at.timestamp()) + " "
         pass
     if create.start_at != None:
-        command += "--start " + str(create.start_at) + " "
+        command += "--start " + str(create.start_at.timestamp()) + " "
         pass
 
     bindingsFile = None
@@ -600,6 +650,10 @@ def update_experiment_nodes(
     if completed.returncode != 0:
         return HandleShellError(completed)
 
+    # Delay a moment to let status change.
+    time.sleep(3)
+    # Need to force this since we hare holding a stale DB object
+    DB.expire_all()
     return ConstructExperiment(DB, experiment_id)
 
 
@@ -672,6 +726,9 @@ def get_experiment_snapshot_status(
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "Snapshot ID is invalid")
 
+    # Delay to cut down on tight loop polling
+    time.sleep(5)
+    
     return get_apt_instance_snapshot_status(experiment_id)
 
 @router.post("/{experiment_id}/node/{client_id}/{operation:str}")
@@ -699,6 +756,10 @@ def update_experiment_node(
     if completed.returncode != 0:
         return HandleShellError(completed)
 
+    # Delay a moment to let status change.
+    time.sleep(3)
+    # Need to force this since we hare holding a stale DB object
+    DB.expire_all()
     return ConstructExperimentNode(DB, experiment_id, client_id)
 
 #
@@ -775,6 +836,7 @@ def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
             started_at = TBDatetimeGMT(instance.started),
             start_at = TBDatetimeGMT(instance.start_at),
             stop_at = TBDatetimeGMT(instance.stop_at),
+            expires_at = TBDatetimeGMT(get_experiment_expiration(experiment_id)),
             bindings = bindings,
             #
             # Huh, we do not have an updated timestamp

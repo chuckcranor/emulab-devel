@@ -3319,8 +3319,6 @@ sub DoRebootOrReload($$)
 	    fatal("Only administrators can use the -P option");
 	}
     }
-    &$usage()
-	if (!@ARGV);
 
     #
     # NOTE: This is called from legacy XMLRPC server, so do a permission
@@ -3333,7 +3331,7 @@ sub DoRebootOrReload($$)
 	    fatal("Cannot lookup creator");
 	}
 	if (!$this_user->SameUser($creator->emulab_user())) {
-	    UserError("Not enough permission to reboot nodes");
+	    UserError("Not enough permission to $which nodes");
 	}
     }
 
@@ -3344,8 +3342,6 @@ sub DoRebootOrReload($$)
     }
 
     my %sliver_urns = ();
-    my %slice_urns  = ();
-    my %node_ids    = ();
     my @slivers     = ();
     foreach my $obj ($instance->ActiveAggregateList()) {
 	# Not finished or failure.
@@ -3360,9 +3356,6 @@ sub DoRebootOrReload($$)
 		     GeniXML::FindNodesNS("n:vhost", $manifest,
 					  $GeniXML::EMULAB_NS)->get_nodelist());
 
-	# List of this agg nodes as we find them.
-	my @aggnodes = ();
-	
 	foreach my $node (@nodes) {
 	    my $client_id   = GeniXML::GetVirtualId($node);
 	    my $sliver_urn  = GeniXML::GetSliverId($node);
@@ -3374,32 +3367,24 @@ sub DoRebootOrReload($$)
 		       defined($manager_urn) &&
 		       $manager_urn eq $obj->aggregate_urn()));
 
-	    push(@aggnodes, $node);
-	    
-	    if (grep {$_ eq $client_id} @ARGV) {
-		if (!exists($sliver_urns{$obj->aggregate_urn()})) {
-		    $sliver_urns{$obj->aggregate_urn()} = [];
-		    push(@slivers, $obj);
+	    if (@ARGV) {
+		if (grep {$_ eq $client_id} @ARGV) {
+		    if (!exists($sliver_urns{$obj->aggregate_urn()})) {
+			$sliver_urns{$obj->aggregate_urn()} = [];
+			push(@slivers, $obj);
+		    }
+		    push(@{ $sliver_urns{$obj->aggregate_urn()} }, $sliver_urn);
 		}
-		push(@{ $sliver_urns{$obj->aggregate_urn()} }, $sliver_urn);
-		$node_ids{$sliver_urn} = $client_id;
+	    }
+	    elsif (!exists($sliver_urns{$obj->aggregate_urn()})) {
+		$sliver_urns{$obj->aggregate_urn()} = [];
+		push(@slivers, $obj);
 	    }
 	}
-	next
-	    if (!exists($sliver_urns{$obj->aggregate_urn()}));
-	
-	#
-	# If we are doing all the nodes at an aggregate, we want to apply
-	# the operation to the slice instead of individual slivers.
-	#
-	if (0 && scalar(@aggnodes) ==
-	    scalar(@{ $sliver_urns{$obj->aggregate_urn()}})) {
-	    # This will cause the operation to apply to the entire aggregate.
-	    $sliver_urns{$obj->aggregate_urn()} = [];
-	}
     }
+    
     if (!@slivers) {
-	$errmsg   = "Cannot find any nodes to reboot";
+	$errmsg   = "Cannot find any nodes to $which";
 	$errcode  = GENIRESPONSE_SEARCHFAILED;
 	$exitcode = 1;
 	goto bad;
