@@ -1187,4 +1187,19 @@ class AptSasRadioState(Base):
     locked: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     locker_pid: Mapped[Optional[int]] = mapped_column(INTEGER(11), server_default=text('0'))
 
+class UserJwtTokens(Base):
+    __tablename__ = 'user_jwt_tokens'
+    __table_args__ = (
+        Index('uuid', 'uuid', unique=True),
+    )
 
+    idx: Mapped[int] = mapped_column(INTEGER(10), primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(40), server_default=text("''"))
+    uid: Mapped[str] = mapped_column(String(8), server_default=text("''"))
+    uid_idx: Mapped[int] = mapped_column(MEDIUMINT(8), server_default=text('0'))
+    issued: Mapped[datetime.datetime] = mapped_column(DateTime)
+    expires: Mapped[datetime.datetime] = mapped_column(DateTime)
+    role: Mapped[Optional[str]] = mapped_column(Enum('user', 'admin'), server_default=text("'user'"))
+    scope_type: Mapped[Optional[str]] = mapped_column(Enum('global', 'experiment'), server_default=text("'global'"))
+    scope_value: Mapped[Optional[str]] = mapped_column(TINYTEXT)
+    token: Mapped[Optional[str]] = mapped_column(Text)
