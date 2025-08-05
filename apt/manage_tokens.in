@@ -177,8 +177,9 @@ exit(0);
 sub DoCreateToken()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_tokens create [-a] [-s] [-E eid] <user>\n";
+	print STDERR "Usage: manage_tokens create [-a] [-s] [-r] [-E eid] <user>\n";
 	print STDERR "Options:\n";
+	print STDERR "  -r   - Refresh the current token\n";
 	print STDERR "  -a   - Generate an admin token; not currently used\n";
 	print STDERR "  -s   - Generate a shortlived token, for debugging\n";
 	print STDERR "  -E   - Generate a token scoped to the specified experiment\n";
@@ -188,10 +189,11 @@ sub DoCreateToken()
     my $scope = "global";
     my $scope_value;
     my $shortlived = 0;
+    my $refresh = 0;
     
     my %options = ();
-    if (! getopts("hasE:", \%options)) {
-
+    if (! getopts("hasE:r", \%options)) {
+	&$usage();
     }
     if (defined($options{"h"})) {
 	&$usage();
@@ -209,6 +211,9 @@ sub DoCreateToken()
     }
     if (defined($options{"s"})) {
 	$shortlived = 1;
+    }
+    if (defined($options{"r"})) {
+	$refresh = 1;
     }
     &$usage()
 	if (!@ARGV);
@@ -238,7 +243,7 @@ sub DoCreateToken()
 		      "and scope_value='$scope_value' " : ""));
     if ($query_result->numrows) {
 	my ($uuid,$token,$expires) = $query_result->fetchrow_array();
-	if ($expires > time() + (7 * 24 * 3600)) {
+	if (!$refresh && $expires > time() + (7 * 24 * 3600)) {
 	    if ($debug) {
 		print "Using existing token: $uuid\n";
 	    }

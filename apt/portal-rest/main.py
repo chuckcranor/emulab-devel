@@ -34,6 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routers import experiments
 from .routers import resgroups
 from .routers import profiles
+from .routers import tokens
 from .dependencies import PortalException, get_current_user
 from .api.models import Error
 
@@ -68,6 +69,7 @@ async def validation_exception_handler(request, exc):
 async def root():
     return {"message": "Cloudlab Portal API Server"}
 
+app.include_router(tokens.router)
 app.include_router(experiments.router)
 app.include_router(resgroups.router)
 app.include_router(profiles.router)
