@@ -214,8 +214,16 @@ def HandleShellError(completed, code = None, message = None):
 # Use suexec to run a command as a uid/pid
 #
 def SUEXEC(user, group, command):
-    uid = user.uid
-    gid = group.unix_gid
+    if type(user) == str:
+        uid = user
+    else:
+        uid = user.uid
+        pass
+    if type(group) == str:
+        gid = group
+    else:
+        gid = group.unix_gid
+        pass
     
     suexec_command = "%s %s %s %s" % (config.TBSUEXEC_PATH, uid, gid, command)
     LOG.info("SUEXEC: %s", suexec_command)

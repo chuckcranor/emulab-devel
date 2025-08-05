@@ -315,8 +315,8 @@ class ProfileModify(BaseModel):
 
 
 class Token(BaseModel):
-    id: Optional[UUID] = Field(None, description='The token id.')
-    user_id: Optional[UUID] = Field(None, description='The owning user id.')
+    id: UUID = Field(..., description='The token id.')
+    user: Optional[str] = Field(None, description='The owner of the token')
     token: Optional[str] = Field(None, description='The token value.', examples=[''])
     expires_at: Optional[AwareDatetime] = Field(
         None,
