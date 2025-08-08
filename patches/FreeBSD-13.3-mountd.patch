@@ -1,3 +1,17 @@
+#
+# Utah changes to speed up mountd updates in the presence of 2000+ entries
+# in the exports file. As of FreeBSD 12, the standard version does incremental
+# updates to the kernel export info (as opposed to completely removing the info
+# and then putting it all in again) so we no longer need our changes for that.
+#
+# We add caching of "--maproot=root" credentials, recording a timestamp
+# to a file when exports are complete (for processes that did a HUP and are
+# waiting for completion), and some stats collection and reporting.
+#
+#   cd /usr/src/usr.sbin
+#   sudo patch -p0 < patchfile
+#
+
 diff -Nur mountd.orig/Makefile mountd/Makefile
 --- mountd.orig/Makefile	2024-03-14 21:16:29.100400000 -0600
 +++ mountd/Makefile	2024-03-14 21:54:48.242442000 -0600
