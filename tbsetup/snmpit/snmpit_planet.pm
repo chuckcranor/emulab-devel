@@ -1,7 +1,7 @@
 #!/usr/bin/perl -W
 
 #
-# Copyright (c) 2010-2023 University of Utah and the Flux Group.
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -500,7 +500,8 @@ sub portControl ($$@) {
     $self->debug("portControl: $cmd -> (".Port->toStrings(@pcports).")\n");
 
     if ($cmd !~ /^(enable|disable)$/) {
-	warn "$id: WARNING: ignoring '$cmd' for @pcports\n";
+	print STDERR "$id: WARNING: ".
+	    "ignoring '$cmd' for @pcports\n";
 	return 0;
     }
 
@@ -695,6 +696,24 @@ sub parsePortRange($)
 	}
     }
     return @ports;
+}
+
+sub expandPortType($)
+{
+    my $pstr = shift;
+
+    if ($pstr) {
+	if ($pstr eq "Gi") {
+	    return "GigabitEthernet";
+	}
+	if ($pstr eq "2.5G") {
+	    return "2.5GigabitEthernet";
+	}
+	if ($pstr eq "10G") {
+	    return "10GigabitEthernet";
+	}
+    }
+    return "";
 }
 
 sub expandPortList($)
@@ -1266,6 +1285,12 @@ sub listPorts($) {
 	if (@token < 8) {
 	    next;
 	}
+	# XXX for some reason some models return the abbreviated name
+	if ($token[1] =~ /^\d+\/\d+$/ &&
+	    $token[0] !~ /^\S*GigabitEthernet$/) {
+	    $token[0] = expandPortType($token[0]);
+	}
+
 	if ($token[0] !~ /^\S*GigabitEthernet$/ ||
 	    $token[1] !~ /^\d+\/\d+$/) {
 	    next;
@@ -1284,9 +1309,16 @@ sub listPorts($) {
 	$enabled = $token[2];
 	
 	my $status = $token[7];
-	if ($status =~ /^(\w+)fdx$/) {
+	# XXX more hackery for those "some models"
+	if ($status =~ /^(Optical|DAC)$/ && exists($token[8])) {
+	    $status = $token[8];
+	}
+	if ($status =~ /^(\w+)([hf]dx)$/) {
 	    $up = "up";
-	    if ($1 eq "100") {
+	    $duplex = "half" if ($2 eq "hdx");
+	    if ($1 eq "10") {
+		$speed = 10;
+	    } elsif ($1 eq "100") {
 		$speed = 100;
 	    } elsif ($1 eq "1G") {
 		$speed = 1000;
