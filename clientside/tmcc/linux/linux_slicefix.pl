@@ -440,7 +440,7 @@ sub find_default_grub_entry
 		}
 	}
 	close FILE;
-
+	print STDERR "cmdline: $cmdline";
 	return ($kernel, $cmdline, $initrd);
 }
 
@@ -452,7 +452,7 @@ sub find_default_grub2_entry
 	my $current_entry = -1;
 	my ($kernel, $cmdline, $initrd);
 
-	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";
+	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";	
 	while (<FILE>) {
 		if (/^\s*set\s+default\s*=\s*["']?(\d+)["']?$/) {
 			$default = $1;
@@ -476,7 +476,7 @@ sub find_default_grub2_entry
 		}
 	}
 	close FILE;
-
+	
 	return ($kernel, $cmdline, $initrd);
 }
 
@@ -997,6 +997,145 @@ sub mount_image
 	return $fstype;
 }
 
+sub detect_and_mount_boot_partitions
+{
+	my ($root, $imageroot) = @_;
+
+	my ($base_device) = get_linux_device_components($root);
+	$base_device = "/dev/$base_device";
+
+	# Extended boot partition, this will only work for ubuntu as boot files are only on partition (16)
+	# other distros may have different partition layouts
+	my $boot_partition = "${base_device}16";
+	
+	if (-b $boot_partition) {
+		
+		# Check if it has boot files
+		my $temp_mount = "/tmp/boot_check_$$";
+		mkdir($temp_mount);
+		
+		if (system("mount $boot_partition $temp_mount 2>/dev/null") == 0) {
+			my @kernels = glob("$temp_mount/vmlinuz*");
+			my @initrds = glob("$temp_mount/initrd*");
+			my @grub_configs = glob("$temp_mount/grub/grub.cfg");
+						
+			if (@kernels > 0) {
+				# This partition has boot files, mount it to /boot
+				system("umount $temp_mount");
+				
+				if (!-d "$imageroot/boot") {
+					mkdir("$imageroot/boot");
+				}
+				
+				if (system("mount $boot_partition $imageroot/boot") == 0) {
+					print "Mounted extended boot partition $boot_partition to /boot\n";
+				} else {
+					print "Failed to mount boot partition to $imageroot/boot";
+				}
+			} else {
+				system("umount $temp_mount");
+			}
+		} else {
+			print STDERR "Could not mount $boot_partition for inspection";
+		}
+		
+		rmdir($temp_mount);
+	} else {
+		print "No boot partition found at $boot_partition";
+	}
+	
+	# To support UEFI based systems
+	# Check for EFI partition (15)
+	my $efi_partition = "${base_device}15";
+	print "Checking for EFI partition: $efi_partition";
+	
+	# Remove the 0 && to enable EFI partition mounting
+	if (0 && -b $efi_partition) {
+		
+		if (!-d "$imageroot/boot") {
+			mkdir("$imageroot/boot");
+		}
+		if (!-d "$imageroot/boot/efi") {
+			mkdir("$imageroot/boot/efi");
+		}
+		
+		if (system("mount $efi_partition $imageroot/boot/efi 2>/dev/null") == 0) {
+			print "Mounted EFI partition $efi_partition to /boot/efi\n";
+		} else {
+			print STDERR "Failed to mount EFI partition";
+		}
+	} else {
+		$efi_partition = "";
+		print "No EFI partition found at $efi_partition";
+	}
+	
+	# Update /etc/fstab to include the additional boot partitions
+	update_fstab_for_boot_partitions($root, $imageroot, $boot_partition, $efi_partition);
+}
+
+sub update_fstab_for_boot_partitions
+{
+	my ($root, $imageroot, $boot_partition, $efi_partition) = @_;
+	
+	# Get UUIDs for the additional partitions
+	my $boot_uuid = "";
+	my $efi_uuid = "";
+	
+	if (-b $boot_partition) {
+		$boot_uuid = get_uuid($boot_partition);
+	}
+	
+	if (-b $efi_partition) {
+		$efi_uuid = get_uuid($efi_partition);
+	}
+	
+	# Read current fstab
+	my $fstab_file = "$imageroot/etc/fstab";
+	if (-f $fstab_file) {
+		# Check if boot/EFI entries already exist
+		my $fstab_content = `cat $fstab_file`;
+		my $needs_boot_entry = ($boot_uuid && $fstab_content !~ m{/boot\s});
+		my $needs_efi_entry = ($efi_uuid && $fstab_content !~ m{/boot/efi\s});
+		
+		if ($needs_boot_entry || $needs_efi_entry) {
+			print "Adding missing boot partition entries to /etc/fstab\n";
+			
+			open(my $fh, '>>', $fstab_file) or return;
+			
+			if ($needs_boot_entry) {
+				print $fh "UUID=$boot_uuid /boot ext4 defaults 0 2\n";
+			}
+			
+			if ($needs_efi_entry) {
+				print $fh "UUID=$efi_uuid /boot/efi vfat umask=0077 0 1\n";
+			}
+			
+			close($fh);
+		} else {
+			print "Fstab already has boot partition entries or UUIDs not available";
+		}
+	}
+}
+
+sub unmount_boot_partitions
+{
+	my ($imageroot) = @_;
+		
+	# Unmount EFI partition
+	if (-d "$imageroot/boot/efi") {
+		if (system("umount $imageroot/boot/efi 2>/dev/null") == 0) {
+			print "Unmounted EFI partition";
+		}
+	}
+	
+	# Unmount boot partition
+	if (-d "$imageroot/boot") {
+		if (system("umount $imageroot/boot 2>/dev/null") == 0) {
+			print "Unmounted boot partition";
+		}
+	}
+}
+
 sub update_random_seed
 {
 	my ($imageroot) = @_;
@@ -1108,6 +1247,58 @@ sub fix_console
     }
 }
 
+sub generate_cloudinit_network_config
+{
+	my ($cnetmacaddr) = @_;
+	my $cloudinitcfg = "";
+
+	print STDERR "Using cloud-init to configure the node\n";
+
+	# Fetch the network config from the metadata server running on boss node.
+	my $network_config_url = "http://155.98.32.70:8000/network-config?source=initramfs";
+	my $network_config = `wget -qO- '$network_config_url'`;
+
+	# Noticed that sometimes immediate fetch fails as node is still not allocated, so retry a few times.
+	my $retry = 1;
+	while ($? != 0 && $retry > 0) {
+		print STDERR "Retrying to fetch network config from $network_config_url\n";
+		sleep(1);
+		$network_config = `wget -qO- '$network_config_url?retry=$retry&src=initramfs'`;
+		$retry--;
+	}
+
+	if ($? != 0 || !$network_config) {
+		print STDERR "Failed to fetch network config from $network_config_url\n";
+	}
+
+	# If we don't have rest of network config, we can at least configure the control interface.
+	my $cloudinitcfg = "network:\n".
+		"  version: 2\n".
+		"  ethernets:\n".
+		"    ctlnet:\n".
+		"      match:\n".
+		"        macaddress: $cnetmacaddr\n".
+		"      dhcp4: true\n".
+		"      set-name: ctlnet\n";
+
+	if ($network_config) {
+		print STDERR "Using network config from $network_config_url\n";
+		print STDERR "Orignal netconfig $network_config\n";
+		$network_config =~ s/^/    /mg;
+		$network_config =~ s/^ {4}(vlans:)/  $1/mg;
+		$cloudinitcfg .= $network_config;
+		print STDERR "After processing netconfig $cloudinitcfg\n";
+	}
+
+	$cloudinitcfg = `echo "$cloudinitcfg" | base64 -w 0`;
+
+	chomp($cloudinitcfg);
+	
+	$cloudinitcfg = " cloud-init=enabled ds='nocloud\;s=http://155.98.32.70:8000/' network-config=$cloudinitcfg";
+
+	return $cloudinitcfg;
+}
+
 #
 # Handle default settings file for grub since package installation
 # might cause the grub.cfg file to get recreated.
@@ -1145,9 +1336,21 @@ sub fix_grub_defaults
 
     my $esig = "# The remaining lines were added by Emulab slicefix";
     my $cnetstr = "";
-    if (defined($cnetmacaddr) && $cnetmacaddr ne "") {
-	$cnetstr = " emulabcnet=$cnetmacaddr";
-    }
+    
+	if (defined($cnetmacaddr) && $cnetmacaddr ne "") {
+		$cnetstr = " emulabcnet=$cnetmacaddr";
+	}
+
+	my $cloudinit = $ENV{"SLICEFIX_CLOUDINIT"};
+	print STDERR "SLICEFIX_CLOUDINIT=$cloudinit\n";
+	my $cloudinitcfg = "";
+
+	if ($cloudinit) {
+		$cloudinitcfg = generate_cloudinit_network_config($cnetmacaddr);
+	}
+	else {
+		print STDERR "Not using cloud-init to configure the node\n";
+	}
 
     my @buffer = ();
     while (<FILE>) {
@@ -1161,20 +1364,20 @@ sub fix_grub_defaults
     push @buffer, "$esig\n";
     push @buffer, "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
     if ($sunit < 0 && $console =~ /^hvc/) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console$cnetstr\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console$cnetstr$cloudinitcfg\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } elsif ($sunit < 0) {
 	if ($arch eq "aarch64") {
 	    # XXX hack for Nvidia Grace Hopper nodes
-	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyAMA0$cnetstr\"\n";
+	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyAMA0$cnetstr$cloudinitcfg\"\n";
 	} else {
-	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr\"\n";
+	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr$cloudinitcfg\"\n";
 	}
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } else {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed$cnetstr\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed$cnetstr$cloudinitcfg\"\n";
 	push @buffer, "GRUB_TERMINAL=serial\n";
 	if ($sport) {
 	    push @buffer, "GRUB_SERIAL_COMMAND=\"serial --unit=$sunit --port=$sport --speed=$sspeed\"\n";
@@ -1381,23 +1584,35 @@ sub fix_grub_cnet_hint
 		return;
 	}
 
+	my $cloudinit = $ENV{"SLICEFIX_CLOUDINIT"};
+	my $cloudinitcfg = "";
+
+	print STDERR "SLICEFIX_CLOUDINIT=$cloudinit\n";
+
+	if ($cloudinit) {
+		$cloudinitcfg = generate_cloudinit_network_config($cnetmacaddr);
+	}
+	else {
+		print STDERR "Not using cloud-init to configure the node\n";
+	}
+
 	open FILE, "+<$imageroot/$file" ||
 		die "Couldn't open $imageroot/$file: $!\n";
 
 	my @buffer = ();
 	while (<FILE>) {
 		if (/emulabcnet=[\w:]+/) {
-			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr#g;
+			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr$cloudinitcfg#g;
 			push @buffer, $_;
-			print "Replaced emulabcnet=$cnetmacaddr in cmdline in $file\n";
+			print "Replaced emulabcnet=$cnetmacaddr$cloudinitcfg in cmdline in $file\n";
 			next;
 		}
 		# Most likely we need to add it; guess.
 		elsif (/root=/ && /console=/) {
 			chomp;
-			$_ .= " emulabcnet=$cnetmacaddr\n";
+			$_ .= " emulabcnet=$cnetmacaddr$cloudinitcfg\n";
 			push @buffer, $_;
-			print "Added emulabcnet=$cnetmacaddr to cmdline in $file\n";
+			print "Added emulabcnet=$cnetmacaddr$cloudinitcfg to cmdline in $file\n";
 			next;
 		}
 		#
@@ -1648,6 +1863,7 @@ sub main
 	my $lilo_commandline = 0;
 
 	my $old_uuid = get_uuid($root);
+
 	#
 	# Currently this break our UEFI images where the UUID is embedded
 	# in /EFI/boot/ubuntu/grub.cfg. Until we start fixing up there,
@@ -1659,6 +1875,10 @@ sub main
 	my $fstype = mount_image($root, $imageroot);
 	# XXX there seems to be an issue if we run blkid (in get_uuid)
 	# too soon after the mount.
+	
+	# Detect and mount additional boot partitions (Ubuntu Cloud Image multi-partition layout)
+	detect_and_mount_boot_partitions($root, $imageroot);
+
 	sleep(2);
 	my $uuid = get_uuid($root);
 	my $label = get_label($root);
@@ -1828,6 +2048,8 @@ sub main
 		       "-D $root -s Linux postload");
 	}
 
+	# Unmount all mounted partitions
+	unmount_boot_partitions($imageroot);
 	`umount $imageroot`;
 
 	if ($lilo_commandline) {
