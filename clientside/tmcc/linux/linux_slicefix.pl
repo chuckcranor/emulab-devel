@@ -440,7 +440,7 @@ sub find_default_grub_entry
 		}
 	}
 	close FILE;
-	print STDERR "cmdline: $cmdline";
+	
 	return ($kernel, $cmdline, $initrd);
 }
 
@@ -1259,7 +1259,7 @@ sub generate_cloudinit_network_config
 	my $network_config = `wget -qO- '$network_config_url'`;
 
 	# Noticed that sometimes immediate fetch fails as node is still not allocated, so retry a few times.
-	my $retry = 1;
+	my $retry = 5;
 	while ($? != 0 && $retry > 0) {
 		print STDERR "Retrying to fetch network config from $network_config_url\n";
 		sleep(1);
