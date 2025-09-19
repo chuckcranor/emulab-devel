@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -668,7 +668,8 @@ TBDebugTimeStamp("Finished node stuff");
 
 # Read class/type maps
 $result =
-    MyQueryFatal("select distinct nt.class,nt.type,nt.isvirtnode,nt.architecture from node_types as nt join nodes as n on n.type=nt.type");
+    MyQueryFatal("select distinct nt.class,nt.type,nt.isvirtnode,nt.architecture from node_types as nt join nodes as n on n.type=nt.type union select nt.class,nt.type,nt.isvirtnode,nt.ar\
+chitecture from node_types as nt where nt.type='pcvm'");
 
 while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
     $map = {};
