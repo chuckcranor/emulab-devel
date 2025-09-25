@@ -1,0 +1,315 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# Convert from a "cloud" image to an Emulab imagezip image suitable for
+# import into the testbed.
+#
+# XXX currently we only handle QCOW2 format images.
+# It could actually handle any image format that `qemu_img` does.
+#
+use strict;
+use English;
+use Getopt::Std;
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+#
+# Take a raw image and make a proper emulab image based off of it
+#
+sub usage()
+{
+    print(STDOUT
+	  "Usage: convertimage [-dIn] [-i imagefile] [-U url] [-f fmt] [-m maxsize] <pid>[/<gid>] <imagename>\n".
+	  "-d          - turn on debugging\n".
+	  "-I          - do not delete intermediate images\n".
+	  "-n          - run in impotent mode\n".
+	  "-i image    - image file to convert\n".
+	  "-U url      - image URL to download and convert\n".
+	  "-f fmt      - format of input image (only do 'qcow2' right now)\n".
+	  "-m maxsize  - maximum size of uncompressed image in GB\n".
+	  "<pid>       - project for new image\n".
+	  "<pid>/<gid> - project and subgroup of new image\n".
+	  "<imagename> - image name\n".
+	  "Converted image will be in ".
+	  "/proj/<pid>/<imagename>/<imagename>.ndz or ".
+	  "/groups/<pid>/<gid>/<imagename>/<imagename>.ndz.\n");
+    exit(-1);
+}
+my $optlist  = "dIni:U:f:m:";
+my $debug = 0;
+my $keepfiles = 0;
+my $impotent = 0;
+my $infile = "";
+my $inurl = "";
+my $format = "qcow2";
+my $pid = "";
+my $gid = "";
+my $imagename = "";
+my $maxsize = 50;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $PROJROOT    = "@PROJROOT_DIR@";
+my $GROUPROOT   = "@GROUPSROOT_DIR@";
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Non configure vars.
+#
+my $qemutool = "/usr/local/bin/qemu-img";
+my $mdconfig = "/sbin/mdconfig";
+my $zipper   = "/usr/testbed/bin/imagezip";
+my $error    = 0;
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"I"})) {
+    $keepfiles = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"i"})) {
+    $infile = $options{"i"};
+}
+if (defined($options{"U"})) {
+    $inurl = $options{"U"};
+}
+if (defined($options{"f"})) {
+    $format = $options{"f"};
+}
+if (defined($options{"m"})) {
+    if ($options{"m"} =~ /^(\d+)$/) {
+	$maxsize = $1;
+	if ($maxsize >= 100) {
+	    print STDERR "maxsize is too large (>=100G)\n";
+	    usage();
+	}
+    } else {
+	print STDERR "Invalid maxsize\n";
+	usage();
+    }
+}
+if (@ARGV != 2) {
+    usage();
+}
+
+if (($infile && $inurl) || (!$infile && !$inurl)) {
+    print STDERR "Must specify exactly one of -i and -U\n";
+    usage();
+}
+if ($inurl) {
+    print STDERR "Do not handle URLs yet\n";
+    usage();
+}
+if ($format ne "qcow2") {
+    print STDERR "Only handle 'qcow2' images right now\n";
+    usage();
+}
+if ($ARGV[0] =~ /^([0-9a-zA-Z][-\w]*)(?:\/([0-9a-zA-Z][-\w]+))?$/) {
+    $pid = $1;
+    $gid = $2 if ($2);
+} else {
+    print STDERR "Invalid pid or pid/gid argument '$ARGV[0]'\n";
+    usage();
+}
+if ($ARGV[1] =~ /^([a-zA-Z0-9][-\w\.+]+)$/) {
+    $imagename = $1;
+} else {
+    print STDERR "Invalid image name argument '$ARGV[1]'\n";
+    usage();
+}
+
+# make sure qcow tools are installed
+if (! -x "$qemutool") {
+    print STDERR "FATAL: qcow-tools not installed\n";
+    exit(1);
+}
+
+# cleanup vars
+my ($tmpdir, $destdir, $tmpfile, $rawfile, $mdunit);
+my $rv = 1;
+
+if ($gid) {
+    $tmpdir = "$GROUPROOT/$pid/$gid/imports/$imagename";
+    $destdir = "$GROUPROOT/$pid/$gid/images/$imagename";
+} else {
+    $tmpdir = "$PROJROOT/$pid/imports/$imagename";
+    $destdir = "$PROJROOT/$pid/images/$imagename";
+}
+
+# XXX take a lock on image conversion?
+
+# see if image has already been imported (?)
+if (-d "$destdir") {
+    print STDERR "Image $destdir already exists\n";
+    exit(1);
+}
+
+# create directories
+print STDERR "debug: mkdir -p $tmpdir\n" if ($debug);
+if (!$impotent && system("mkdir -p $tmpdir")) {
+    print STDERR "Could not create image import directory\n";
+    exit(1);
+}
+print STDERR "debug: mkdir -p $destdir\n" if ($debug);
+if (!$impotent && system("mkdir -p $destdir")) {
+    print STDERR "Could not create image directory\n";
+    unlink($tmpdir);
+    exit(1);
+}
+
+# import image via URL to expected place
+$tmpfile = "$tmpdir/$imagename.tmp";
+print STDERR "debug: rm -f $tmpdir/$imagename.tmp\n" if ($debug);
+if (!$impotent && system("rm -f $tmpfile")) {
+    print STDERR "Input image tmp file already exists\n";
+    exit(1);
+}
+if ($inurl) {
+    # XXX wget to $tmpfile
+    ;
+}
+# copy file to expected place
+else {
+    # XXX if running as root need to make sure user has access to source file
+
+    print STDERR "debug: cp $infile $tmpfile\n" if ($debug);
+    if (!$impotent && system("cp $infile $tmpfile")) {
+	print STDERR "Could not copy $infile to tmp directory\n";
+	goto cleanup;
+    }
+}
+
+# run tools on image to make sure it is a support format and get its size
+#    file format: qcow2
+#    virtual size: 3.5 GiB (3758096384 bytes)
+#    ...
+print STDERR "debug: $qemutool info $tmpfile\n" if ($debug);
+if (!$impotent) {
+    my @output = `$qemutool info $tmpfile`;
+    if ($?) {
+	print STDERR "Could not get info on input file!\n";
+	goto cleanup;
+    }
+    chomp @output;
+    my $dsize = -1;
+    my $itype = "UNKNOWN";
+    foreach my $line (@output) {
+	if ($line =~ /file format: (\S+)/) {
+	    $itype = $1;
+	} elsif ($line =~ /virtual size: .*\((\d+) bytes\)/) {
+	    $dsize = $1;
+	}
+    }
+    if ($itype ne $format) {
+	print STDERR "Input image not in correct format ($itype != $format)\n";
+	goto cleanup;
+    }
+    # make sure size is under some limit
+    # make sure there is space in the project's /proj tree
+    if ($dsize < 0 || $dsize >= ($maxsize * 1000 * 1000 * 1000)) {
+	print STDERR "Input image is too large ($dsize bytes)\n";
+	goto cleanup;
+    }
+}
+
+# Convert the image into raw format
+$rawfile = "$tmpdir/$imagename.raw";
+print STDERR "debug: rm -f $rawfile\n" if ($debug);
+if (!$impotent && system("rm -f $rawfile")) {
+    print STDERR "Input image raw file already exists\n";
+    goto cleanup;
+}
+print STDERR "debug: $qemutool convert -O raw -m 1 $tmpfile $rawfile\n" if ($debug);
+if (!$impotent && system("$qemutool convert -O raw -m 1 $tmpfile $rawfile")) {
+    print STDERR "Could not convert $tmpfile!\n";
+    goto cleanup;
+}
+
+# Map the raw format file as a memory disk so we can run imagezip
+print STDERR "debug: $mdconfig -a -n -t vnode -f $rawfile\n" if ($debug);
+if (!$impotent) {
+    my @output = `$mdconfig -a -n -t vnode -f $rawfile`;
+    if ($?) {
+	print STDERR "Could not map input image\n";
+	goto cleanup;
+    }
+    chomp @output;
+    if ($output[0] =~ /^(\d+)$/) {
+	$mdunit = $1;
+    } else {
+	print STDERR "Unexpected output from mdconfig: '$output[0]' !?\n";
+	goto cleanup;
+    }
+} elsif ($impotent) {
+    $mdunit = 0;
+}
+
+# run "imagezip -r" on the zvol device to create image
+print STDERR "debug: $zipper -r /dev/md$mdunit $destdir/$imagename.ndz\n" if ($debug);
+if (!$impotent) {
+    if (system("$zipper -r /dev/md$mdunit $destdir/$imagename.ndz")) {
+	print STDERR "Could not imagezip image\n";
+	unlink("$destdir/$imagename.ndz");
+	goto cleanup;
+    }
+}
+
+# drop the lock
+
+$rv = 0;
+
+cleanup:
+
+if (!$impotent) {
+    if (defined($mdunit)) {
+	system("mdconfig -d -u $mdunit");
+    }
+    if (!$keepfiles) {
+	unlink($rawfile) if ($rawfile);
+	unlink($tmpfile) if ($tmpfile);
+    }
+}
+if ($keepfiles) {
+    print STDERR "Original image file ($tmpfile) and raw image file ($rawfile) kept\n";
+}
+exit($rv);

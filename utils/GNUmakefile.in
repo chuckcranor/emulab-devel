@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,7 +78,7 @@ LIBEXEC_SCRIPTS	= spewleds webcopy spewsource webcvsweb xlogin webviewvc \
 
 CTRLSBIN_SCRIPTS= opsdb_control.proxy daemon_wrapper ec2import.proxy \
 		 ec2import-image.pl GrubConf.rb export-template-remote.rb \
-		 setzfsquotas pruneexpdirs 
+		 setzfsquotas pruneexpdirs convertclimage
 
 SBSBIN_SCRIPTS=   daemon_wrapper subboss_cacheclean
 
