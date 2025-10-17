@@ -6,8 +6,8 @@
 #
 
 diff -Nur mount.orig/mount.c mount/mount.c
---- mount.orig/mount.c	2024-03-14 21:15:45.193217000 -0600
-+++ mount/mount.c	2024-03-14 22:11:32.933198000 -0600
+--- mount.orig/mount.c	2025-03-13 09:21:10.000000000 -0400
++++ mount/mount.c	2025-08-07 18:55:54.768463000 -0400
 @@ -241,10 +241,10 @@
  	struct fstab *fs;
  	struct statfs *mntbuf;

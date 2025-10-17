@@ -1,3 +1,10 @@
+#
+# Incorporate a Utah change to pw_user to not make so many group file writes.
+#
+# cd /usr/src/usr.sbin
+# sudo patch -p0 < patchfile
+#
+
 diff -Nur pw.orig/Makefile pw/Makefile
 --- pw.orig/Makefile	2024-03-12 16:38:57.000000000 -0600
 +++ pw/Makefile	2024-03-14 21:18:07.327518000 -0600

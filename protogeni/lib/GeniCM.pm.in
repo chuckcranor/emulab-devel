@@ -2267,11 +2267,11 @@ sub GetTicketAuxAux($)
 			# ignore silly user.
 			next;
 		    }
-		    if ($isshared && 0 && $attrvalue > 1024) {
+		    if ($isshared && 0 && $attrvalue > (128 * 1024)) {
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad XEN setting; ".
-						 "limited to 1024 MB");
+						 "limited to 128 GB");
 			goto bad;
 		    }
 		    $attrkey = "XEN_MEMSIZE";
@@ -2282,11 +2282,11 @@ sub GetTicketAuxAux($)
 			# ignore silly user.
 			next;
 		    }
-		    if ($isshared && $attrvalue > 12) {
+		    if ($isshared && $attrvalue > 16) {
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad XEN setting; ".
-						 "limited to 1-12 cores");
+						 "limited to 1-16 cores");
 			goto bad;
 		    }
 		}

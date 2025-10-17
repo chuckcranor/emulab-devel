@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2024 University of Utah and the Flux Group.
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -225,6 +225,10 @@ class MyServer(ForkingTCPServer, SimpleXMLRPCDispatcher):
         
         ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         ctx.options &= ~ssl.OP_NO_SSLv3
+        try:
+            ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        except:
+            pass
         ctx.load_cert_chain(server_cert)
         ctx.load_verify_locations(cafile=ca_cert)
         ctx.verify_mode = ssl.CERT_REQUIRED
