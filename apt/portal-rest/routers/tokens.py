@@ -43,6 +43,7 @@ from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Response, status
 from fastapi import Query, Path, Body
+from fastapi import status as FStatus
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -99,7 +100,7 @@ def get_token(
 #
 # Refresh token.
 #
-@router.put("/this/refresh")
+@router.put("/this/refresh", status_code=FStatus.HTTP_201_CREATED)
 def refresh_token(
         current_user: Annotated[object, Depends(get_current_user)],
         x_api_token: Annotated[str, Header()],
@@ -124,7 +125,7 @@ def refresh_token(
 
     webtask.Refresh()
     token = webtask["result"]
-    
+
     try:
         claims = DecodeToken(token)
     except Exception as exc:

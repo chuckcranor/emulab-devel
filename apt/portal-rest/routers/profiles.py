@@ -325,13 +325,13 @@ def create_profile(user, group, args):
                      html.escape(args.script, quote=True)  + "</value>");
             fp.write("</attribute>\n");
         elif args.repository_url:
-            fp.write("<attribute name='profile_repourl'>");
+            fp.write("<attribute name='repourl'>");
             fp.write("  <value>" +
-                     html.escape(args.repository_url, quote=True)  + "</value>");
+                     html.escape(str(args.repository_url), quote=True)  + "</value>");
             fp.write("</attribute>\n");
             pass
         if args.public:
-            fp.write("<attribute name='profile_public'><value>")
+            fp.write("<attribute name='profileublic'><value>")
             fp.write("1")
             fp.write("</value></attribute>\n")
             pass
@@ -536,9 +536,10 @@ def delete_profile(
                            "join apt_profile_versions as v on "+
                            "  v.profileid=p.profileid "+
                            "where p.uuid=%s and v.deleted is null",
-                           (match[1],))
+                           (str(profile_id),))
         if qres == None or len(qres) == 0:
-            raise PortalException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+            raise PortalException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                  "No such profile ID")
         if len(qres) != 1:
             raise PortalException(
                 status.HTTP_400_BAD_REQUEST,
