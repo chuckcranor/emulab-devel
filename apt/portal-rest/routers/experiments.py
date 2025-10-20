@@ -517,10 +517,10 @@ def create_experiment(
     if create.duration != None:
         command += "--duration " + str(create.duration) + " "
     elif create.stop_at != None:
-        command += "--stop " + str(create.stop_at.timestamp()) + " "
+        command += "--stop " + str(int(create.stop_at.timestamp())) + " "
         pass
     if create.start_at != None:
-        command += "--start " + str(create.start_at.timestamp()) + " "
+        command += "--start " + str(int(create.start_at.timestamp())) + " "
         pass
 
     bindingsFile = None
