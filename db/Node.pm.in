@@ -2059,7 +2059,7 @@ sub requires_reservation($;$) {
 	$$stuff = $val if (defined($stuff));
 	return $val;
     }
-    return $val;
+    return NodeTypeInfo($self)->requires_reservation($stuff);
 }
 
 sub stated_noreboot($;$) {
@@ -2148,6 +2148,21 @@ sub snmpitbeforeossetup($;$) {
 	return $val;
     }
     return NodeTypeInfo($self)->snmpitbeforeossetup($stuff);
+}
+
+sub jailipbase_style($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "jailipbase_style", \$val);
+    return $val;
+}
+sub jailipbase_value($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "jailipbase_value", \$val);
+    return $val;
 }
 
 #
@@ -2763,6 +2778,8 @@ sub CreateVnodes($$$)
     my $nodeprefix;
     my $nodenum;
     my $ipbase;
+    my $ipbase_style = $node->jailipbase_style();
+    my $ipbase_value = $node->jailipbase_value();
 
     if ($isfednode) {
 	$nodeprefix = $nodetype->type();
@@ -2775,12 +2792,12 @@ sub CreateVnodes($$$)
 	$nodenum    = "$2$3";
 	$ipbase     = $nodenum;
     }
-    elsif ($pnode =~ /^(.*\D)(\d{1,3})$/) {
+    elsif (!$ipbase_style && $pnode =~ /^(.*\D)(\d{1,3})$/) {
 	$nodeprefix = $1;
 	$nodenum    = $2;
 	$ipbase     = $nodenum;
     }
-    else {
+    elsif (!$ipbase_style || $ipbase_style eq "control_ip") {
 	$nodeprefix = $pnode;
 	$nodenum    = "";
 	$ipbase     = 0;
