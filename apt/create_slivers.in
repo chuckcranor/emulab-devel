@@ -785,7 +785,6 @@ else {
 	my ($subject, $message);
 
 	my $headers =
-	    "CC: " . $brand->OpsEmailAddress() . "\n" .
 	    "BCC: " . $brand->LogsEmailAddress();
 
 	#
@@ -874,7 +873,7 @@ else {
 	$message .= "\n\n" . $instance->webURL() . "\n\n";
 	
 	$instance->Brand()->SendEmail($email, $subject, $message,
-				      $brand->LogsEmailAddress(), $headers);
+				      $brand->OpsEmailAddress(), $headers);
     }
 }
 
