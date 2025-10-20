@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -167,7 +167,7 @@ if (isset($iface)) {
         SPITUSERERROR("Illegal characters in iface");
         exit();
     }
-    $iface = "'rf0'";
+    $iface = "'" . $iface . "'";
 }
 else {
     $iface = null;
