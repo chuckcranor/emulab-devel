@@ -184,11 +184,11 @@ sub initRDZstate($$)
 	    my $parent_instance = APT_Instance->Lookup($parent);
 	    if (!$parent_instance) {
 		$$perrmsg = "RDZ instance does not exist";
-		return -1;
+		return 1;
 	    }
 	    if ($parent_instance->rdz_flags() !~ /rdzinrdz/) {
 		$$perrmsg = "RDZ instance is not an RDZ in RDZ";
-		return -1;
+		return 1;
 	    }
 	    if ($parent_instance->status() ne "provisioned" &&
 		$parent_instance->status() ne "ready") {
@@ -1394,6 +1394,7 @@ sub DeleteClaimFromReservation($$)
 sub CreateClaimsFromInstance($$;$$)
 {
     my ($instance, $perrmsg, $debug, $impotent) = @_;
+    my @radio_ports = ();
 
     return 0
 	if (!$DOCLAIMS);
@@ -1411,8 +1412,39 @@ sub CreateClaimsFromInstance($$;$$)
 	print "CreateClaimsFromInstance: Skipping claim since the ".
 	    "experiment is not using outdoor radios\n";
 	return 0;
-    }	    
+    }
+    
+    my $resources = $instance->_resources();
+    if (!defined($resources)) {
+	my $perrmsg;
+	if (APT_Profile::GetResources($instance->RSPEC(),
+				      $perrmsg, \$resources)) {
+	    $$perrmsg = "Could not get resources for experiment";
+	    print "CreateClaimsFromInstance: $$perrmsg\n";
+	    return -1;
+	}
+    }
 
+    # XXX Does not support rdzinrdz
+    foreach my $client_id (keys(%{$resources->{'radios'}})) {
+	my $radio = $resources->{'radios'}->{$client_id};
+	next
+	    if ($radio->node_id() =~ /^oai-w/);
+
+	my $frontend = $radio->FrontendInterface("rf0");
+	if ($frontend) {
+	    my $radio_port_id = $frontend->rdz_radioport_id();
+	    if ($radio_port_id) {
+		push(@radio_ports, {"radio_port_id" => $radio_port_id});
+	    }
+	    else {
+		$$perrmsg = "$radio is not registered with the RDZ";
+		print "CreateClaimsFromInstance: $$perrmsg\n";
+		return -1;
+	    }
+	}
+    }
+    
     if (!defined($ZMC)) {
 	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
 	if (!defined($ZMC)) {
@@ -1452,6 +1484,7 @@ sub CreateClaimsFromInstance($$;$$)
 			},
 		    },
 		],
+		"radio_ports" => \@radio_ports,
 	    },
 	};
 	if ($debug) {
@@ -1709,7 +1742,6 @@ sub DeleteTemporaryUser($)
 #
 # ZMS Constants. There are many more.
 #
-our $EVENTTYPE_REPLACED 	= 1;
 our $EVENTTYPE_CREATED		= 2;
 our $EVENTTYPE_UPDATED  	= 3;
 our $EVENTTYPE_DELETED		= 4;
@@ -1719,6 +1751,7 @@ our $EVENTTYPE_DENIED		= 9;     #
 our $EVENTTYPE_STARTED		= 18;    # active
 our $EVENTTYPE_STOPPED		= 19;    # paused
 our $EVENTTYPE_PENDING		= 23;    # pending
+our $EVENTTYPE_REPLACED 	= 25;
 our $EVENTSOURCE_ZMC		= 2;
 our $EVENTSOURCE_DST		= 3;
 our $EVENTCODE_GRANT		= 2006;
@@ -1808,11 +1841,12 @@ sub WatchExperiment($$;$)
 	logit("heartBeat $pideid: $grant_id, $status") if ($debug);
 
 	my $reply;
-	if ($status eq "active" || $status eq "pending") {
+	if ($status eq "active") {
 	    $reply = $status;
 	}
-	elsif ($status eq "revoked" || $status eq "replacing") {
-	    $reply = "pending";
+	elsif ($status eq "revoked" || $status eq "pending" ||
+	       $status eq "replacing") {
+	    $reply = "paused";
 	}
 	elsif ($status eq "deleted" || $status eq "denied") {
 	    $grant->{'status_ack_by'} = undef;
