@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013-2024 University of Utah and the Flux Group.
+# Copyright (c) 2013-2025 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -173,7 +173,7 @@ sub createExpectObject($)
 	return undef;
     }
     $exp->expect($CONN_TIMEOUT,
-         [qr/$self->{USERNAME}\@$self->{NAME}(\.[-\w\.]+)?\'s password:/ =>
+         [qr/$self->{USERNAME}\@$self->{NAME}(\.[-\w\.]+)?\'s password:/i =>
 	  sub { my $e = shift;
 		$e->send($self->{PASSWORD}."\n");
 		exp_continue;}],
