@@ -809,10 +809,22 @@ if( defined( $pid ) ) {
 		    # Node is currently reserved to another project. Mark it
 		    # to be pruned out below.
 		    #
+		    print STDERR "Pruning $node_id cause reserved to another project\n";
 		    $pruned_nodes{$node_id} = $node;
 		    last;
 		}
 	    }
+	}
+	#
+	# OK, if the node is reservable and not reserved and not yet pruned,
+	# look to see if it is marked as requiring a reservation to use.
+	# If it requires a reservation, prune it.
+	#
+	if (!exists($reserved_nodes{$node_id}) &&
+	    !exists($pruned_nodes{$node_id}) && $node->requires_reservation()) {
+	    print STDERR
+		"Pruning $node_id cause requires_reservation and not reserved\n";
+	    $pruned_nodes{$node_id} = $node;
 	}
     }
     TBDebugTimeStamp("Finished reservations 4");
