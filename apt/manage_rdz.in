@@ -1648,8 +1648,10 @@ sub DoObservations()
 
     my $request = {
 	"monitor_id"  => $monitor_id,
-	"types"       => "inline,sweep",
-	"format"      => "psd-csv-inline",
+	"Kind"        => "psd",
+	"labels"      => "inline,sweep",
+	"format"      => "csv",
+        "types"       => "powder.rfmonitor.v2.psd",	
 	"description" => $aggregate->nickname() . " " . $node_id,
 	"min_freq"    => $min_freq * 1000000,
 	"max_freq"    => $max_freq * 1000000,
