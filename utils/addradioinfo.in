@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2024 University of Utah and the Flux Group.
+# Copyright (c) 2003-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -114,6 +114,7 @@ sub usage(;$$)
 	" --sync=           - Synchronization method: 'White Rabbit',GPSDO,PTP",
 	" --ue-imsi=        - UE IMSI",
 	" --powder-zone=    - Radio zone: 'Indoor OTA Lab'",
+	" --fetype=         - Frontend type: TDD,FDD,none",
 	);
     print STDERR "Usage: addradioinfo [-dn] [options] ".
 	"[--location=location [--itype=itype] <aggregate> <node_id>\n";
@@ -150,12 +151,13 @@ sub usage(;$$)
 my @optlist   = ('d', 'n', 'u', 'r', 'F', 'h', "delete",
 		 "location=s", "itype=s", 
 		 "tx=s", "rx=s", "radio-type=s", "sync=s", "powder-zone=s",
-		 "ue-imsi=s", "hidden=i", "notes=s", "monitored=i", "rfscans=i"
+		 "ue-imsi=s", "hidden=i", "notes=s", "monitored=i", "rfscans=i",
+		 "fetype=s"
                 );
 my @isets     = ();
 my @fsets     = ();
 my ($location,$itype);
-my ($radiotype,$sync,$powderzone,$ueimsi,$notes,$hidden);
+my ($radiotype,$sync,$powderzone,$ueimsi,$notes,$hidden,$fetype);
 
 #
 # Parse command arguments. 
@@ -342,6 +344,16 @@ if (defined($options{"radio-type"})) {
     }
     push(@isets, "radio_type='$radiotype'");
 }
+if (defined($options{'fetype'})) {
+    $fetype = $options{'fetype'};
+    if ($fetype !~ /^(TDD|FDD|none)$/) {
+	fatal("Unsupported frontend type");
+    }
+    if ($update) {
+	fatal("The frontend type cannot be updated");
+    }
+}
+
 if ($update) {
     my $isets = join(",", @isets);
     my $fsets = join(",", @fsets);
@@ -375,7 +387,7 @@ else {
     push(@isets, "aggregate_urn='$aggregate_urn'", "node_id='$node_id'",
 	 "location='$location'", "itype='$itype'");
     push(@fsets, "aggregate_urn='$aggregate_urn'", "node_id='$node_id'",
-	 "iface='rf0'", "frontend='none'");
+	 "iface='rf0'", "frontend='$fetype'");
 
     my $isets = join(",", @isets);
     my $fsets = join(",", @fsets);
