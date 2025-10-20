@@ -2061,7 +2061,7 @@ class User
 
         $query_result = DBQueryFatal(
             "select *,UNIX_TIMESTAMP(expires) as expires from user_jwt_tokens ".
-            "where uid_idx='$uid_idx' and role='user' and scope='global'");
+            "where uid_idx='$uid_idx' and role='user' and scope_type='global'");
         if (!mysql_num_rows($query_result)) {
             return null;
         }
