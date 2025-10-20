@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -614,9 +614,6 @@ class Profile
 	if (!$project) {
 	    return 0;
 	}
-        if ($project->isAPT()) {
-            return 0;
-        }
         if ($this->creator_idx() == $user->uid_idx() || ISADMIN() ||
             $user->uid_idx() == $project->GetLeader()->uid_idx()) {
 	    return 1;

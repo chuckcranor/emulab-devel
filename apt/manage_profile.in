@@ -1955,8 +1955,6 @@ sub CanDelete($$)
     my $project = Project->Lookup($profile->pid_idx());
     return 0
 	if (!defined($project));
-    return 0
-        if ($project->isAPT());
     return 1
 	if ($user->IsAdmin());
     return 1
