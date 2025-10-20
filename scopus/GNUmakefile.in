@@ -29,14 +29,16 @@ ISMAINSITE	= @TBMAINSITE@
 
 include $(OBJDIR)/Makeconf
 
-SBIN_SCRIPTS	= findpapers
+SBIN_SCRIPTS	= findpapers reload
+LIB_STUFF	= scopus.pm
 
 all:	scopus.pm retrieve search matchusers getpapers fixaffil \
-        checkaffil reload $(SBIN_SCRIPTS)
+        checkaffil reload $(SBIN_SCRIPTS) $(LIB_STUFF)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install:	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS))
+install:	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
+		$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF))
 
 clean:		
 boss-install:	install
