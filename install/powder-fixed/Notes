@@ -5,6 +5,8 @@ inner ops!
 	boss> sudo scp -rp ~stoller/powder/systems/XXX
 	         	pcvmXXX-1:/usr/testbed/etc/targetsys
 
+	boss> ~/testbed/testbed/install/powder-fixed/syncmirror.sh pcvmXXX-1
+
 Now we convert the VMs for boot in the target environment:
 
 First ssh (as root) into inner ops:
@@ -22,14 +24,13 @@ Now ssh (as root) into the inner boss VM from outer boss: Oh, use the
 	boss> script
 	boss> sudo perl emulab-install -b -i boss/targetsys boss
 	boss> cd /users/elabman/emulab-devel/obj/install
-	boss> sudo perl emulab-install -b -i boss/powder-endpoint boss
+	Boss> sudo perl emulab-install -b -i boss/powder-endpoint boss
 	boss> exit
 
 Grab (inner) boss:/usr/testbed/etc/elabman.pswd and save it.
 
-Need to remove a bunch of client files;
-
-	boss> rm -rf `cat rmfiles.txt`
+Fix for ntpdate:
+        echo '155.98.33.74    ntp1.emulab.net ntp1' | sudo cat >> /etc/hosts
 
 Now we have to shutdown the VMs. Log out of the boss/ops vms, and log
 into the physical host and then:
@@ -39,6 +40,7 @@ into the physical host and then:
 Approve the certificate on the MotherShip.
 
 	msboss> sudo cacontrol -c ...
+	msboss> sudo /usr/local/etc/rc.d/2.portalpsd.sh stop
 	msboss> sudo /usr/local/etc/rc.d/2.portalpsd.sh start
 
 Add the named entries to bas and ddc named server.
@@ -47,44 +49,128 @@ Add the named entries to bas and ddc named server.
 	
 After David does his magic and boss boots, need to do:
 
+Add sudoers path:
+
+	boss> wap addinterface -t P2PLTE -e expt ed1 rf0
 	boss> wap update_sitevars 
 	boss> wap addservers
         boss> sudo getcacerts -f
-	boss> sudo /bin/rm -rf `cat rmfiles.txt`
+	boss> sudo /bin/rm -rf `cat /users/elabman/emulab-devel/emulab-devel/install/powder-fixed/rmfiles.txt`
+	boss> sudo mv /etc/emulab /etc/emulab.old
+	boss> sudo mv /usr/local/etc/emulab /usr/local/etc/emulab.old
 	boss> sudo testbed-control boot
+
+	Copy the defs file to Mothership boss, powder-defs directory.
+	Symlink emulab-devel/defs file to the powder-defs version.
+	Push up new defs files and bump mobile revision.
+
+Fix up email aliases file on both boss and ops:
+
+# Send everything to the Mothership.
+testbed-ops:            powder-aggregate-ops@emulab.net
+testbed-logs:           powder-aggregate-logs@emulab.net
+testbed-www:            powder-aggregate-www@emulab.net
+testbed-approval:       powder-aggregate-approval@emulab.net
+testbed-audit:          powder-aggregate-audit@emulab.net
+testbed-stated:         powder-aggregate-stated@emulab.net
+testbed-testsuite:      powder-aggregate-testsuite@emulab.net
+testbed-errors:         powder-aggregate-errors@emulab.net
+testbed-automail:       powder-aggregate-automail@emulab.net
 
 And back on Mothership boss:
 
 Add the apt_aggregates entry to the DB, and then:
 
-        mysql> REPLACEINTO `apt_aggregates` VALUES
-	        ('urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
-		 'Bus 4964','Bus4964','Bus4964',1,0,0,1,0,1,1,1,1,1,0,
+        REPLACE INTO `apt_aggregates` VALUES
+	        ('urn:publicid:IDN+bus-6361.powderwireless.net+authority+cm',
+		 'Bus 6361','Bus6361','Bus6361',1,0,0,1,0,1,1,1,1,1,0,
 		 'me-allowed',NULL,NULL,NULL,1,now(),
-		 'https://www.bus-4964.powderwireless.net',0,1,1,'powder',NULL);
-	mysql> REPLACE INTO `apt_aggregate_status` VALUES
-	         ('urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
+		 'https://www.bus-6361.powderwireless.net',0,1,1,'powder',NULL);
+	REPLACE INTO `apt_aggregate_status` VALUES
+	         ('urn:publicid:IDN+bus-6361.powderwireless.net+authority+cm',
 		  'up',now(),NULL,2,2,0,0,'');
 
-	musql> REPLACE into apt_mobile_aggregates set
-	       urn='urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
+	REPLACE into apt_mobile_aggregates set
+	       urn='urn:publicid:IDN+bus-6361.powderwireless.net+authority+cm',
 	        type='bus';
 
-	mysql> REPLACE into apt_mobile_buses set
-	       urn='urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
-	       busid='4964';
+	REPLACE into apt_mobile_buses set
+	       urn='urn:publicid:IDN+bus-6361.powderwireless.net+authority+cm',
+	       busid='6361';
 
 	msboss> manage_aggregate ping -a XXX -s
     	msboss> manage_aggregate chflag -a XXX disabled no
 
-Back on the node, lets to the letsencrypt thing.
+Back on the node, lets do the letsencrypt thing.
 
 	boss> cd ~/emulab-devel/obj/install
 	boss> sudo perl emulab-install -b -i letsencrypt boss
 
-Copy the defs file to Mothership boss, powder-defs directory.
-Symlink emulab-devel/defs file to the powder-defs version.
+On FEs after in the enclosure. 
+        Install Jie's monitor and check device_config.json
 
+        Run monitor noise calibration.
+
+	Install and start temp monitor
+
+	wap setsitevar powder/deadman_enable 1
+
+	Restore symlink in /etc/xen/auto
+
+	Get the defs file, check for arduino update, power version to 2.
+
+	Power on the SWITCH!
+	
+	boss> wap addinterface -t P2PLTE -e expt ed1 rf0
+	OR
+	boss> wap addinterface -t P2PLTE -e expt nuc2 rf0
+
+	update interfaces set mac='' where node_id='ed1' and iface='ipmi20';
+	update interfaces set mac='' where node_id='ed1' and iface='eth2';
+	update interfaces set mac='' where node_id='ed1' and iface='eth0';
+	update interfaces set mac='' where node_id='ed1' and iface='eth1';
+
+	update interfaces set mac='' where node_id='n300-1' and iface='eth2';
+	update interfaces set mac='' where node_id='n300-1' and iface='eth0';
+	update interfaces set mac='' where node_id='n300-1' and iface='eth1';
+
+	boss> cd ~/emulab-devel/obj/install/powder-bus
+	boss> sudo gmake install-poweron
+
+
+	boss> sudo pkg install -y -r Emulab cracklib
+
+Check serial number and iface of control nuc:
+      sudo dmidecode -t system | grep Serial
+
+
+Add profile to select image urn.
 
 sort -r -n -t, -k 4 /tmp/mon.out | head -30
- 
+
+ B. Verify that N300 is properly connected with 10Gb interfaces.
+    Swap in an experiment with the supermicro node and n300. Leigh has
+    a profile for this. Or you can just swap in an experiment on the
+    supermicro with the UHD tools.
+    Login to the boss node and power on the n300 if it is off:
+      wap power on n300-1
+    Now login to ed1 and configure the 10Gb interfaces:
+      sudo ifconfig eno7 inet 192.168.10.1 netmask 255.255.255.0 mtu 9000
+      sudo ifconfig eno8 inet 192.168.20.1 netmask 255.255.255.0 mtu 9000
+    Use ethtool to ensure there is a link on both. See if they ping.
+    If neither pings, they might be backward. Try changing the IPs
+    and try again. If they now ping, have Jon swap one end of the cables.
+
+    Then enable one interface at a time and run uhd_usrp_probe or
+    uhd_find_devices to make sure they can talk.
+
+
+
+
+update interfaces set mac='3cecef43d353' where node_id='ed1' and iface'ipmi20';
+update interfaces set mac='002590bc34a4' where node_id='ed1' and iface='eth2';
+update interfaces set mac='002590bc36a8' where node_id='ed1' and iface='eth0';
+update interfaces set mac='002590bc36a9' where node_id='ed1' and iface='eth1';
+update interfaces set mac='00802f26907b' where node_id='n300-1' and iface='eth2';
+update interfaces set mac='00802f26907c' where node_id='n300-1' and iface='eth0';
+update interfaces set mac='00802f26907d' where node_id='n300-1' and iface='eth1';
