@@ -2875,5 +2875,59 @@ sub PortalManifest($)
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
 }
 
+#
+# Update spectrum. This is a modify bypass.
+#
+sub UpdateSpectrum($)
+{
+    my ($argref)  = @_;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (!exists($argref->{'slice_urn'})) {
+	return GeniResponse->BadArgsResponse("Missing slice urn");
+    }
+    my $slice_urn = $argref->{'slice_urn'};
+    my $slice = GeniSlice->Lookup($slice_urn);    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($slice));
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	print STDERR "No experiment for slice\n";
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED);
+    }
+    my @nodes = $experiment->NodeList();
+    if (!@nodes) {
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
+    }
+
+    if (!exists($argref->{'spectrum'})) {
+	return GeniResponse->BadArgsResponse("Missing spectrum");
+    }
+    my $spectrum = $argref->{'spectrum'};
+    print STDERR Dumper($spectrum);
+
+    foreach my $ref (@{ $spectrum }) {
+	if (!(exists($ref->{"frequency_low"}) &&
+	      exists($ref->{"frequency_high"}) && exists($ref->{"power"}))) {
+	    return GeniResponse->BadArgsResponse("Invalid spectrum definition");
+	}
+    }
+    foreach my $node (@nodes) {
+	# Purge existing limits
+	if ($node->AddSpectrum($spectrum, undef, 1)) {
+	    print STDERR "Failed to update spectrum on $node\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+			"Could not update spectrun on $node");
+	}
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

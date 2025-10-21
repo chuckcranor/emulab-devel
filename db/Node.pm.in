@@ -4994,9 +4994,10 @@ sub NeedsAdminMFS($)
 #
 # Spectrum stuff.
 #
-sub AddSpectrum($$$)
+sub AddSpectrum($$;$$)
 {
-    my ($self, $spectrum, $iface) = @_;
+    my ($self, $spectrum, $iface, $purge) = @_;
+    $purge = 0 if (!defined($purge));
     my $node_id = $self->node_id();
     my @ifaces = ();
     require EmulabConstants;
@@ -5008,6 +5009,11 @@ sub AddSpectrum($$$)
 	if (Interface->LookupAll($self, \@ifaces)) {
 	    return -1;
 	}
+    }
+    if ($purge) {
+	DBQueryWarn("delete from interfaces_rf_limit ".
+		    "where node_id='$node_id'")
+	    or return -1;
     }
     foreach $iface (@ifaces) {
 	my $iface_id = $iface->iface();

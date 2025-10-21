@@ -8569,6 +8569,96 @@ sub DoMetaData($)
 }
 
 #
+# Update spectrum for an experiment. 
+#
+AddCommand(
+    "updatespectrum", \&DoUpdateSpectrum,
+    "Update spectrum declaration at the clusters",
+    "-C || min,max,power \n".
+    "Options:\n".
+    "  -C           - Clear the spectrum declaration at the clusters\n".
+    "  min,max,pow  - Set global spectrum declaration at the clusters\n"
+);
+sub DoUpdateSpectrum($)
+{
+    my ($usage)  = @_;
+    my $slice    = $instance->GetGeniSlice();
+    my @spectrum = ();
+    my $errmsg   = "";
+    my $optlist  = "C";
+    my $clear    = 0;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    if (defined($options{"C"})) {
+	$clear = 1;
+    }
+    &$usage()
+	if (! ($clear || @ARGV == 1));
+
+    if (!$clear) {
+	foreach my $arg (@ARGV) {
+	    my ($min,$max,$power) = split(",", $arg);
+	    if (! (defined($min) && defined($max) && defined($power))) {
+		$errmsg = "Invalid spectrum argument: $arg";
+		goto bad;
+	    }
+	    push(@spectrum, {
+		"frequency_low"  => $min,
+		"frequency_high" => $max,
+		"power"          => $power,
+		 }
+		);
+	}
+    }
+    my @aggregates = $instance->ActiveAggregateList();
+    return 0
+	if (!@aggregates);
+
+    #
+    # Push new spectrum out
+    #
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	return $sliver->UpdateSpectrum(\@spectrum);
+    };
+    my $responses;
+
+    my $oldtimeo   = Genixmlrpc->SetTimeout(30);
+    my $errcode = CallMethodOnAggregates($coderef, 0, \$responses, @aggregates);
+    Genixmlrpc->SetTimeout($oldtimeo);
+    if ($errcode) {
+	$errmsg = $responses;
+	goto bad;
+    }
+
+    # Lets see which ones we were able to update.
+    foreach my $aggregate (@aggregates) {
+	my $response = shift(@{$responses});
+	my $code     = $response->code();
+	my $aptagg   = $aggregate->GetAptAggregate();
+
+	if ($code) {
+	    $errmsg = "Update Spectrum failed at " . $aptagg->name();
+	    goto bad;
+	}
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited(-1);
+    }
+    exit(-1);
+}
+
+#
 # Usage that uses the command descriptions
 #
 sub usage()

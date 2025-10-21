@@ -2770,6 +2770,106 @@ sub GetNewSpectrum($;$)
     exit(1);
 }
 
+#
+# Watch for grants created by smart transmitters.
+#
+sub WatchSmartTransmitters($)
+{
+    my ($debug) = @_;
+
+    my $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+    if (!defined($ZMC)) {
+	print STDERR "Could not contact the RDZ\n";
+	return -1;
+    }
+    my $processGrant = sub {
+	my ($ref) = @_;
+	
+	my $code   = $ref->{'header'}->{'code'};
+	my $type   = $ref->{'header'}->{'type'};
+	my $source = $ref->{'header'}->{'source_type'};
+
+	if ($code != $EVENTCODE_GRANT || $source != $EVENTSOURCE_ZMC) {
+	    logit("WatchSmartTransmitters: Unknown event: ".
+		  "source:$source, code:$code, type:$type") if ($debug);
+	    return 0;
+	}
+	my $grant   = $ref->{'object'};
+	my $ext_id   = $grant->{'ext_id'};
+	my $status   = $grant->{'status'};
+	my $grant_id = $grant->{'id'};
+
+	#
+	# Map to experiment.
+	#
+	my (undef,$pid,$eid) = split(":", $ext_id);
+	my $instance = APT_Instance->Lookup("$pid,$eid");
+	if (!defined($instance)) {
+	    logit("WatchSmartTransmitters: Unknown experiment $pid,$eid")
+		  if ($debug);
+	    return 0;
+	}
+	logit("WatchSmartTransmitters $pid,$eid: grant event $type ($status) ".
+	      "for grant $grant_id");
+
+	if ($type == $EVENTTYPE_APPROVED) {
+	    #
+	    # An approved grant updates the experiment spectrum
+	    #
+	    my $details = $grant->{"constraints"}[0]->{"constraint"};
+	    my $min   = $details->{"min_freq"} / 1000000.0;
+	    my $max   = $details->{"max_freq"} / 1000000.0;
+	    my $power = $details->{"max_eirp"};
+	    
+	    my $command = "$SUDO -u $PROTOUSER $WAP ".
+		"$MANAGEINSTANCE updatespectrum $pid,$eid $min,$max,$power ";
+	    logit("WatchSmartTransmitters: $command");
+	    # Verbose flag to duplicate output to stdout as it happens
+	    my $output = emutil::ExecQuiet($command, 1);
+	    if ($?) {
+		
+	    }
+	}
+	elsif ($type == $EVENTTYPE_DELETED) {
+	    #
+	    # If the grant has a replacement, then we ignore it since the
+	    # approval of the replacement already took care of it. 
+	    #
+	    if (!defined($grant->{'replacement'})) {
+		my $command = "$SUDO -u $PROTOUSER $WAP ".
+		    "$MANAGEINSTANCE updatespectrum $pid,$eid -C ";
+		logit("WatchSmartTransmitters: $command");
+		my $output = emutil::ExecQuiet($command, 1);
+		if ($?) {
+		
+		}
+	    }
+	}
+	return 0;
+    };
+    
+    my $callback = sub {
+	my ($type, $ref) = @_;
+
+	logit("WatchSmartTransmitters callback: $type") if ($debug);
+
+	return
+	    if ($type eq "heartbeat");
+
+	if (!defined($ref->{"object"}->{"ext_id"}) ||
+	    $ref->{"object"}->{"ext_id"} !~ /^smarttx:/) {
+	    logit("WatchSmartTransmitters: ignoring non-smarttx grant")
+		if ($debug);
+	    return;
+	}
+	&$processGrant($ref);
+	# Never quit
+	return 0;
+    };
+
+    WatchGrants($callback, $ZMC, $debug);
+}
+
 sub logit($)
 {
     my ($msg) = @_;

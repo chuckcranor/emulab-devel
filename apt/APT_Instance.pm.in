@@ -6790,6 +6790,25 @@ sub PushPortalManifest($$)
     return APT_Geni::PortalRPC($authority, undef, "PortalManifest", $args);
 }
 
+#
+# Push new spectrum allocation. This bypasses modify and so doing a subsequent
+# modify will wipe out whatever we do here. 
+#
+sub UpdateSpectrum($$)
+{
+    my ($self, $spectrum) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return ContextError()
+	if (! (defined($authority)));
+
+    my $args = {
+	"slice_urn" => $slice->urn(),
+	"spectrum"  => $spectrum,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "UpdateSpectrum", $args);
+}
+
 ###################################################################
 #
 # Record what instances are currently using rf ranges routes. Faster then
