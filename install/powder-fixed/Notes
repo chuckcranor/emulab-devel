@@ -1,9 +1,11 @@
 When rebuilding an existing endpoint, I get a few things first:
 
+Note that if the boss VM is not running, start it.
+
 Log into the control node and copy the rfmonitor config
 to Mothership boss and put it in ~stoller/powder/systems/XXX
 
-	control> scp /etc/rfmonitor/device.config boss.emulab.net:
+	control> scp /etc/rfmonitor/device_config,json boss.emulab.net:
 
 On the boss, grab interfaces info and copy to Mothership boss and put
 it in ~stoller/powder/systems/XXX
@@ -20,7 +22,11 @@ Grab a copy of the DB and copy to Mothership boss and put it in
 
 Now use the interfaces info to update the files in ~stoller/powder/systems/XXX
 If the node.txt is space delimited, needs to be fixed up. Look at one of the
-buses. 
+other buses.
+
+Before starting the elabinelab:
+
+	msboss> sudo cacontrol -R -r boss.<aggregate>.powderwireless.net
 
 ------
 
