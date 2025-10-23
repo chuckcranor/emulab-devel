@@ -28,6 +28,19 @@ Before starting the elabinelab:
 
 	msboss> sudo cacontrol -R -r boss.<aggregate>.powderwireless.net
 
+And update the ns file for experiment elab-febuild (or elab-mebuild2).
+You need to change:
+
+	CONFIG_NICKNAME
+	TARGETSYS_DOMAIN
+	TARGETSYS_NETWORK
+	TARGETSYS_ROUTER
+	TARGETSYS_BOSSIP
+	TARGETSYS_HOMEBASE
+	SSLCERT_ORGNAME
+	XEN_STARTUPSCRIPT (rc.powder argument first arg should be router IP)
+
+
 ------
 
 Fire up the elabinelab.
