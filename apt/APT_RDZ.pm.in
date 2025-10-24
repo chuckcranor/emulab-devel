@@ -329,6 +329,10 @@ sub setupRDZinRDZ($$$)
     return 0
 	if (!defined($element));
 
+    # Do not overwrite, come back to this later.
+    return 0
+	if (GeniXML::GetText("user-id", $element));
+
     my $rdzinfo = $instance->RDZINFO();
     my $rdzinrdzinfo = $instance->RDZINRDZINFO();
     
@@ -564,11 +568,11 @@ sub RequestSpectrum($$;$)
 
     print "RequestSpectrum: $instance\n";
 
+    #
+    # No ranges is okay; the experiment might contact the RDZ directly
+    #
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
-    if (!defined($rfranges) || !keys(%{$rfranges})) {
-	print "RequestSpectrum: No rfranges for $instance\n";
-	return 0;
-    }
+
     # Lets see if there is anything to do.
     my %tmp = ();
     foreach my $rfrange (values(%{$rfranges})) {
@@ -596,10 +600,6 @@ sub RequestSpectrum($$;$)
     return -1
 	if ($failed);
     
-    if (!keys(%tmp)) {
-	print "RequestSpectrum: No rfranges left to process for $instance\n";
-	return 0;
-    }
     $rfranges = \%tmp;
 
     # Update the web UI
@@ -700,13 +700,18 @@ sub RequestSpectrum($$;$)
 			$rdz_instance->ExecuteServicesFinished());
 	    }
 	}
-	$instance->SetStatus("rdzwait");
-	if (MapOuterToInnerRadios($instance, \%radios, $perrmsg)){
-	    return -1;
-	}
-	@radio_ports = ();
-	foreach my $id (values(%radios)) {
-	    push(@radio_ports, {"radio_port_id" => $id});
+	#
+	# If no rfranges then we do not need to do this.
+	#
+	if (keys(%{$rfranges})) {
+	    $instance->SetStatus("rdzwait");
+	    if (MapOuterToInnerRadios($instance, \%radios, $perrmsg)){
+		return -1;
+	    }
+	    @radio_ports = ();
+	    foreach my $id (values(%radios)) {
+		push(@radio_ports, {"radio_port_id" => $id});
+	    }
 	}
     }
     my $ZMC = GetZMC($instance);
@@ -2773,16 +2778,36 @@ sub GetNewSpectrum($;$)
 #
 # Watch for grants created by smart transmitters.
 #
-sub WatchSmartTransmitters($)
+sub WatchSmartTransmitters($$$)
 {
-    my ($debug) = @_;
+    my ($instance, $debug, $impotent) = @_;
+    my $uuid    = $instance->uuid();
+    my $pid     = $instance->pid();
+    my $eid     = $instance->name();
+    my $pideid  = $instance->Printable();
+    my $mytxid  = "smarttx:" . $instance->pid() . ":" . $instance->name();
+    
+    # We keep track of grants for experiment termination.
+    my %grants  = ();
 
-    my $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+    #
+    # For simplicity, we want to use the element token for both
+    # inner and outer RDZ. Not the temporary user token,
+    #
+    my $ZMC;
+    if (exists($instance->RDZINFO()->{'element_token'})) {
+	$ZMC = GetZMC($instance);
+    }
+    else {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+    }
     if (!defined($ZMC)) {
-	print STDERR "Could not contact the RDZ\n";
+	print STDERR "WatchSmartTransmitters($PID): $pideid: ".
+	    "Could not contact the RDZ\n";
 	return -1;
     }
-    my $processGrant = sub {
+
+    my $processEvent = sub {
 	my ($ref) = @_;
 	
 	my $code   = $ref->{'header'}->{'code'};
@@ -2790,26 +2815,16 @@ sub WatchSmartTransmitters($)
 	my $source = $ref->{'header'}->{'source_type'};
 
 	if ($code != $EVENTCODE_GRANT || $source != $EVENTSOURCE_ZMC) {
-	    logit("WatchSmartTransmitters: Unknown event: ".
+	    logit("WatchSmartTransmitters($PID): $pideid: Ignoring unknown event: ".
 		  "source:$source, code:$code, type:$type") if ($debug);
 	    return 0;
 	}
-	my $grant   = $ref->{'object'};
+	my $grant    = $ref->{'object'};
 	my $ext_id   = $grant->{'ext_id'};
 	my $status   = $grant->{'status'};
 	my $grant_id = $grant->{'id'};
 
-	#
-	# Map to experiment.
-	#
-	my (undef,$pid,$eid) = split(":", $ext_id);
-	my $instance = APT_Instance->Lookup("$pid,$eid");
-	if (!defined($instance)) {
-	    logit("WatchSmartTransmitters: Unknown experiment $pid,$eid")
-		  if ($debug);
-	    return 0;
-	}
-	logit("WatchSmartTransmitters $pid,$eid: grant event $type ($status) ".
+	logit("WatchSmartTransmitters($PID) $pideid: grant event $type ($status) ".
 	      "for grant $grant_id");
 
 	if ($type == $EVENTTYPE_APPROVED) {
@@ -2823,12 +2838,15 @@ sub WatchSmartTransmitters($)
 	    
 	    my $command = "$SUDO -u $PROTOUSER $WAP ".
 		"$MANAGEINSTANCE updatespectrum $pid,$eid $min,$max,$power ";
-	    logit("WatchSmartTransmitters: $command");
-	    # Verbose flag to duplicate output to stdout as it happens
-	    my $output = emutil::ExecQuiet($command, 1);
-	    if ($?) {
-		
+	    logit("WatchSmartTransmitters($PID): $command");
+	    if (!$impotent) {
+		# Verbose flag to duplicate output to stdout as it happens
+		my $output = emutil::ExecQuiet($command, 1);
+		if ($?) {
+		}
 	    }
+	    # Remember for termination
+	    $grants{$grant_id} = $grant;
 	}
 	elsif ($type == $EVENTTYPE_DELETED) {
 	    #
@@ -2838,36 +2856,79 @@ sub WatchSmartTransmitters($)
 	    if (!defined($grant->{'replacement'})) {
 		my $command = "$SUDO -u $PROTOUSER $WAP ".
 		    "$MANAGEINSTANCE updatespectrum $pid,$eid -C ";
-		logit("WatchSmartTransmitters: $command");
-		my $output = emutil::ExecQuiet($command, 1);
-		if ($?) {
-		
+		logit("WatchSmartTransmitters($PID): $command");
+		if (!$impotent) {
+		    my $output = emutil::ExecQuiet($command, 1);
+		    if ($?) {
+		    }
 		}
 	    }
+	    delete($grants{$grant_id});	    
 	}
 	return 0;
+    };
+    my $stop = 0;
+    local $SIG{TERM} = sub {
+	logit("WatchSmartTransmitters($PID): $pideid: TERM, exiting");
+	exit(0);
     };
     
     my $callback = sub {
 	my ($type, $ref) = @_;
 
-	logit("WatchSmartTransmitters callback: $type") if ($debug);
+	logit("WatchSmartTransmitters callback: $pideid, $type") if ($debug);
 
-	return
-	    if ($type eq "heartbeat");
-
-	if (!defined($ref->{"object"}->{"ext_id"}) ||
-	    $ref->{"object"}->{"ext_id"} !~ /^smarttx:/) {
-	    logit("WatchSmartTransmitters: ignoring non-smarttx grant")
-		if ($debug);
-	    return;
+	# Use the heartbeat to check if the experiment is running
+	if ($type eq "heartbeat") {
+	    $instance->Purge();
+	    if (!defined(APT_Instance->Lookup($uuid))) {
+		logit("WatchSmartTransmitters($PID) $pideid: experiment is gone");
+		$stop = 1;
+		# Signal to quit the subscription
+		return 1;
+	    }
+	    return 0;
 	}
-	&$processGrant($ref);
+	if (defined($ref->{"object"}->{"ext_id"}) &&
+	    $ref->{"object"}->{"ext_id"} eq $mytxid) {
+
+	    # Check again.
+	    $instance->Purge();
+	    if (!defined(APT_Instance->Lookup($uuid))) {
+		logit("WatchSmartTransmitters($PID) $pideid: experiment is gone");
+		$stop = 1;
+		# Signal to quit the subscription
+		return 1;
+	    }
+	    &$processEvent($ref);
+	}
 	# Never quit
 	return 0;
     };
+    while (! $stop) {
+	WatchGrants($callback, $ZMC, $debug);
+	sleep(2);
+    }
+    #
+    # Stopped because the experiment terminated, make sure smart grants are gone
+    #
+    my $response;
+    if ($ZMC->GET("/grants?ext_id=$mytxid", \$response)) {
+	logit("WatchSmartTransmitters($PID): $pideid: Could not grant list");
+    }
+    foreach my $g (@{$response->{"grants"}}) {
+	my $id = $g->{"id"};
 
-    WatchGrants($callback, $ZMC, $debug);
+	next
+	    if (defined($g->{'deleted_at'}));
+
+	logit("WatchSmartTransmitters($PID): $pideid: Deleting grant $id");
+	my $error;
+	if ($ZMC->DELETE("/grants/$id", \$error)) {
+	    logit("WatchSmartTransmitters($PID): $pideid: ".
+		  "Could not delete grant: $id ($mytxid)");
+	}
+    }
 }
 
 sub logit($)

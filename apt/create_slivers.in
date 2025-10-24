@@ -539,8 +539,6 @@ foreach my $aggregate (@aggregate_list) {
 # Probably not the right place for this. Certainly not the right way.
 #
 if (defined($instance->rdz_status())) {
-    my $spectrum = $instance->_spectrum();
-    if ($spectrum && @{$spectrum}) {
 	my $error;
 
 	# This will change the instance status if there is something to do.
@@ -572,7 +570,6 @@ if (defined($instance->rdz_status())) {
 	$instance->Update({'rdz_status' => "ready"});
 	# This changed in RequestSpectrum.
 	$rspecstr = $instance->rspec();
-    }
 }
 
 if ($usestitcher) {
