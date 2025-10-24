@@ -5,13 +5,12 @@ Note that if the boss VM is not running, start it.
 Log into the control node and copy the rfmonitor config
 to Mothership boss and put it in ~stoller/powder/systems/XXX
 
-	control> scp /etc/rfmonitor/device_config,json boss.emulab.net:
+	control> scp /etc/rfmonitor/device_config.json boss.emulab.net:
 
 On the boss, grab interfaces info and copy to Mothership boss and put
 it in ~stoller/powder/systems/XXX
 
-	boss> mysql tbdb
-	tbdb> echo 'select node_id,iface,role,ip,mac from interfaces;' | mysql -t tbdb > /tmp/iface.txt
+	boss> echo 'select node_id,iface,role,ip,mac from interfaces;' | mysql -t tbdb > /tmp/iface.txt
 	boss> scp /tmp/iface.txt boss.emulab.net: 
 
 Grab a copy of the DB and copy to Mothership boss and put it in
@@ -26,7 +25,20 @@ other buses.
 
 Before starting the elabinelab:
 
-	msboss> sudo cacontrol -R -r boss.<aggregate>.powderwireless.net
+	msboss> sudo /usr/testbed/sbin/protogeni/cacontrol -R -r boss.<aggregate>.powderwireless.net
+
+And update the ns file for experiment elab-febuild (or elab-mebuild2).
+You need to change:
+
+	CONFIG_NICKNAME
+	TARGETSYS_DOMAIN
+	TARGETSYS_NETWORK
+	TARGETSYS_ROUTER
+	TARGETSYS_BOSSIP
+	TARGETSYS_HOMEBASE
+	SSLCERT_ORGNAME
+	XEN_STARTUPSCRIPT (rc.powder argument first arg should be router IP)
+
 
 ------
 
