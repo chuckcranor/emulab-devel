@@ -307,7 +307,7 @@ def create_resgroup(
         resgroup: ResGroup,
         response: Response,
         duration: Annotated[int, Query(ge=1)] = None,
-        noautoapprove: Annotated[bool, Query()] = False,
+        noautoapprove: Annotated[bool, Query()] = True,
         DB: Session = Depends(get_DB)) -> Union[ResGroup, ResGroupError]:
     LOG.info("create_resgroup: args: %r", resgroup)
     try:
@@ -822,7 +822,8 @@ def ConstructResGroup(DB: Session, resgroup_id, elaborate=True):
         start_at = TBDatetimeGMT(resgroup.start),
         expires_at = TBDatetimeGMT(resgroup.end))
 
-    if elaborate == True:
+    # This was elaborate, but not really useful
+    if True:
         if resgroup.reservations:
             nodetypes = []
         

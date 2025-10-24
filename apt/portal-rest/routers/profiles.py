@@ -111,7 +111,7 @@ def check_profile_id(profile_id):
                            (match[1], match[2]))
         if qres == None or len(qres) != 1:
             raise PortalException(
-                status.HTTP_404_NOTFOUND, "No such profile")
+                status.HTTP_404_NOT_FOUND, "No such profile")
         row = qres[0]
         return row[0]
 
@@ -136,7 +136,7 @@ def check_profile_id(profile_id):
         return row[0]
 
     raise PortalException(
-        status.HTTP_404_NOTFOUND, "No such profile")
+        status.HTTP_404_NOT_FOUND, "No such profile")
 
 #
 # Check that a profile version exists,
@@ -147,10 +147,10 @@ def check_profile_version(profile_id, version_id):
                        "join apt_profile_versions as v on " +
 		       "   v.profileid=i.profileid " +
                        "where i.uuid=%s and v.uuid=%s",
-                       (profile_id, version_id))
+                       (str(profile_id), str(version_id)))
     if qres == None or len(qres) != 1:
         raise PortalException(
-            status.HTTP_404_NOTFOUND, "No such profile version")
+            status.HTTP_404_NOT_FOUND, "No such profile version")
 
     return True
 
@@ -331,7 +331,7 @@ def create_profile(user, group, args):
             fp.write("</attribute>\n");
             pass
         if args.public:
-            fp.write("<attribute name='profileublic'><value>")
+            fp.write("<attribute name='profile_public'><value>")
             fp.write("1")
             fp.write("</value></attribute>\n")
             pass
