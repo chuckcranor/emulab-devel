@@ -377,6 +377,20 @@ sub CreateProfile()
 	    fatal("Could not generate a repo access key");
 	}
 	$new_args{'repokey'} = $repokey;
+
+	#
+	# If there is no script, we came in through the REST interface.
+	# Typically we come in through the Web UI which already grabbed the
+	# script and passed it along.
+	#
+	if (!defined($script)) {
+	    $output = emutil::ExecQuiet("$MANAGEGITREPO getsource -n $reponame");
+	    if ($?) {
+		UserError($output);	
+	    }
+	    $script = $output;
+	    $new_args{'script'} = $script;
+	}
     }
     # Script parameters
     if (defined($script) && $script ne "" && $script =~ /^(import|from)/m) {
