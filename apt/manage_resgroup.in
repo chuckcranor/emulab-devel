@@ -337,7 +337,9 @@ sub DoGroupReserve()
 	$zoneoverride = $options{"Z"};
 
 	# XXX Needs to come from the DB.
-	if ($zoneoverride ne "Outdoor" && $zoneoverride ne "Indoor OTA Lab") {
+	if ($zoneoverride ne "Outdoor" &&
+	    $zoneoverride ne "Indoor OTA Lab" &&
+	    $zoneoverride ne "Flux") {
 	    UserError("Invalid powder zone override");
 	}
 	# Ick
