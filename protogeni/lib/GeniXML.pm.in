@@ -2137,6 +2137,9 @@ sub IsPrivate($)
     return 0;
 }
 
+#
+# Get parameters from the manifest for an RU node.
+#
 sub GetCOTSRUParameters($)
 {
     my ($ref) = @_;
