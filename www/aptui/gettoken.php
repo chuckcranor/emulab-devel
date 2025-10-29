@@ -67,7 +67,7 @@ else {
     # For now, short lived tokens
     $retval = SUEXEC($this_user, "nobody",
                      "webmanage_tokens -t " . $webtask->task_id() .
-                     " create -s $target_uid",
+                     " create $target_uid",
                      SUEXEC_ACTION_CONTINUE);
 
     if ($retval != 0) {
