@@ -2098,5 +2098,32 @@ sub GetBusRoutes($)
     return \@result;
 }
 
+#
+# Add a password or text string (to be encrypted) to an rspec
+#
+sub AddPassword($$$)
+{
+    my ($rspec, $name, $text) = @_;
+    
+    my $pswdref = AddElement("password", $rspec, $EMULAB_NS);
+    SetText("name", $pswdref, $name);
+    $pswdref->appendText($text);
+
+    return $pswdref;
+}
+
+sub IsPrivate($)
+{
+    my ($rspec) = @_;
+    my $private = FindNodesNS("n:private", $rspec, $EMULAB_NS)->pop();
+    
+    if ($private) {
+	my $enabled = GetText("enabled", $private);
+	return 1
+	    if (defined($enabled) && $enabled eq "true");
+    }
+    return 0;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

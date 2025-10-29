@@ -27,12 +27,6 @@ use Getopt::Std;
 use Data::Dumper;
 use File::Temp qw(tempfile tempdir);
 use Date::Parse;
-use File::Basename;
-use MIME::Base64;
-use JSON;
-use Crypt::JWT qw(decode_jwt encode_jwt);
-use Crypt::PK::RSA;
-use Crypt::OpenSSL::X509;
 
 #
 # Manage JWT tokens for users.
@@ -55,21 +49,7 @@ my $debug       = 0;
 my $impotent    = 0;
 my $webtask_id;
 my $webtask;
-my $DEFAULTEXP  = 60; # days
-my $JSON;
-
-#
-# The default JWT payload
-#
-my $JWT_payload = {
-    "sub"   => undef,
-    "jti"   => undef,
-    "name"  => undef,
-    "role"  => undef,
-    "exp"   => undef,
-};
-my $JWT_ALG	= "RS256";
-my $JWT_TYP     = "JWT";
+my $DEFAULTEXP  = 180; # days
 
 #
 # Configure variables
@@ -78,9 +58,6 @@ my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $MAINSITE    = @TBMAINSITE@;
 my $OURDOMAIN	= "@OURDOMAIN@";
-my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
-my $EMULAB_CERT = "$TB/etc/emulab.pem";
-my $EMULAB_KEY  = "$TB/etc/emulab.key";
 
 #
 # Untaint the path
@@ -104,6 +81,7 @@ use libEmulab;
 use User;
 use WebTask;
 use APT_Instance;
+use UserJWT;
 
 # Protos
 sub DoCreateToken();
@@ -138,18 +116,6 @@ if (defined($options{"t"})) {
 }
 if (@ARGV < 1) {
     usage();
-}
-
-#
-# We will need this.
-#
-my $emulab_cert = Crypt::OpenSSL::X509->new_from_file($EMULAB_CERT);
-if (!$emulab_cert) {
-    fatal("Could not load $EMULAB_CERT");
-}
-my $emulab_key  = Crypt::PK::RSA->new($EMULAB_KEY);
-if (!$emulab_key) {
-    fatal("Could not load $EMULAB_KEY");
 }
 
 my $action = shift(@ARGV);
@@ -226,108 +192,50 @@ sub DoCreateToken()
     my $uid_uuid = $target_user->uuid();
     my $uid_uid  = $target_user->uid();
     my $uid_idx  = $target_user->uid_idx();
-    my $exp      = ($shortlived ?
+    my $expires  = ($shortlived ?
 		    time() + (7 * 24 * 3600) :
 		    time() + ($DEFAULTEXP * 24 * 3600));
 
     #
     # At the moment only one (unexpired) token per user (scope)
     #
-    DBQueryFatal("lock tables user_jwt_tokens write");
-    my $query_result =
-	DBQueryFatal("select uuid,token,UNIX_TIMESTAMP(expires) as expires ".
-		     "  from user_jwt_tokens ".
-		     "where uid_idx='$uid_idx' and ".
-		     "      scope_type='$scope' ".
-		     (defined($scope_value) ? 
-		      "and scope_value='$scope_value' " : ""));
-    if ($query_result->numrows) {
-	my ($uuid,$token,$expires) = $query_result->fetchrow_array();
-	if (!$refresh && $expires > time() + (7 * 24 * 3600)) {
+    if (User::JWT->LockTables()) {
+	fatal("Could not lock tables");
+    }
+    my $token = User::JWT->LookupByScope($target_user, $scope, $scope_value);
+    if ($token) {
+	if (!$refresh && $token->expires_timestamp() > time() + (60 * 24 * 3600)) {
 	    if ($debug) {
-		print "Using existing token: $uuid\n";
+		print "Using existing token: $token\n";
 	    }
-	    DBQueryFatal("unlock tables");
+	    User::JWT->UnlockTables();
 	    if (defined($webtask)) {
-		$webtask->result($token);
+		$webtask->result($token->token());
 		$webtask->Exited(0);
 	    }
-	    print $token . "\n";
+	    print $token->token() . "\n";
 	    exit(0);
 	}
 	if (!$impotent) {
-	    DBQueryFatal("delete from user_jwt_tokens where uuid='$uuid'");
+	    $token->Delete();
 	}
-	DBQueryFatal("unlock tables");
 	if ($debug) {
-	    print "Deleted (soon to be) expired token: $uuid\n";
+	    print "Deleted (soon to be) expired token: $token\n";
 	}
     }
-    
-    #
-    # The token has its own uuid, more random version.
-    #
-    my $jti = `uuidgen -r`;
-    if ($?) {
-	fatal("Could not generate a jti");
+    # Tell Create we already have the lock.
+    $token = User::JWT->Create($target_user, $role,
+			       $scope, $scope_value, $expires, 1);
+    if (!$token) {
+	User::JWT->UnlockTables();
+	fatal("Could not create token");
     }
-    chomp($jti);
-    
-    $JWT_payload->{"sub"}   = $uid_uuid;
-    $JWT_payload->{"name"}  = $uid_uid;
-    $JWT_payload->{"jti"}   = $jti;
-    $JWT_payload->{"role"}  = $role;
-    $JWT_payload->{"exp"}   = $exp;
-    
-    if ($debug) {
-	print Dumper($JWT_payload);
-    }
-    my $token = eval { encode_jwt('payload' => $JWT_payload,
-				  'alg'     => $JWT_ALG,
-				  'key'     => $emulab_key); };
-    if ($@) {
-	fatal("CreateToken: $@");
-    }
-    my $safe_token = DBQuoteSpecial($token);
-    
-    DBQueryFatal("lock tables user_jwt_tokens write");
-    $query_result =
-	DBQueryFatal("select uuid,token,UNIX_TIMESTAMP(expires) as expires ".
-		     "  from user_jwt_tokens ".
-		     "where uid_idx='$uid_idx' and ".
-		     "      scope_type='$scope' ".
-		     (defined($scope_value) ? 
-		      "and scope_value='$scope_value' " : ""));
-    if ($query_result->numrows) {
-	my ($uuid,$existing) = $query_result->fetchrow_array();
-	if ($debug) {
-	    print "Using existing token: $uuid\n";
-	}
-	$token = $existing;
-    }
-    else {
-	if ($impotent) {
-	    print "Would insert token: $uid_uid,$scope\n";
-	}
-	else {
-	    if (!DBQueryWarn(
-		     "insert into user_jwt_tokens set ".
-		     "  uuid='$jti', uid='$uid_uid', uid_idx='$uid_idx', ".
-		     "  issued=now(), expires=FROM_UNIXTIME($exp), ".
-		     "  role='$role', token=$safe_token, scope_type='$scope' ".
-		     (defined($scope_value) ?
-		      ",scope_value='$scope_value'" : ""))) {
-		fatal("Could not save new token");
-	    }
-	}
-    }
-    DBQueryWarn("unlock tables");
-
+    User::JWT->UnlockTables();
     if (defined($webtask)) {
-	$webtask->result($token);
+	$webtask->result($token->token());
 	$webtask->Exited(0);
     }
-    print $token . "\n";
+    print $token->token() . "\n";
     return 0;
 }
 
@@ -367,14 +275,11 @@ sub DoDecodeToken()
     fatal("Not a token")
 	if ($token eq "");
 
-    my ($head, $data) = eval { decode_jwt("token"         => $token,
-					  'accepted_alg'  => $JWT_ALG,
-					  'decode_header' => 1,
-					  'verify_exp'    => 1,
-					  'key'           => $emulab_cert); };
-    if ($@) {
-	fatal("DecodeToken: $@");
+    my ($head, $data) = User::JWT::DecodeToken($token);
+    if (!defined($head) || !defined($data)) {
+	fatal("Could not decode token");
     }
+
     if ($debug) {
 	print Dumper($head);
 	print Dumper($data);
@@ -398,72 +303,90 @@ sub DoDecodeToken()
 sub DoDeleteToken()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_tokens delete [-f filename | token]\n";
-	print STDERR "  Pipe token to stdin when not using the -f option\n";
-	print STDERR "       manage_tokens delete uuid | user\n";
+	print STDERR "Usage: manage_tokens delete -f <filename | ->\n";
+	print STDERR "       manage_tokens delete -t <token>\n";
+	print STDERR "       manage_tokens delete <user>\n";
+	print STDERR "       manage_tokens delete <user> <token uuid>\n";
+	print STDERR "       manage_tokens delete <user> <token scope> [scope_value]\n";
+	print STDERR "  Pipe token to stdin when using [-f -]\n";
 	print STDERR "  When deleting for a user, all tokens are deleted\n";
 	exit(-1);
     };
-    my $token   = "";
     my %options = ();
-    if (! getopts("hf:", \%options)) {
+    if (! getopts("hf:t:", \%options)) {
 	&$usage();
     }
     if (defined($options{"h"})) {
 	&$usage();
     }
-    if (@ARGV) {
-	my $arg = $ARGV[0];
-	if ($arg =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
-	    if (!$impotent) {
-		DBQueryFatal("delete from user_jwt_tokens ".
-			     "where uuid='$arg'");
+    if (defined($options{"f"}) || defined($options{"t"})) {
+	my $token;
+
+	if (defined($options{"f"})) {
+	    my $file = $options{"f"};
+
+	    if ($file eq "-") {
+		while (<STDIN>) {
+		    $token .= $_;
+		}
 	    }
-	    return 0;
+	    else {
+		fatal("No such file or file cannot be read")
+		    if (! -e $file);
+		$token = emutil::ReadFile($file);
+		fatal("Not a token")
+		    if (!$token || $token eq "");
+	    }
 	}
-	my $user = User->Lookup($arg);
-	if (!$user) {
-	    fatal("No such user");
+	else {
+	    $token = $options{"t"};
 	}
-	my $uid_idx = $user->uid_idx();
+	chomp($token);
+
+	my ($head, $data) = User::JWT::DecodeToken($token);
+	if (!defined($head) || !defined($data)) {
+	    fatal("Could not decode token");
+	}
+	my $uuid = $data->{'jti'};
 	if (!$impotent) {
-	    DBQueryFatal("delete from user_jwt_tokens ".
-			 "where uid_idx='$uid_idx'");
+	    DBQueryFatal("delete from user_jwt_tokens where uuid='$uuid'");
 	}
 	return 0;
     }
-    elsif (defined($options{"f"})) {
-	my $file = $options{"f"};
-	
-	fatal("No such file or file cannot be read")
-	    if (! -e $file);
-	$token = emutil::ReadFile($file);
-	fatal("Not a token")
-	    if (!$token || $token eq "");
-    }
-    else {
-	while (<STDIN>) {
-	    $token .= $_;
+    usage()
+	if (@ARGV < 1 || @ARGV > 3);
+
+    my $user = User->Lookup($ARGV[0]);
+    fatal("No such user")
+	if (!defined($user));
+
+    if (@ARGV == 1) {
+	my $tokens;
+	if (User::JWT->LookupAll($user, \$tokens)) {
+	    fatal("Could not lookup tokens for user");
 	}
+	foreach my $token (@{$tokens}) {
+	    if ($impotent) {
+		print "Would delete $token\n";
+	    }
+	    elsif ($token->Delete()) {
+		fatal("Could not delete $token");
+	    }
+	}
+	return 0;
     }
-    chomp($token);
-
-    fatal("Not a token")
-	if ($token eq "");
-
-    my ($head, $data) = eval { decode_jwt("token"         => $token,
-					  'accepted_alg'  => $JWT_ALG,
-					  'decode_header' => 1,
-					  # We need to delete expired tokens too
-					  'verify_exp'    => 0,
-					  'key'           => $emulab_cert); };
-    if ($@) {
-	fatal("DeleteToken: $@");
+    my $scope = $ARGV[1];
+    my $scope_value = $ARGV[2] if (@ARGV == 3);
+    my $token = User::JWT->Lookup($user, $scope, $scope_value);
+    if (!$token) {
+	print "Token already deleted\n";
+	return 0;
     }
-
-    my $uuid = $data->{'jti'};
-    if (!$impotent) {
-	DBQueryFatal("delete from user_jwt_tokens where uuid='$uuid'");
+    if ($impotent) {
+	print "Would delete $token\n";
+    }
+    elsif ($token->Delete()) {
+	fatal("Could not delete $token");
     }
     return 0;
 }
@@ -491,36 +414,17 @@ sub DoListTokens()
     if (!$user) {
 	fatal("No such user");
     }
-    my $uid_idx = $user->uid_idx();
-    my $query_result =
-	DBQueryFatal("select * from user_jwt_tokens where uid_idx='$uid_idx'");
-    if (!$query_result->numrows) {
-	print "No tokens exist for user\n";
+    my $tokens;
+    if (User::JWT->LookupAll($user, \$tokens)) {
+	fatal("Could not lookup tokens for user");
     }
-    else {
-	while (my $row = $query_result->fetchrow_hashref()) {
-	    print "uuid:        " . $row->{'uuid'} . "\n";
-	    print "expires:     " . $row->{'expires'} . "\n";
-	    print "role:        " . $row->{'role'} . "\n" if ($row->{'role'});
-	    print "scope_type:  " . $row->{'scope_type'} . "\n";
-	    if ($row->{'scope_value'}) {
-		print "scope_value: " . $row->{'scope_value'} . " ";
-		
-	    	if ($row->{'scope_type'} eq "experiment") {
-		    my $instance = APT_Instance->Lookup($row->{'scope_value'});
-		    if (!defined($instance)) {
-			print "\n";
-			print("No such experiment: " . $row->{'scope_value'});
-		    }
-		    else {
-			my $pid = $instance->pid();
-			my $eid = $instance->eid();
-			print " ($pid/$eid)\n";
-		    }
-		}
-	    }
-	    print $row->{"token"} . "\n\n";
-	}
+    if (!@{$tokens}) {
+	print "No tokens exist for user\n";
+	exit(0);
+    }
+    foreach my $token (@{$tokens}) {
+	$token->Dump();
+	print "\n";
     }
     return 0;
 }
