@@ -1178,6 +1178,13 @@ sub CreateSliver($)
     if (!$aggobj->_isupdate() && defined($response->logurl())) {
 	$aggobj->SetPublicURL($response->logurl());
     }
+    if ($aptagg->IsLocalCluster() && $instance->private()) {
+	# Reach down to the local experiment and mark it private.
+	my $exp = $instance->LocalExperiment();
+	if ($exp) {
+	    $exp->Update({"private" => 1});
+	}
+    }
 
     #
     # Watch for async return. We will keep looping waiting for an error

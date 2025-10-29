@@ -75,6 +75,7 @@ use GeniXML;
 use GeniImage;
 use WebTask;
 use Logfile;
+use UserJWT;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -406,6 +407,55 @@ sub SetRSPEC($$;$)
     else {
 	$self->{'RSPEC'} = undef;
     }
+    return 0;
+}
+
+#
+# Add RPC tokens as needed.
+#
+sub AddTokens($$$)
+{
+    my ($self, $rspec, $perrmsg) = @_;
+    my $uuid  = $self->uuid();
+
+    #
+    # Create a long lived experiment token. It will be deleted when the
+    # experiment is terminated. Note that delete==revoked
+    #
+    my $token = User::JWT->CreateExperimentToken(
+	$self->GetCreator(), $self);
+    if (!defined($token)) {
+	$$perrmsg .= "internal error";
+	return -1;
+    }
+    GeniXML::AddPassword($rspec, "experiment-rpctoken", $token->token());
+
+    # And the user token if it is a private experiment.
+    if ($self->private()) {
+	$token = User::JWT->GetUserToken($self->GetCreator());
+	if (!defined($token)) {
+	    $token = User::JWT->CreateUserToken($self->GetCreator());
+	}
+	if (defined($token)) {
+	    GeniXML::AddPassword($rspec, "user-rpctoken", $token->token());
+	}
+    }
+    return 0;
+}
+
+#
+# And delete experiment token when experiment ends.
+# Note that this token is useless once the experiment ends
+#
+sub DeleteToken($)
+{
+    my ($self) = @_;
+    
+    my $token = User::JWT->GetExperimentToken(
+	$self->GetCreator(), $self);
+    $token->Delete()
+	if (defined($token));
+    
     return 0;
 }
 
@@ -1704,6 +1754,10 @@ sub GetSSHKeys($$;$)
     # Want keys for single user.
     goto done
 	if (defined($target_user));
+
+    # Ditto if a "private" experiment.
+    goto done
+	if ($self->private());
 
     if (! ($project->pid() eq $APT_HOLDINGPROJECT ||
 	   $project->pid() eq $PROTOGENI_HOLDINGPROJECT ||

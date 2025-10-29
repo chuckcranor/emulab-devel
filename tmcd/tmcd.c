@@ -266,6 +266,7 @@ typedef struct {
         int		genisliver_idx;
         int		geniflags;
 	int		isnonlocal_pid;
+	int		private;
 	unsigned short  taintstates;
 	unsigned short  experiment_keys;
 	char            nfsmounts[TBDB_FLEN_TINYTEXT];
@@ -3592,7 +3593,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		/*
 		 * Watch for a swapper only project flag.
 		 */
-		if (swapper_only && !isleader &&
+		if ((swapper_only || reqp->private) && !isleader &&
 		    strcmp(reqp->swapper, row[0])) {
 			goto skipkeys;
 		}
@@ -8072,7 +8073,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public,NULL "
+				 " r.rootkey_private,r.rootkey_public,NULL, "
+				 " e.private "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -8103,7 +8105,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 47, nodekey);
+				 48, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -8145,7 +8147,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
 				 " r.rootkey_private,r.rootkey_public, "
-				 " es.slice_uuid "
+				 " es.slice_uuid,e.private "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -8174,7 +8176,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 47, reqp->vnodeid, clause);
+				 48, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -8209,7 +8211,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
 				 " r.rootkey_private,r.rootkey_public, "
-				 " es.slice_uuid "
+				 " es.slice_uuid,e.private "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -8241,7 +8243,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 47, clause);
+				 48, clause);
 	}
 
 	if (!res) {
@@ -8281,6 +8283,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	reqp->isplabsvc    = (row[22] && strcasecmp(row[22], "0")) ? 1 : 0;
 	reqp->elab_in_elab = (row[23] && strcasecmp(row[23], "0")) ? 1 : 0;
 	reqp->singlenet    = (row[24] && strcasecmp(row[24], "0")) ? 1 : 0;
+	reqp->isdedicatedwa = (row[29] && !strncmp(row[29], "1", 1)) ? 1 : 0;
 	reqp->isdedicatedwa = (row[29] && !strncmp(row[29], "1", 1)) ? 1 : 0;
 	reqp->geniflags    = 0;
 	reqp->isnonlocal_pid = 0;
@@ -8438,6 +8441,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	if (row[46]) {
 		strcpy(reqp->slice_uuid, row[46]);
 	}
+	/* Private experiment */
+	reqp->private = (row[47] && !strncmp(row[47], "1", 1)) ? 1 : 0;
 	
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
