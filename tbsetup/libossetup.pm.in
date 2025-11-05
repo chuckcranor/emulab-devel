@@ -2661,6 +2661,17 @@ use Node;
 use English;
 use Data::Dumper;
 
+package libossetup_x410;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
 package libossetup_n300;
 use base qw(libossetup_sdr);
 
