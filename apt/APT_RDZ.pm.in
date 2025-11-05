@@ -330,8 +330,8 @@ sub setupRDZinRDZ($$$)
 	if (!defined($element));
 
     # Do not overwrite, come back to this later.
-    return 0
-	if (GeniXML::GetText("user-id", $element));
+#    return 0
+#	if (GeniXML::GetText("user-id", $element));
 
     my $rdzinfo = $instance->RDZINFO();
     my $rdzinrdzinfo = $instance->RDZINRDZINFO();
