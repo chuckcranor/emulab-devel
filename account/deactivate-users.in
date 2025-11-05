@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,10 @@ my $interval   = 24;	# months
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN   = "@OURDOMAIN@";
+my $WAP         = "$TB/sbin/withadminprivs";
+my $TBACCT      = "$TB/sbin/tbacct";
+my $SUDO	= "/usr/local/bin/sudo";
+my $PROTOUSER   = "elabman";
 
 #
 # Untaint the path
@@ -102,11 +106,11 @@ my $query_result =
 		 "    (s.last_activity is null or ".
 		 "     s.last_activity<DATE_SUB(curdate(), INTERVAL $interval MONTH)) and ".
 		 "    u.admin=0 and u.foreign_admin=0 and u.stud=0 ".
-		 "order by weblogin_last asc");
+		 "order by weblogin_last asc limit 1");
 
 while (my ($uid) = $query_result->fetchrow_array()) {
     if ($doit) {
-	system("$TB/sbin/tbacct -s -u deactivate $uid");
+	system("$SUDO -u $PROTOUSER $WAP $TBACCT -s -u deactivate $uid");
     }
     else {
 	print "$uid\n";

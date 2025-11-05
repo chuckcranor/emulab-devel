@@ -1578,6 +1578,24 @@ sub NeedStitcher($$)
 }
 
 #
+# Is the rspec requesting "private" mode.
+#
+sub IsPrivate($$$)
+{
+    my ($rspec, $pref, $perrmsg) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "IsPrivate: Could not parse rspec";
+	    return -1;
+	}
+    }
+    $$pref = GeniXML::IsPrivate($rspec);
+    return 0;
+}
+
+#
 # Check everything that needs to be checked. :-)
 #
 sub CheckEverything($$$$$$$$$$$)

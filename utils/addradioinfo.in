@@ -113,7 +113,7 @@ sub usage(;$$)
 	" --radio-type=     - Adhoc string like 'NI/Ettus B210'",
 	" --sync=           - Synchronization method: 'White Rabbit',GPSDO,PTP",
 	" --ue-imsi=        - UE IMSI",
-	" --powder-zone=    - Radio zone: 'Indoor OTA Lab'",
+	" --powder-zone=    - Radio zone: 'Indoor OTA Lab', 'Flux'",
 	" --fetype=         - Frontend type: TDD,FDD,none",
 	);
     print STDERR "Usage: addradioinfo [-dn] [options] ".
