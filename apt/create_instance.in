@@ -46,11 +46,12 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P', 'X');
+my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'I', 'P', 'X');
 my $debug   = 0;
 my $verbose = 1;
 my $foreground     = 0;
 my $ignorefailures = 0;
+my $isprivate      = 0;
 my $nopending      = 0;
 my $maxduration    = 0;
 my $xmlfile;
@@ -222,6 +223,9 @@ if (defined($options{"f"})) {
 if (defined($options{"i"})) {
     $ignorefailures = 1;
 }
+if (defined($options{"I"})) {
+    $isprivate = 1;
+}
 if (defined($options{"v"})) {
     $verbose = 1;
 }
@@ -364,7 +368,7 @@ my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
     $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
     $reporef, $repohash, $duration, $webinfo, $noresokay, $brand, $errcode,
-    $rdzenabled, $resources, $isprivate);
+    $rdzenabled, $resources);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -581,9 +585,11 @@ if (!@aggregate_urns) {
 # but do not override command line force.
 $usestitcher = 1 if ($needstitcher);
 
-# Private mode
-if (APT_Profile::IsPrivate($rspec, \$isprivate, \$errmsg)) {
-    fatal($errmsg);
+# Private mode. Command line flag overrides.
+if (!$isprivate) {
+    if (APT_Profile::IsPrivate($rspec, \$isprivate, \$errmsg)) {
+	fatal($errmsg);
+    }
 }
 
 #

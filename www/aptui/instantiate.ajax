@@ -1268,6 +1268,10 @@ function Do_Submit()
         $formfields["failure_okay"] == "checked") {
         $options .= " -i ";
     }
+    if (isset($formfields["private_experiment"]) &&
+        $formfields["private_experiment"] == "checked") {
+        $options .= " -I ";
+    }
 
     # So we can look up the slice after the backend creates it.
     $uuid = NewUUID();
