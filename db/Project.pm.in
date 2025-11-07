@@ -1108,7 +1108,7 @@ sub WaitForMount($)
 {
     my ($self) = @_;
     my $pid  = $self->pid();
-    my $path = "$PROJROOT/$pid";
+    my $path = ($WITHZFS ? "$PROJROOT/$pid" : "$PROJROOT");
 
     return emutil::waitForMount($path);
 }
