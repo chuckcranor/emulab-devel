@@ -14,8 +14,8 @@ sub Install($$$)
 	if ($isupdate);
 
     my $SOURCEURL     = "http://$OUTER_BOSS/downloads/shellinabox.tar.Z";
-    my $SOURCEDIR     = "$PREFIX/src/shellinabox";
-    my $BUILDDIR      = "$PREFIX/obj/shellinabox";
+    my $SOURCEDIR     = "$TOP_SRCDIR/../shellinabox";
+    my $BUILDDIR      = "$TOP_OBJDIR/shellinabox";
     my $localtarfile  = "/tmp/shellinabox.tar.gz";
     my $LOGFILE       = "$PREFIX/log/shellinabox.log";
 
