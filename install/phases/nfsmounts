@@ -30,6 +30,10 @@ sub Install($$$)
 	}
 	my @dirs = ();
 	my @mkdirs = ();
+	my %fsdirs = ( $GROUPROOT => $FSDIR_GROUPS, $USERROOT => $FSDIR_USERS,
+		       $SCRATCHROOT => $FSDIR_SCRATCH,
+		       $SHAREROOT => $FSDIR_SHARE, $PROJROOT => $FSDIR_PROJ );
+
 
 	#
 	# If we are the FS then we do not need to mount the FS file systems.
@@ -76,6 +80,7 @@ sub Install($$$)
 
 	    my @lines = ();
 	    foreach my $dir (@dirs) {
+		my $fsdir = (defined($fsdirs{$dir})) ? $fsdirs{$dir} : $dir;
 		if ($dir eq $USERSVAR_MOUNTPOINT) {
 		    push(@lines,
 			 "$USERNODE:/var\t\t$USERSVAR_MOUNTPOINT\tnfs\t".
@@ -93,7 +98,7 @@ sub Install($$$)
 		#
 		elsif (!$WITHZFS || $dir eq $SHAREROOT) {
 		    push(@lines,
-			 "$FSNODE:$dir\t\t$dir\tnfs\trw,$nfsopt\t0\t0");
+			 "$FSNODE:$fsdir\t\t$dir\tnfs\trw,$nfsopt\t0\t0");
 		}
 	    }
 	    AppendToFileFatal($FSTAB, @lines);
