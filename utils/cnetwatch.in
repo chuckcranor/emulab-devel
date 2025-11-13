@@ -822,47 +822,87 @@ sub getnodeinfo($)
     #
     # Find the names of all the control net switches.
     # Note that shared switches will have role==testswitch, so include those.
+    # We don't do this if we are not using switch metrics.
     #
-    my $query_result = DBQueryWarn("select node_id from nodes where".
-				   "  role='ctrlswitch' or role='testswitch'");
-    if (! $query_result || $query_result->numrows == 0) {
-	print STDERR "No control net switches found!?\n";
-	exit(0);
+    my $sclause = "";
+    if ($nodemetrics != 2) {
+	my $query_result =
+	    DBQueryWarn("select node_id from nodes where".
+			"  role='ctrlswitch' or role='testswitch'");
+	if (! $query_result || $query_result->numrows == 0) {
+	    print STDERR "No control net switches found!?\n";
+	    exit(0);
+	}
+	my @cswitches = ();
+	while (my ($sw) = $query_result->fetchrow_array()) {
+	    push(@cswitches, $sw);
+	}
+	$sclause = "and node_id2 in ('" . join("','", @cswitches) . "')";
+	print STDERR "Switches: ", join(" ", @cswitches), "\n"
+	    if ($debug && 0);
     }
-    my @cswitches = ();
-    while (my ($sw) = $query_result->fetchrow_array()) {
-	push(@cswitches, $sw);
+
+    #
+    # XXX use the new query unless $nodemetrics == 0 for compat (just Emulab?)
+    #
+    # For the new query we must check whether $switch (node_id2) is null.
+    # If not null and $nodemetrics<2, use switch metrics.
+    # If not null and $nodemetrics==2, ignore the switch and use node metrics.
+    # If null and $nodemetrics==0, then ignore the node.
+    # If null and $nodemetrics>0, then use node metrics for the node.
+    #
+    # Also, we have to look at the switch's "noportstats" and the node's
+    # "cnetwatch_disable".
+    # If cnetwatch_disable is set, ignore the node.
+    # If noportstats is set and switch is not null, null out switch
+    # 
+    if ($nodemetrics == 0) {
+	$query_result =
+	    DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,".
+			"iface1,mac,node_id2,".
+			"a.attrvalue as disable,a2.attrvalue as noportstats".
+			" from nodes as n".
+			" left join wires as w on n.node_id=w.node_id1".
+			" left join interfaces as i on ".
+			"  i.node_id=n.node_id and i.iface=w.iface1".
+			" left join reserved as r on n.node_id=r.node_id".
+			" left join node_attributes as a on".
+			"  n.node_id=a.node_id and a.attrkey='cnetwatch_disable'".
+			" left join node_attributes as a2 on".
+			"  w.node_id2=a2.node_id and a2.attrkey='noportstats'".
+			" where w.node_id1=n.node_id".
+			"  $sclause".
+			"  and w.type='Control'".
+			"  and n.role='testnode' $nclause".
+			" order by node_id1");
+    } else {
+	$query_result = 
+	    DBQueryWarn("select r.pid,r.eid,n.node_id as node_id1,eventstate,".
+			"i.iface as iface1,mac,node_id2,".
+			"a.attrvalue as disable,a2.attrvalue as noportstats".
+			" from nodes as n".
+			" left join interfaces as i on ".
+			"  i.node_id=n.node_id and i.role='ctrl'".
+			" left join reserved as r on n.node_id=r.node_id".
+			" left join wires as w on ".
+			"  w.node_id1=n.node_id and w.type='Control'".
+			" left join node_attributes as a on".
+			"  n.node_id=a.node_id and a.attrkey='cnetwatch_disable'".
+			" left join node_attributes as a2 on".
+			"  w.node_id2=a2.node_id and a2.attrkey='noportstats'".
+			" where n.role='testnode' $nclause".
+			"  $sclause".
+			"  and i.IP is not null".
+			" order by n.node_id");
     }
-    my $sclause = "and node_id2 in ('" . join("','", @cswitches) . "')";
-
-    print STDERR "Switches: ", join(" ", @cswitches), "\n"
-	if ($debug && 0);
-
-    $query_result =
-	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,".
-		    "iface1,mac,node_id2,".
-		    "a.attrvalue as disable,a2.attrvalue as noportstats".
-		    " from nodes as n".
-		    " left join wires as w on n.node_id=w.node_id1".
-		    " left join interfaces as i on ".
-		    "  i.node_id=n.node_id and i.iface=w.iface1".
-		    " left join reserved as r on n.node_id=r.node_id".
-		    " left join node_attributes as a on".
-		    "  n.node_id=a.node_id and a.attrkey='cnetwatch_disable'".
-		    " left join node_attributes as a2 on".
-		    "  w.node_id2=a2.node_id and a2.attrkey='noportstats'".
-		    " where w.node_id1=n.node_id".
-		    "  $sclause".
-		    "  and w.type='Control'".
-		    "  and n.role='testnode' $nclause".
-		    " order by node_id1");
     if (! $query_result || $query_result->numrows == 0) {
 	print STDERR "Node(s) not found.\n";
 	exit(0);
     }
 
-    print STDERR "Nodes: "
-	if ($debug && 0);
+    print STDERR "Node query returned ", $query_result->numrows, " rows\n"
+	if ($debug);
+    print STDERR "Nodes: " if ($debug > 2);
 
     %switches = ();
     @nodestats = ();
@@ -878,6 +918,11 @@ sub getnodeinfo($)
 	# XXX if cnetwatch is disabled for the node, just skip it.
 	if ($disable) {
 	    print STDERR "*** $pc administratively ignored!\n" if ($debug);
+	    next;
+	}
+	if (!$switch && $nodemetrics == 0) {
+	    print STDERR "*** $pc no switch associated with cnet!\n"
+		if ($debug);
 	    next;
 	}
 
@@ -936,10 +981,10 @@ sub getnodeinfo($)
 	}
 	
 	print "$pc "
-	    if ($debug && 0);
+	    if ($debug > 1);
     }
     print "\n"
-	if ($debug && 0);
+	if ($debug > 1);
 
     foreach my $node (keys %pcs) {
 	if (!exists($pcs{$node}{'mark'})) {
@@ -1033,7 +1078,7 @@ sub getrrdstats($$)
 
     require RRDTool::OO;
 
-    if ($debug) {
+    if ($debug > 2) {
 	logit("rrdstats: " . join(' ', @$noderef));
     }
     my $now = time();
