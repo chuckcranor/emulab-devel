@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -107,7 +107,7 @@ function Do_GetBaseStations()
             "name"        => $location,
             "latitude"    => $latitude,
             "longitude"   => $longitude,
-            "type"        => "Rooftop Base Station",
+            "type"        => "Rooftop Site",
             "street"      => $streeturl,
             "cluster_urn" => $urn,
             "radioinfo"   => null
