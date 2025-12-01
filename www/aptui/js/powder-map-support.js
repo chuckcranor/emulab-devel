@@ -1356,7 +1356,7 @@ window.ShowPowderMap = (function()
 	var url = "https://docs.powderwireless.net/hardware.html" +
 	    "#%28part._powder-bs-hw%29";
 	var layer = GraphicsLayer({
-	    title: "Base Stations",
+	    title: "Rooftop Sites",
 	    id: id,
 	})
 
