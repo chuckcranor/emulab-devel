@@ -33,8 +33,18 @@ if [ $? -ne 0 -o -z "$spaces" ]; then
     echo "WARNING: could not figure out how man NVMe namespaces there are"
     exit 1
 fi
-if [ $spaces -gt 1 ]; then
+# XXX I have seen a scenario in which there is a single namespace but
+# no corresponding "/dev/nvmeXn1" device. This will causet the format
+# check below to fail. A reset seems to bring back the device.
+reset=0
+if [ $spaces -eq 1 -a ! -e "${device}n1" ]; then
+    echo "WARNING: no special file for NVMe namespace on $device, clearing..."
+    reset=1
+elif [ $spaces -gt 1 ]; then
     echo "WARNING: found $spaces NVMe namespaces on $device, clearing..."
+    reset=1
+fi
+if [ $reset -eq 1 ]; then
     if [ $checkonly -ne 0 ]; then
 	echo "CHECK: would delete all namespaces"
 	exit 0
