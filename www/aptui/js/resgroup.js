@@ -584,7 +584,13 @@ $(function ()
 	if (editing) {
 	    PopulateReservation();
 	    // Start out with button disabled until a change.
-	    ToggleSubmit(false, "check");
+            if (isadmin) {
+                // For Mike. :-)
+                ToggleSubmit(true, "check");
+            }
+            else {
+	        ToggleSubmit(false, "check");
+            }
 	    
 	    $('#reserve-delete-button').click(function (e) {
 		e.preventDefault();
