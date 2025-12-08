@@ -136,9 +136,11 @@ my $FSSCRATCHROOT = "@FSDIR_SCRATCH@";
 # These are duplicated in db/Project.pm.in ...
 # Project subdir list
 my @DIRLIST  = ("exp", "images", "logs", "deltas", "tarfiles", "rpms",
-		"groups", "tiplogs", "images/sigs", "templates");
+		"groups", "tiplogs", "images/sigs", "templates",
+		"imports");
 # Groups subdir list
-my @GDIRLIST = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
+my @GDIRLIST = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs",
+		"imports");
 
 #
 # Function prototypes
