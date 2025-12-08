@@ -75,7 +75,7 @@ else {
         $webtask->Delete();
         return;
     }
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     $webtask->Refresh();
     $token = $webtask->TaskValue("result");
 }
