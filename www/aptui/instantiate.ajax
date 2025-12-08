@@ -557,6 +557,10 @@ function Do_GetImageInfo()
             list ($auth,$type,$id) = Instance::ParseURN($urn);
 
             $parsed_id = preg_split('/:/', $id);
+            if (count($parsed_id) < 2) {
+                error_log("Bad image URN id: $urn");
+                continue;
+            }
             $proj = $parsed_id[0];
             $name = $parsed_id[1];
             $version = (count($parsed_id) == 3 ? $parsed_id[2] : null);
