@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2024 University of Utah and the Flux Group.
+# Copyright (c) 2014-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -217,7 +217,13 @@ if (defined($options{"D"})) {
     $dodeleted = 1;
     $allvers = 1;
 }
-@images = @ARGV;
+# Need to taint check these to make perl happy when UID==0
+foreach my $pidimage (@ARGV) {
+    if ($pidimage =~/^(.*)$/) {
+	$pidimage = $1;
+    }
+    push(@images, $pidimage);
+}
 
 my $fixit = 0;
 if (defined($options{"F"})) {
