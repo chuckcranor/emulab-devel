@@ -101,10 +101,12 @@ sub Lookup($$$)
     return $self;
 }
 
-sub Create($$$$;$$$)
+sub Create($$$$;$$$$)
 {
-    my ($class, $user, $role, $scope, $scope_value, $expires, $nolock) = @_;
+    my ($class, $user, $role,
+	$scope, $scope_value, $expires, $nolock, $doauth) = @_;
     $nolock = 0 if (!defined($nolock));
+    $doauth = 0 if (!defined($doauth));
     $expires = time() + (180 * 24 * 3600) if (!defined($expires));
     my $debug = 1;
 
@@ -137,22 +139,53 @@ sub Create($$$$;$$$)
     if (defined($scope_value)) {
 	$payload->{"scope_value"} = $scope_value;
     }
+    if ($doauth) {
+	my @projects;
+	if ($user->ProjectMembershipList(\@projects)) {
+	    print STDERR "Could not generate project membership list\n";
+	    return undef;
+	}
+	my $tmp = {};
+	foreach my $project (@projects) {
+	    my $group = $project->GetProjectGroup();
+	    my $memb  = $group->LookupUser($user);
+	    if (!defined($memb)) {
+		print STDERR "No membership for $user in $project!\n";
+		next;
+	    }
+	    $tmp->{$project->pid()} = $memb->trust();
+	}
+	my $str = eval { encode_json($tmp); };
+	if ($@) {
+	    print STDERR "Could not encode project list: $@\n";
+	    return undef;
+	}
+	$payload->{"projects"} = $str;
+	$payload->{"email"} = $user->email();
+	$payload->{"name"} = $user->name();
+    }
     if ($debug) {
 	print Dumper($payload);
     }
     my $token = eval { encode_jwt('payload' => $payload,
 				  'alg'     => $JWT_ALG,
 				  'key'     => $emulab_key); };
+
     if ($@) {
 	print STDERR "User::JWT::Create: $@\n";
 	return undef;
     }
-    my $safe_token = DBQuoteSpecial($token);
-    
+    # Auth tokens do not go in the DB, thus cannot be used to invoke the API.
+    if ($doauth) {
+	return $token;
+    }
+	
     if (!$nolock) {
 	DBQueryWarn("lock tables user_jwt_tokens write")
 	    or return undef;
     }
+    my $safe_token = DBQuoteSpecial($token);
+    
     # Check again now that we are locked.
     my $existing = User::JWT->LookupByScope($user, $scope, $scope_value);
     if ($existing) {
@@ -213,7 +246,8 @@ sub LockTables($)
     my ($class) = @_;
 
     return -1
-	if (!DBQueryWarn("lock tables user_jwt_tokens write"));
+	if (!DBQueryWarn("lock tables user_jwt_tokens write, ".
+			 "projects read, groups read, group_membership read"));
     return 0;
 }
 sub UnlockTables($)
@@ -359,6 +393,73 @@ sub LookupByScope($$$;$)
 
     my ($idx) = $query_result->fetchrow_array();
     return User::JWT->Lookup($user, $idx);    
+}
+
+############################################################################
+#
+package User::JWT::SSOCode;
+use libdb;
+use libtestbed;
+use English;
+use overload ('""' => 'Stringify');
+
+sub Lookup($$$)
+{
+    my ($class, $user, $code) = @_;
+    my $uid_idx = $user->uid_idx();
+    my $safe_code = DBQuoteSpecial($code);
+    my $query_result;
+
+    if ($token =~ /^(\w*)$/) {
+	$query_result =
+	    DBQueryWarn("select *,UNIX_TIMESTAMP(expires) as expires_timestamp ".
+			"   from user_sso_codes ".
+			"where uid_idx='$uid_idx' and code='$safe_code'");
+    }
+    return undef
+	if (! $query_result || !$query_result->numrows);
+    
+    my $self          = {};
+    $self->{'DBROW'}  = $query_result->fetchrow_hashref();
+    bless($self, $class);
+    return $self;
+}
+# accessors
+sub field($$)	{ return $_[0]->{'DBROW'}->{$_[1]}; }
+sub idx($)	{ return field($_[0], "idx"); }
+sub uid($)	{ return field($_[0], "uid"); }
+sub uid_idx($)	{ return field($_[0], "uid_idx"); }
+sub code($)	{ return field($_[0], "code"); }
+sub expires($)	{ return field($_[0], "expires"); }
+
+sub Create($$)
+{
+    my ($class, $user) = @_;
+
+    my $uid_idx  = $user->uid_idx();
+    my $uid_uid  = $user->uid();
+    my $code     = TBGenSecretKey();
+    my $expires  = time() + 60;
+
+    if (!DBQueryWarn(
+	     "insert into user_sso_codes ".
+	     "  uid='$uid_uid', uid_idx='$uid_idx', code='$code', ".
+	     "  expires=FROM_UNIXTIME($expires)")) {
+	return undef;
+    }
+    return User::JWT::SSOCode->Lookup($user, $code);
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    my $uid     = $self->uid();
+    my $code    = $self->code();
+
+    return "[User::JWT::SSOCode $uid, $code]"
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

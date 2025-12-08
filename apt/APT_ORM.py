@@ -1203,3 +1203,15 @@ class UserJwtTokens(Base):
     scope_type: Mapped[Optional[str]] = mapped_column(Enum('global', 'experiment'), server_default=text("'global'"))
     scope_value: Mapped[Optional[str]] = mapped_column(TINYTEXT)
     token: Mapped[Optional[str]] = mapped_column(Text)
+
+class UserSsoCodes(Base):
+    __tablename__ = 'user_sso_codes'
+    __table_args__ = (
+        Index('idx', 'idx', unique=True),
+    )
+
+    idx: Mapped[int] = mapped_column(INTEGER(10), primary_key=True)
+    code: Mapped[str] = mapped_column(String(40), server_default=text("''"))
+    uid: Mapped[str] = mapped_column(String(8), server_default=text("''"))
+    uid_idx: Mapped[int] = mapped_column(MEDIUMINT(8), server_default=text('0'))
+    expires: Mapped[datetime.datetime] = mapped_column(DateTime)

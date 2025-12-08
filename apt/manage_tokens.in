@@ -149,6 +149,7 @@ sub DoCreateToken()
 	print STDERR "  -a   - Generate an admin token; not currently used\n";
 	print STDERR "  -s   - Generate a shortlived token, for debugging\n";
 	print STDERR "  -E   - Generate a token scoped to the specified experiment\n";
+	print STDERR "  -Z   - Create an SSO auth token for Powder ZMS\n";
 	exit(-1);
     };
     my $role  = "user";
@@ -156,9 +157,10 @@ sub DoCreateToken()
     my $scope_value;
     my $shortlived = 0;
     my $refresh = 0;
+    my $doauth = 0;
     
     my %options = ();
-    if (! getopts("hasE:r", \%options)) {
+    if (! getopts("hasE:rZ", \%options)) {
 	&$usage();
     }
     if (defined($options{"h"})) {
@@ -181,6 +183,9 @@ sub DoCreateToken()
     if (defined($options{"r"})) {
 	$refresh = 1;
     }
+    if (defined($options{"Z"})) {
+	$doauth = 1;
+    }
     &$usage()
 	if (!@ARGV);
 
@@ -194,7 +199,9 @@ sub DoCreateToken()
     my $uid_idx  = $target_user->uid_idx();
     my $expires  = ($shortlived ?
 		    time() + (7 * 24 * 3600) :
-		    time() + ($DEFAULTEXP * 24 * 3600));
+		    ($doauth ?
+		     time() + (5 * 60) :
+		     time() + ($DEFAULTEXP * 24 * 3600)));
 
     #
     # At the moment only one (unexpired) token per user (scope)
@@ -202,40 +209,42 @@ sub DoCreateToken()
     if (User::JWT->LockTables()) {
 	fatal("Could not lock tables");
     }
-    my $token = User::JWT->LookupByScope($target_user, $scope, $scope_value);
-    if ($token) {
-	if (!$refresh && $token->expires_timestamp() > time() + (60 * 24 * 3600)) {
+    if (!$doauth) {
+	my $token = User::JWT->LookupByScope($target_user, $scope, $scope_value);
+	if ($token) {
+	    if (!$refresh && $token->expires_timestamp() > time() + (60 * 24 * 3600)) {
+		if ($debug) {
+		    print "Using existing token: $token\n";
+		}
+		User::JWT->UnlockTables();
+		if (defined($webtask)) {
+		    $webtask->result($token->token());
+		    $webtask->Exited(0);
+		}
+		print $token->token() . "\n";
+		exit(0);
+	    }
+	    if (!$impotent) {
+		$token->Delete();
+	    }
 	    if ($debug) {
-		print "Using existing token: $token\n";
+		print "Deleted (soon to be) expired token: $token\n";
 	    }
-	    User::JWT->UnlockTables();
-	    if (defined($webtask)) {
-		$webtask->result($token->token());
-		$webtask->Exited(0);
-	    }
-	    print $token->token() . "\n";
-	    exit(0);
-	}
-	if (!$impotent) {
-	    $token->Delete();
-	}
-	if ($debug) {
-	    print "Deleted (soon to be) expired token: $token\n";
 	}
     }
     # Tell Create we already have the lock.
-    $token = User::JWT->Create($target_user, $role,
-			       $scope, $scope_value, $expires, 1);
+    my $token = User::JWT->Create($target_user, $role,
+			       $scope, $scope_value, $expires, 1, $doauth);
     if (!$token) {
 	User::JWT->UnlockTables();
 	fatal("Could not create token");
     }
     User::JWT->UnlockTables();
     if (defined($webtask)) {
-	$webtask->result($token->token());
+	$webtask->result($doauth ? $token : $token->token());
 	$webtask->Exited(0);
     }
-    print $token->token() . "\n";
+    print $doauth ? $token : $token->token() . "\n";
     return 0;
 }
 

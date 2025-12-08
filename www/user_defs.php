@@ -2068,5 +2068,22 @@ class User
         $row = mysql_fetch_array($query_result);
         return $row;
     }
+
+    #
+    # SSO code.
+    #
+    function GetSSOCode()
+    {
+        $uid     = $this->uid();
+        $uid_idx = $this->uid_idx();
+        $code    = GENHASH();
+        $expires = time() + 60;
+        
+        DBQueryFatal("insert into user_sso_codes set ".
+                     "  uid='$uid', uid_idx='$uid_idx', code='$code', ".
+                     "  expires=FROM_UNIXTIME($expires)");
+        return $code;
+    }
+    # https://www.cloudlab.us/dev/stoller/login.php?client_id=XXX&redirect_uri=https://www.cloudlab.us/dev/stoller/user-dashboard.php
 }
 ?>

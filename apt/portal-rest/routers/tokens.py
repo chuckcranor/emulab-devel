@@ -62,6 +62,7 @@ from ..dependencies import (
 from ..api.models import (
     Error,
     Token,
+    RawToken,
     TokenRole,
     TokenScope
 )
@@ -69,7 +70,7 @@ from ..api.models import (
 # Testbed DB access lib
 from libdb import *
 from WebTask import WebTask
-from APT_ORM import UserJwtTokens
+from APT_ORM import UserJwtTokens, UserSsoCodes
 import AccessCheck
 
 MANAGETOKENS = "webmanage_tokens"
@@ -133,6 +134,56 @@ def refresh_token(
                             detail="New Token invalid: " + str(exc))
 
     return ConstructToken(DB, claims["jti"])
+
+#
+# Redeem a code to get an auth0 token for a user. RDZ SSO
+#
+@router.put("/redeem")
+def get_redeem(
+        code: str = None,
+        DB: Session = Depends(get_DB)) -> RawToken:
+    LOG.info("get_redeem: %r", code)
+
+    if code == None:
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Must supply a code")
+
+    if not re.match("^([\w]+)$", code):
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Invalid code")
+
+    # Validate the code here.
+    stmt = select(UserSsoCodes).where(text("code = :id"))
+    row = DB.execute(stmt, {'id': code}).first()
+    if not row:
+        raise HTTPException(
+            status_code=404, detail="No such code " + str(code)
+        )
+    dbcode = row.UserSsoCodes
+    expires = dbcode.expires.timestamp()
+    LOG.info("row: %r", dbcode)
+    LOG.info("expires: %r %r", expires, time.time())
+    if time.time() > expires:
+        # This was easier the using sqlalchemy, bizzare errors
+        DBQueryFatal("delete from user_sso_codes where idx=%s",
+                     (dbcode.idx,))
+        raise PortalException(
+            status.HTTP_400_BAD_REQUEST, "Code has expired")
+
+    # Now create the auth0 token (which is not stored in the DB).
+    webtask = WebTask.CreateAnonymous()
+    command = MANAGETOKENS + " -t " + webtask.task_id + " "
+    command  = command + " create -Z " + dbcode.uid
+
+    completed = SUEXEC(dbcode.uid, "nobody", command);
+    if completed.returncode != 0:
+        webtask.Delete()
+        return HandleShellError(completed)
+
+    webtask.Refresh()
+    token = webtask["result"]
+    
+    return RawToken(token = token)
 
 #
 # Construct a Token that matches the openapi description.

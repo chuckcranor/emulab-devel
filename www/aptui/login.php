@@ -29,6 +29,12 @@ $page_title = "Login";
 AddTemplate("waitwait-modal");
 
 #
+# Some SSO stuff, hardwired for now,
+#
+$SSO_CLIENT_ID    = "t4DgFrG1T5TRrTEAr";
+$SSO_REDIRECT_URI = "https://rdz.powderwireless.net/auth/powder";
+
+#
 # Get current user in case we need an error message.
 #
 $this_user = CheckLogin($check_status);
@@ -42,11 +48,22 @@ $optargs = OptionalPageArguments("login",       PAGEARG_STRING,
 				 "from",        PAGEARG_STRING,
 				 "adminmode",   PAGEARG_BOOLEAN,
                                  "cleanmode",   PAGEARG_BOOLEAN,
-				 "ajax_request",PAGEARG_BOOLEAN);
+				 "ajax_request",PAGEARG_BOOLEAN,
+                                 # ZMS SSO
+                                 "client_id",   PAGEARG_STRING,
+                                 "redirect_uri",PAGEARG_STRING,
+                                 "scope",       PAGEARG_STRING);
 
 $referrer = null;
 if (GetReferrer($referrer) != 0) {
     PAGEARGERROR("Invalid REFERRER");        
+}
+
+if (isset($client_id) && isset($redirect_uri)) {
+    if ($client_id != $SSO_CLIENT_ID ||
+        $redirect_uri != $SSO_REDIRECT_URI) {
+        PAGEARGERROR("Invalid AUTH0 arguments");        
+    }
 }
 
 # Allow adminmode to be passed along to new login. Handy for letting admins
@@ -164,6 +181,7 @@ function SPITFORM($error)
     if ($PROTOGENI_GENIWEBLOGIN) {
 	?>
                  <button class='btn btn-info btn-sm pull-left'
+                    style='margin-right: 10px;'
 		    type='button'
                     data-toggle="tooltip" data-placement="left"
 		    title="You can use your geni credentials to login"
@@ -215,11 +233,33 @@ function SPITFORM($error)
     SPITFOOTER();
     return;
 }
+
+#
+# Handle RDZ SSO.
+#
+function RedirectSSO()
+{
+    global $this_user, $redirect_uri, $client_id;
+    
+    #
+    # Generate a shortlived code that allows the endpoint to redeem a
+    # descoped token for this user.
+    #
+    $code = $this_user->GetSSOCode();
+    header("Location: $redirect_uri?code=$code&client_id=$client_id");
+    ClearReferrer();
+    return;
+}
+
 #
 # If not clicked, then put up a form.
 #
 if (!$ajax_request && !isset($login)) {
     if ($this_user) {
+        if (isset($client_id) && isset($redirect_uri)) {
+            RedirectSSO();
+            return;
+        }
 	header("Location: $APTBASE/landing.php");
         ClearReferrer();
 	return;
@@ -384,6 +424,10 @@ if ($CHECKLOGIN_USER->IsActive() && $CHECKLOGIN_USER->isClassic() &&
     $CHECKLOGIN_USER->GenEncryptedCert();
 }
 
+if (isset($client_id) && isset($redirect_uri)) {
+    RedirectSSO();
+    return;
+}
 if ($ajax_request) {
     SPITAJAX_RESPONSE("login sucessful");
     exit();

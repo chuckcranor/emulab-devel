@@ -48,7 +48,6 @@ LOG = logging.getLogger("uvicorn.error")
 LOG.setLevel(logging.INFO)
 
 app = FastAPI(
-    dependencies=[Depends(get_current_user)]
 )
 
 @app.exception_handler(PortalException)
