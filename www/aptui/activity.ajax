@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,10 +195,16 @@ function Do_Search()
         $pcount    = $row["physnode_count"];
         $vcount    = $row["virtnode_count"];
         $phours    = $row["phours"];
-        $portal    = $portals[$row["servername"]];
         $clusters  = $row["clusters"];
         $failed    = $row["failed"];
         $errormsg  = $row["failure_reason"];
+
+        if ($row["servername"]) {
+            $portal = $portals[$row["servername"]];
+        }
+        else {
+            $portal = "Emulab";
+        }
         
         # Backwards compat.
         if (!isset($pproj)) {
