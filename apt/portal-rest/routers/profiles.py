@@ -418,7 +418,7 @@ def modify_profile(
             fp.write("</value></attribute>\n")
             pass
         if modifyargs.project_writable != None:
-            fp.write("<attribute name='profile_shared'><value>")
+            fp.write("<attribute name='profile_project_write'><value>")
             if modifyargs.project_writable:
                 fp.write("1")
             else:
@@ -593,29 +593,28 @@ def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=False):
     profile = row.AptProfiles
 
     versions = {}
-    if elaborate:
-        for version in profile.versions:
-            uuid = version.uuid
-            #print(str(uuid))
-            if version_id and str(uuid) != str(version_id):
-                continue
-            
-            paramdefs = None
-            if version.paramdefs != None:
-                paramdefs = json.loads(version.paramdefs)
-                pass
-        
-            versions[uuid] = ProfileVersion(
-                id = uuid,
-                version = version.version,
-                updater = version.updater,
-                created_at = TBDatetimeGMT(version.created),
-                deleted_at = TBDatetimeGMT(version.deleted),
-                parameters = paramdefs,
-                script = version.script,
-                rspec = version.rspec,
-            )
+    for version in profile.versions:
+        uuid = version.uuid
+        #print(str(uuid))
+        if (version_id and
+            str(uuid) != str(version_id) and not elaborate):
+            continue
+
+        paramdefs = None
+        if version.paramdefs != None:
+            paramdefs = json.loads(version.paramdefs)
             pass
+        
+        versions[uuid] = ProfileVersion(
+            id = uuid,
+            version = version.version,
+            updater = version.updater,
+            created_at = TBDatetimeGMT(version.created),
+            deleted_at = TBDatetimeGMT(version.deleted),
+            parameters = paramdefs,
+            script = version.script,
+            rspec = version.rspec,
+        )
         pass
 
     current = profile.versions[profile.version]
