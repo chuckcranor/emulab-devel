@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,7 +92,7 @@ my $query_result =
 		 "where webonly=0 and wikionly=0 and ".
 		 "      (u.status='active' or u.status='frozen') and ".
 		 "      revoked is null ".
-		 "order by u.uid");
+		 "order by s.last_activity desc");
 
 while (my ($uid,$uid_idx,$encrypted) = $query_result->fetchrow_array()) {
     system("$CHECKQUOTA $uid");
