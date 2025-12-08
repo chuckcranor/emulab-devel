@@ -96,7 +96,9 @@ class ExperimentCreate(BaseModel):
         None,
         description='For a repository based profile, optionally specify a refspec[:hash] to use instead of the HEAD of the default branch',
     )
-
+    sshpubkey: Optional[str] = Field(
+        None, description='Additional ssh public key for the experiment'
+    )
 
 class ExperimentModify(BaseModel):
     bindings: AnyObject = Field(
@@ -448,6 +450,9 @@ class Experiment(BaseModel):
     )
     last_snapshot_status: Optional[SnapshotStatus] = Field(
         None, description='Status for most recent snapshot request'
+    )
+    sshpubkey: Optional[str] = Field(
+        None, description='Additional ssh public key for the experiment'
     )
 
 

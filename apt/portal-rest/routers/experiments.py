@@ -95,6 +95,7 @@ ExperimentValidation = {
     "stop_at"          : None,
     "refspec"          : "default:tinytext:optional",
     "bindings"         : None,
+    "sshpubkey"        : "default:text:optional",
 }
 
 #
@@ -522,6 +523,22 @@ def create_experiment(
     if create.start_at != None:
         command += "--start " + str(int(create.start_at.timestamp())) + " "
         pass
+    if create.refspec != None:
+        command += "--refspec " + shlex.quote(create.refspec) + " "
+        pass
+
+    # An extra ssh public key for the experiment.
+    pubkeyFile = None
+    if create.sshpubkey:
+        LOG.info("PubKey: %r", create.sshpubkey)
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as fp:
+            fp.write(create.sshpubkey)
+            fp.flush()
+            os.chmod(fp.name, 0o644)
+            pubkeyFile = fp.name
+            pass
+        command += "--sshpubkey " + pubkeyFile + " "
+        pass
 
     bindingsFile = None
     if create.bindings:
@@ -546,6 +563,9 @@ def create_experiment(
     completed = SUEXEC(current_user, group, command)
     if bindingsFile:
         os.unlink(bindingsFile)
+        pass
+    if pubkeyFile:
+        os.unlink(pubkeyFile)
         pass
     if completed.returncode != 0:
         return HandleShellError(completed)
@@ -846,6 +866,7 @@ def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
             # The URL is generated on the fly in APT_Instance.
             #url = "https://",
             aggregates = aggregate_list,
+            sshpubkey = instance.sshpubkey,
         )
         if instance.repourl:
             exp.repository_url = AnyUrl(instance.repourl)
