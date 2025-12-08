@@ -950,6 +950,10 @@ class Instance
                            "cl-ap"              => true,
                            "wifi-ap"            => true,
                            "bb-pc"              => true,
+                           "ue1"                => true,
+                           "ue2"                => true,
+                           "ue3"                => true,
+                           "ue4"                => true,
                            # Wisconsin, not ready yet
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
