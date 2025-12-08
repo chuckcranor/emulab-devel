@@ -2109,6 +2109,18 @@ sub AddPassword($$$)
     SetText("name", $pswdref, $name);
     $pswdref->appendText($text);
 
+    my @list = FindNodesNS("n:password", $rspec,
+			   $EMULAB_NS)->get_nodelist();
+    #
+    # Fix a problem for David; prepend system added passwords.
+    #
+    if (@list > 1) {
+	# Reference to the last password.
+	my $ref = pop(@list);
+	my $first = $list[0];
+	$rspec->removeChild($ref);
+	$rspec->insertBefore($ref, $first);
+    }
     return $pswdref;
 }
 
