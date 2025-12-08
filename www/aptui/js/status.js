@@ -2982,6 +2982,8 @@ $(function ()
 		else {
 		    clone.find(' [name=delete]')
 			.parent().addClass('disabled');		    
+		    clone.find(' [name=delete]')
+                        .attr("disabled", true);
 		}
 		if (canrecover) {
 		    // Recovery button handler
@@ -3085,6 +3087,8 @@ $(function ()
 		else {
 		    clone.find(' [name=vnc]')
 			.parent().addClass('disabled');
+		    clone.find(' [name=vnc]')
+                        .attr("disabled", true);
 		}
 
 		// Optional service execution logs.
