@@ -2031,7 +2031,8 @@ $(function ()
 						callback);
 	    deferred.push(xmlthing);
 	});
-	if (window.FROMRSPEC) {
+	if (window.FROMRSPEC ||
+            (resgroup && !resgroup.approved)) {
 	    $.when.apply($, deferred).then(function() {
 		RegenCombinedGraph();
 	    });
