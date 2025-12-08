@@ -1,0 +1,27 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("user_sso_codes")) {
+       DBQueryFatal("CREATE TABLE `user_sso_codes` ( ".
+		    " `idx` int(10) unsigned NOT NULL AUTO_INCREMENT, ".
+		    " `code` varchar(40) NOT NULL default '', ".
+		    " `uid` varchar(8) NOT NULL DEFAULT '', ".
+		    " `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0', ".
+		    " `expires` datetime NOT NULL, ".
+		    " PRIMARY KEY (`idx`) ".
+		    " ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

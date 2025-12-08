@@ -6391,6 +6391,20 @@ CREATE TABLE `user_jwt_tokens` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `user_sso_codes`
+--
+
+DROP TABLE IF EXISTS `user_sso_codes`;
+CREATE TABLE `user_sso_codes` (
+  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(40) NOT NULL default '',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `expires` datetime NOT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `users`
 --
 
