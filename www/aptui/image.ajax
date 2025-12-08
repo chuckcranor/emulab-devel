@@ -919,6 +919,107 @@ function Do_Snapshot()
     SPITAJAX_RESPONSE($url);
 }
 
+#
+# Import a Cloud image
+#
+function Do_ImportCLImage()
+{
+    global $this_user, $ajax_args;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $TB_PROJECT_MAKEIMAGEID;
+
+    $this_idx   = $this_user->uid_idx();
+    $this_uid   = $this_user->uid();
+    # Allow for form precheck only. So JS code knows it will be fast. 
+    $checkonly  = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
+
+    if (!isset($ajax_args["formfields"])) {
+	SPITAJAX_ERROR(1, "Missing formfields");
+	return;
+    }
+    $formfields = $ajax_args["formfields"];
+    $errors = array();
+    $node   = null;
+
+    $required = array("pid", "imagename", "image_url", "image_os",
+                      "image_architecture");
+
+    foreach ($required as $field) {
+	if (!isset($formfields[$field]) || $formfields[$field] == "") {
+	    $errors[$field] = "Missing field";
+	}
+    }
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return;
+    }
+    $pid = $formfields["pid"];
+    $project = Project::Lookup($pid);
+    if (!$project) {
+        $errors["pid"] = "No such project";
+    }
+    $imagename = $formfields["imagename"];
+    if (!TBvalid_imagename($imagename)) {
+        $errors["imagename"] = TBFieldErrorString();
+    }
+    if (!count($errors)) {
+        $image = Image::LookupByName($project, $imagename);
+        if ($image) {
+            $errors["imagename"] = "Already in use";
+        }
+    }
+
+    $os = $formfields["image_os"];
+    if ($os != "Linux") {
+        $errors["image_os"] = "Must be Linux (for now)";
+    }
+
+    $arch = $formfields["image_architecture"];
+    if ($arch != "x86_64" && $arch != "aarch64") {
+        $errors["image_architecture"] = "Must be x86_64 or aarch64";
+    }
+
+    $url = $formfields["image_url"];
+    if (!preg_match("/^http[s]?:\/\//", $url) || !TBvalid_URL($url)) {
+        $errors["image_url"] = "Not a valid URL";
+    }
+        
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return;
+    }
+    if ($checkonly) {
+	SPITAJAX_RESPONSE(0);
+	return;
+    }
+    $webtask = WebTask::CreateAnonymous();
+        
+    $retval = SUEXEC($this_uid, $pid,
+                     "webimportclimage -t " . $webtask->task_id() . " " .
+                     "-a $arch $pid $imagename " . escapeshellarg($url),
+                     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    if ($retval != 0) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal error starting snapshot");
+        }
+        else {
+            # Need to pass exitcode through on this one.
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
+        }
+        $webtask->Delete();
+        return;
+    }
+    $newimage = Image::Lookup($webtask->TaskValue("imageid"));
+    if (!$newimage) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        SPITAJAX_ERROR(-1, "Internal error important cloud image");
+    }
+    $url = "show-image.php?imageid=" . $newimage->uuid();
+    SPITAJAX_RESPONSE($url);
+}
+
 # Local Variables:
 # mode:php
 # End:

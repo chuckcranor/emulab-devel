@@ -1,0 +1,115 @@
+<style>
+ .panel-heading-list {
+     padding: 2px;
+ }
+ .panel-body-dashboard {
+     padding: 2px;
+ }
+</style>  
+<div class='row'>
+  <div class='col-lg-8 col-lg-offset-2 offset-lg-2
+	      col-md-8 col-md-offset-2 offset-md-2
+	      col-sm-12 
+	      col-xs-12'>
+    <div class='card panel panel-default'>
+      <div class='card-header panel-heading'>
+        <h3 class='card-title panel-title'>
+	  Import a Cloud Image
+	</h3>
+      </div>
+      <div class='card-body panel-body'>
+	<div style="margin-bottom: 10px;">
+	  <center><span id="general_error" style="color:red;"></span></center>
+	</div>
+	<form id='import-form'
+              class='form-horizontal' role='form'>
+	  <div class='row'>
+	    <div class='col-sm-12'>
+	      <% if (projects.length == 1) { %>
+		<div class="form-group">
+		  <input name="pid" readonly
+			 id="pid"
+			 value="<%- formfields.pid %>"
+			 class="form-control format-me"
+			 data-label="Project"
+			 data-key="pid">
+		</div>
+	      <% } else { %>
+		<div class="form-group">
+		  <select name="pid"
+			  class='form-control format-me'
+			  data-colsize="6"
+			  data-key="pid"
+			  data-label="Project"
+			  placeholder='Please Select'>
+		    <% _.each(projects, function(name) { %>
+		      <option 
+			  <% if (_.has(formfields, 'pid') &&
+			    formfields.pid == name) { %>
+			  selected
+			  <% } %>
+			  value='<%= name %>'><%= name %>
+		      </option>
+		    <% }); %>
+		  </select>
+		</div>
+	      <% } %>
+	      <div class="form-group">
+		<input name='imagename'
+		       placeholder="alphanumeric, dash, no whitespace"
+		       value="<%- formfields.image_name %>"
+		       class="form-control format-me"
+		       data-key="imagename"
+		       data-colsize="6"
+		       data-label="Image Name">
+	      </div>
+	      <div class="form-group">
+		<input name='image_url'
+		       placeholder="https://..."
+		       value="<%- formfields.image_url %>"
+		       class="form-control format-me"
+		       data-key="image_url"
+		       data-colsize="6"
+		       data-label="Image URL">
+	      </div>
+	      <div class="form-group">
+		<input name="image_os" readonly
+		       value="Linux"
+		       class="form-control format-me"
+		       data-label="OS"
+		       data-key="image_os">
+	      </div>
+	      <div class="form-group">
+		<select name="image_architecture"
+			id="pid"
+			class='form-control format-me'
+			data-colsize="6"
+			data-key="image_architecture"
+			data-label="Architecture"
+			placeholder='Please Select'>
+		  <% _.each(architectures, function(arch) { %>
+		    <option 
+			<% if (_.has(formfields, 'image_architecture') &&
+			  formfields.image_architecture == arch) { %>
+			selected
+			<% } %>
+			value='<%= arch %>'><%= arch %>
+		    </option>
+		  <% }); %>
+		</select>
+	      </div>
+	      
+              <button class='btn btn-primary btn-sm pull-right'
+                      id='import-submit-button'
+                      type='submit' name='submit'>Submit</button>
+	    </div>
+	  </div>
+	</form>
+      </div>
+    </div>
+  </div>
+</div>
+<div>
+  <div id='oops_div'></div>
+  <div id='waitwait_div'></div>
+</div>

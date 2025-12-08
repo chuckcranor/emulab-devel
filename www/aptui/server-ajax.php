@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -565,7 +565,11 @@ $routing = array("geni-login" =>
                                                  "SnapshotStatus" =>
                                                      "Do_SnapshotStatus",
                                                  "Modify" =>
-                                                     "Do_Modify")),
+                                                     "Do_Modify",
+                                                 "ImportCLImage" =>
+                                                     "Do_ImportCLImage",
+                              )
+                        ),
 		 "node" =>
 			array("file"    => "node.ajax",
 			      "guest"   => true,

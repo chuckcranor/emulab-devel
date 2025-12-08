@@ -1,0 +1,463 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+use strict;
+use English;
+use Getopt::Std;
+use POSIX qw(strftime);
+use CGI;
+use File::Temp qw(tempfile);
+
+#
+# Import a cloudinit image.
+#
+sub usage()
+{
+    print("Usage: importclimage [-d] <pid>[/<gid>] <imagename> <url>\n".
+	  "       importclimage [-d] <pid>[/<gid>] <imagename> <filename>\n".
+	  "Options:\n".
+	  " -d         - Turn on debug mode\n".
+	  " -n         - Impotent mode\n".
+	  " -g         - Image is global\n".
+	  " -a <arch>  - Architecture; either x86_64 or aarch64\n".
+	  "<pid>       - project for new image\n".
+	  "<pid>/<gid> - project and subgroup of new image\n".
+	  "<imagename> - image name\n");
+	  
+    exit(-1);
+}
+my $optlist     = "dnt:ga:";
+my $debug       = 0;
+my $impotent    = 0;
+my $global      = 0;
+my $OS          = "Linux";
+my $OSfeatures  = "ping,ssh,cloud-init";
+my $OPmode      = "MINIMAL";
+my $architecture= "x86_64",
+my $imtracker   = 0;    
+my $webtask;
+my ($project,$group);
+my ($pid,$gid);
+my ($imagename,$source);
+my $image;
+my $logfile;
+
+#
+# Configure variables
+#
+my $TB           = "@prefix@";
+my $PROJROOT     = "@PROJROOT_DIR@";
+my $GROUPROOT    = "@GROUPSROOT_DIR@";
+my $CONTROL      = "@USERNODE@";
+my $NEWIMAGEEZ   = "$TB/bin/newimageid_ez";
+my $MKPROJDIRS   = "/usr/testbed/sbin/mkprojdirs";
+my $CONVERTIMAGE = "/usr/testbed/sbin/convertclimage";
+my $IMAGEVALIDATE= "/usr/testbed/sbin/imagevalidate";
+my $POSTIMAGEDATA= "/usr/testbed/sbin/protogeni/postimagedata";
+my $SSH		 = "/usr/bin/ssh";
+my $SUDO	 = "/usr/local/bin/sudo";
+my $DOIMAGEDIRS  = @IMAGEDIRECTORIES@;
+my $SAVEUID      = $UID;
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# We don't want to run this script unless its the real version.
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be setuid! Maybe its a development version?\n");
+}
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libdb;
+use emutil;
+use libEmulab;
+use EmulabConstants;
+use libtestbed;
+use User;
+use Project;
+use Group;
+use OSImage;
+use WebTask;
+use Logfile;
+
+# Protos
+sub fatal($);
+sub logit($);
+
+#
+# There is no reason to run as root until later.
+#
+$EUID = $UID;
+
+#
+# Map invoking user to object. 
+#
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+# For posting the image data. 
+if (GetSiteVar("protogeni/use_imagetracker")) {
+    $imtracker = 1;
+}
+
+#
+# Parse command arguments. 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"g"})) {
+    $global = 1;
+}
+if (defined($options{"a"})) {
+    $architecture = $options{"a"};
+    fatal("Only	x86_64 or aarch64 images supported")
+	if ($architecture ne "x86_64" && $architecture ne "aarch64");
+}
+if (defined($options{"t"})) {
+    my $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    $webtask->AutoStore(1);
+}
+
+usage()
+    if (@ARGV != 3);
+
+$group = Group->Lookup($ARGV[0]);
+if (defined($group)) {
+    $project = $group->GetProject();
+}
+elsif ($project = Project->Lookup($ARGV[0])) {
+    $group = $project->GetProjectGroup();
+}
+else {
+    fatal("No such project or group");
+}
+$pid = $project->pid();
+$gid = $group->gid();
+$imagename = $ARGV[1];
+$source    = $ARGV[2];
+
+if ($source !~ /^http/) {
+    fatal("Only URLs at the moment");
+}
+#
+# The "source" goes into the description, so make sure it is ok.
+#
+if (! TBcheck_dbslot($source, "images",
+		     "description", TBDB_CHECKDBSLOT_ERROR)) {
+    fatal("Invalid source (for description): " . TBFieldErrorString());
+}
+if (! TBcheck_dbslot($imagename, "images",
+		     "imagename", TBDB_CHECKDBSLOT_ERROR)) {
+    fatal("Invalid imagename: " . TBFieldErrorString());
+}
+# We know this is valid, but must taint check anyway for shell command.
+if ($imagename =~/^(.*)$/) {
+    $imagename = $1;
+}
+# Ditto
+if ($source =~/^(.*)$/) {
+    $source = $1;
+}
+
+#
+# Determine path.
+# Subgroups change the path, but a global image should still
+# go into the project image directory.
+#
+my $path = ($pid eq $gid || $global ?
+	    "$PROJROOT/$pid/images/" :
+	    "$GROUPROOT/$pid/$gid/images/");
+if ($DOIMAGEDIRS) {
+    $path .= "${imagename}/";
+}
+else {
+    $path .= "${imagename}.ndz";
+}
+
+#
+# Create the image descriptor. We use the backend script to do the
+# heavy lifting, but we have to cons up an XML file based on the image
+# descriptor that is being cloned.
+#
+# These are the fields we have to come up with, plus a number
+# of mtype_* entries.
+#
+my %xmlfields =
+    ("imagename"	=> $imagename,
+     "pid"		=> $pid,
+     "gid"		=> $gid,
+     "description"	=> $source,
+     "OS"		=> $OS,
+     "version"		=> "Cloud",
+     "path"		=> $path,
+     "op_mode",		=> $OPmode,
+     "reboot_waittime"  => 120,
+     "osfeatures"       => $OSfeatures,
+     "mbr_version"	=> 1,
+     "wholedisk",	=> 1,
+     "loadpart"		=> 1,
+     "architecture"	=> $architecture,
+     # Other cluster are not yet able to run these images.
+     "noexport"		=> 1,
+);
+if ($global) {
+    $xmlfields{"global"} = 1;
+}
+else {
+    $xmlfields{"shared"} = 1;
+}
+
+#
+# Create the XML file to pass to newimageid_ez.
+#
+my ($fh, $filename) = tempfile(UNLINK => 1);
+fatal("Could not create temporary file")
+    if (!defined($fh));
+
+print $fh "<image>\n";
+foreach my $key (keys(%xmlfields)) {
+    my $value = $xmlfields{$key};
+
+    print $fh "<attribute name=\"$key\">";
+    print $fh "<value>" . CGI::escapeHTML($value) . "</value>";
+    print $fh "</attribute>\n";
+}
+print $fh "</image>\n";
+close($fh);
+
+if ($debug) {
+    system("/bin/cat $filename");
+}
+
+my $output = emutil::ExecQuiet("$NEWIMAGEEZ -s -v $filename");
+if ($?) {
+    print STDERR $output;
+    my $foo = `cat $filename`;
+    print STDERR $foo;
+    fatal("Failed to verify image descriptor from $filename");
+}
+if ($impotent) {
+    print "Not doing anything in impotent mode\n";
+    system("cat $filename");
+    exit(0);
+}
+
+# Make sure this works before creating.
+$project->UpdateExports(1) == 0 or
+    fatal("Could not export project directory");
+$project->WaitForMount() == 0 or
+    fatal("Could not mount project directory");
+# And since the imports directory is new, make sure it is created.
+system("$MKPROJDIRS $pid " . ($pid ne $gid ? $gid : "")) == 0 or
+    fatal("Could not create project imports directory");
+
+$output = emutil::ExecQuiet("$NEWIMAGEEZ -s -L $PID $filename");
+if ($?) {
+    print STDERR $output;
+    my $foo = `cat $filename`;
+    print STDERR $foo;
+    fatal("Failed to create image descriptor");
+}
+# Image is returned locked (-L)
+$image = OSImage->Lookup($pid, $imagename);
+if (!defined($image)) {
+    fatal("Cannot lookup newly created image for $imagename");
+}
+# No versioning of cloud images, not sure it would make any sense.
+$image->SetNoVersioning(1);
+
+# Create the image directory, typically done in create_image.
+$image->CreateImageDir() == 0 or
+    fatal("Could not create image directory");
+
+#
+# Now call out to ops to do the import.
+#
+my ($tmpdir,$imgdir);
+if ($pid ne $gid) {
+    $tmpdir = "$GROUPROOT/$pid/$gid/imports/$imagename";
+    $imgdir = "$GROUPROOT/$pid/$gid/images/$imagename";
+}
+else {
+    $tmpdir = "$PROJROOT/$pid/imports/$imagename";
+    $imgdir = "$PROJROOT/$pid/images/$imagename";
+}
+my $tmpfile = "$tmpdir/$imagename.ndz";
+if (-e $tmpfile) {
+    $EUID = 0;
+    system("/bin/rm -f $tmpfile") == 0 or
+	fatal("Could not delete $tmpfile");
+    $EUID = $UID;
+}
+
+#
+# The rest of this takes a while.
+#
+if (! $debug) {
+    $logfile = Logfile->Create($group);
+    fatal("Could not create a logfile")
+	if (!defined($logfile));
+    
+    # Mark it open since we are going to start using it right away.
+    $logfile->Open();
+    
+    # Logfile becomes the current spew.
+    $image->SetLogFile($logfile);
+
+    if (defined($webtask)) {
+	$webtask->logfileid($logfile->logid());
+	$webtask->imageid($image->imageid());
+    }
+    if (my $childpid = TBBackGround($logfile->filename())) {
+	# Parent exits normally
+	exit(0);
+    }
+}
+
+my $command = "$SSH $CONTROL $CONVERTIMAGE -d ";
+$command .= " -u '$source' ";
+$command .= "$pid";
+$command .= "/$gid" if ($pid ne $gid);
+$command .= " " . $imagename;
+if ($debug) {
+    logit($command);
+}
+$EUID = $UID = 0;
+if (system($command)) {
+    fatal("Image converter failed");
+}
+$EUID = $UID = $SAVEUID;
+
+#
+# Move the image file into place and imagevalidate it.
+# Run imagevalidate as root so it has access/permissions.
+#
+$EUID = 0;
+system("/bin/mv $tmpfile $imgdir") == 0 or
+    fatal("Could not mv $tmpfile to $imgdir");
+
+# This will update the owner/group/perms
+system("$IMAGEVALIDATE -u $pid/$imagename") == 0 or
+    fatal("Could not validate image");
+$EUID = $UID;
+
+# These images are immediately released.
+$image->MarkReady();
+$image->Release();
+
+if ($imtracker) {
+    # Need this to make the image look like it was created on the Geni path.
+    $image->Update({"creator_urn" => $this_user->urn()});
+    
+    #
+    # If we are using the image tracker, post the image data to the IMS.
+    #
+    system("$POSTIMAGEDATA " . $image->versname());
+    # Failure is okay, the daemon will pick it up.
+}
+
+# Logfile to tblogs.
+if (!$debug) {
+    my $imageurl = $project->wwwBase() .
+	"/show-image.php?imageid=" . $image->imageid();
+    
+    $project->SendEmail($this_user->email(),
+			"Cloud image imported",
+			"Cloud image import has finished\n\n".
+			$imageurl . "\n\n",
+			$project->OpsEmailAddress(),
+			"BCC: " . $project->LogsEmailAddress(),
+			$logfile->filename());
+}
+if (defined($logfile)) {
+    # Close up the log file so the webpage stops.
+    $logfile->Close();
+    # And store it so that we can look at it until the next create_image,
+    $logfile->Store();
+}
+if (defined($webtask)) {
+    $webtask->imageid($image->imageid());
+    $webtask->Exited(0);
+}
+$image->Unlock();
+exit(0);
+
+sub logit($)
+{
+    my ($msg) = @_;
+
+    my $stamp = strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print STDERR "$stamp: $msg\n";
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($logfile)) {
+	# Close up the log file so the webpage stops.
+	$logfile->Close();
+	# And store it so that we can look at it until the next create_image,
+	$logfile->Store();
+    }
+    $image->Unlock()
+	if (defined($image) && $image->GotLock());
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(-1);
+}
+
