@@ -1170,6 +1170,7 @@ sub DoCommitInfo()
     }
     # Remove non ascii chars
     $author =~ tr/\x80-\xFF//d;	
+    $log    =~ tr/\x80-\xFF//d;	
     
     my $blob = {"hash"      => $hash,
 		"author"    => $author,
