@@ -64,7 +64,8 @@ from ..api.models import (
     Token,
     RawToken,
     TokenRole,
-    TokenScope
+    TokenScope,
+    Auth0TokenRequest
 )
 
 # Testbed DB access lib
@@ -138,15 +139,16 @@ def refresh_token(
 #
 # Redeem a code to get an auth0 token for a user. RDZ SSO
 #
-@router.put("/redeem")
+@router.post("/redeem", status_code=status.HTTP_201_CREATED)
 def get_redeem(
-        code: str = None,
+        stuff: Auth0TokenRequest = None,
         DB: Session = Depends(get_DB)) -> RawToken:
-    LOG.info("get_redeem: %r", code)
+    LOG.info("get_redeem: %r", stuff)
 
-    if code == None:
+    if stuff == None or not hasattr(stuff, "code") or stuff.code == None:
         raise PortalException(
             status.HTTP_400_BAD_REQUEST, "Must supply a code")
+    code = stuff.code
 
     if not re.match("^([\w]+)$", code):
         raise PortalException(
