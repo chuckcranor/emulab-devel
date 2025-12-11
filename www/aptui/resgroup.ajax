@@ -603,7 +603,7 @@ function Do_Delete()
     global $TBDB_TRUST_GROUPROOT;
     $this_idx = $this_user->uid_idx();
     $opt = "";
-    $resuuid = "";
+    $resuuids = "";
 
     sleep(2);
 
@@ -633,21 +633,21 @@ function Do_Delete()
 	return;
     }
     
-    if (isset($ajax_args["reservation_uuid"]) &&
-        $ajax_args["reservation_uuid"] != "") {
-        $resuuid = $ajax_args["reservation_uuid"];
-        if (!IsValidUUID($resuuid)) {
-            SPITAJAX_ERROR(-1, "Invalid uuid");
-            return;
-        }
-        if (!$resgroup->Reservation($resuuid)) {
-            SPITAJAX_ERROR(-1, "No such reservation in group");
-            return;
+    if (isset($ajax_args["reservation_uuids"])) {
+        foreach ($ajax_args["reservation_uuids"] as $resuuid) {
+            if (!IsValidUUID($resuuid)) {
+                SPITAJAX_ERROR(-1, "Invalid uuid");
+                return;
+            }
+            if (!$resgroup->Reservation($resuuid)) {
+                continue;
+            }
+            $resuuids .= $resuuid . " ";
         }
     }
     elseif (isset($ajax_args["allroutes"])) {
         foreach ($resgroup->routereservations() as $res) {
-            $resuuid .= $res->route_uuid() . " ";
+            $resuuids .= $res->route_uuid() . " ";
         }
     }
     
@@ -678,7 +678,7 @@ function Do_Delete()
     $retval = SUEXEC($this_uid, $pid,
                      "webmanage_resgroup ".
                      "-t " . $webtask->task_id() .
-                     " delete $opt $uuid $resuuid",
+                     " delete $opt $uuid $resuuids",
                      SUEXEC_ACTION_IGNORE);
     
     #SUEXECERROR(SUEXEC_ACTION_CONTINUE);

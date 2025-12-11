@@ -80,6 +80,18 @@ $(function ()
 	otaStuff.RequestOtaPermission(pid);
     }
 
+    // Special case for treating OTA lab as a single unit.
+    function isOTALabNode(cluster_urn, type)
+    {
+        if (window.ISPOWDER &&
+            _.has(radioinfo, cluster_urn) &&
+            _.has(radioinfo[cluster_urn], type) &&
+            radioinfo[cluster_urn][type].itype == "OTA") {
+            return true;
+        }
+        return false;
+    }
+
     var addClusterRowString = 
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
 	'    <tr>' +
@@ -193,16 +205,18 @@ $(function ()
 	'		 data-trigger="hover" ' +
 	'		 title="Add a new reservation row"></span>' +
 	'       </button>' +
-	'       <button type="button" ' +
-	'               class="btn btn-xs btn-default delete-reservation ' +
-	'                      hidden" ' +
-	'               style="color: red;">' +
- 	'          <span class="glyphicon glyphicon-remove" ' +
-	'		 data-toggle="tooltip" ' +
-	' 		 data-container="body" ' +
-	'		 data-trigger="hover" ' +
-	'		 title="Delete this cluster reservation"></span>' +
-	'       </button>' +
+	'	<% if (candelete) { %>' +
+	'         <button type="button" ' +
+	'                 class="btn btn-xs btn-default delete-reservation ' +
+	'                        hidden" ' +
+	'                 style="color: red;">' +
+ 	'            <span class="glyphicon glyphicon-remove" ' +
+	'		   data-toggle="tooltip" ' +
+	' 		   data-container="body" ' +
+	'		   data-trigger="hover" ' +
+	'		   title="Delete this cluster reservation"></span>' +
+	'         </button>' +
+	'	<% } %>' +
 	'     </td>' +
 	'     <% if (window.ISADMIN) { %> ' +
 	'       <td style="width: 16px; padding-right: 0px;">' +
@@ -475,7 +489,7 @@ $(function ()
      */
     function modified_callback()
     {
-	console.info("modified_callback");
+	//console.info("modified_callback");
 	ToggleSubmit(true, "check");
 	aptforms.MarkFormUnsaved();
 	if (editing) {
@@ -660,6 +674,7 @@ $(function ()
 	}
 	if (window.ISPOWDER) {
 	    $('#range-info-div').html(templates["range-tabs"]);
+            SetupOtaLab();
 	}
  	
 	// Add one unassigned row.
@@ -877,12 +892,15 @@ $(function ()
 		// Kill tooltips since they get left behind if visible.
 		row.find('[data-toggle="tooltip"]').tooltip('destroy');
 		row.remove();
-		if ($('#cluster-table tbody').length == 1) {
+		if ($('#cluster-table tbody').length == 0) {
+                    return AddClusterRow();
+                }
+		else if ($('#cluster-table tbody').length == 1) {
 		    $('#cluster-table .delete-cluster').hide();
 		    $('#cluster-table .add-cluster').show();
 		}
 		else {
-		    $('#cluster-table .delete-cluster').show();
+		    $('#cluster-table .delete-cluster:not([disabled])').show();
 		    $('#cluster-table .add-cluster').show();
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
@@ -900,7 +918,7 @@ $(function ()
 	    $('#cluster-table .delete-cluster').hide();
 	}
 	else {
-	    $('#cluster-table .delete-cluster').show();
+	    $('#cluster-table .delete-cluster:not([disabled])').show();
 	    $('#cluster-table .add-cluster').not(":last").hide();
 	}
 	return row;
@@ -1152,7 +1170,14 @@ $(function ()
                 modified_callback();
 	    }
 	    else {
-                Delete(undefined, true /* allroutes */);
+                if (window.UUID) {
+                    Delete(undefined, true /* allroutes */,
+                           // Cancel handler
+                           function () {
+                               // Reset this back to checked
+		               $('#allroutes-checkbox').prop("checked", true);
+                           });
+                }
 		// OTA perm warning.
 		$('#allroutes-ota-warning').addClass("hidden");
 	    }
@@ -1160,6 +1185,83 @@ $(function ()
 	});
 	// OTA permission request.
 	$('#allroutes-ota-warning .ota-request-permission')
+	    .click(requestOtaPermission);
+    }
+
+    /*
+     * OK< treat the OTA lab as a single resource. First cut is simple.
+     */
+    function SetupOtaLab()
+    {
+	console.info("SetupOtaLab");
+
+	$('#ota-alloc-div .otalab-help').popover({
+	    trigger: 'hover',
+	    container: 'body',
+	    delay: {"hide":1000},
+	    content: 'The OTA lab is allocated as a single unit. When you ' +
+                'click this button, all of the OTA lab resources will be ' +
+                'added to this reservation. Deselecting the button will '+
+                'remove all of the OTA lab reources.'
+
+	});
+	$("#ota-alloc-div").removeClass("hidden");
+
+	$('#otalab-checkbox').change(function () {
+	    var ischecked =  $('#otalab-checkbox').is(":checked");
+	    console.info("OTA lab: " + ischecked);
+
+	    if (ischecked) {
+                _.each(radioinfo, function(details, urn) {
+                    _.each(radioinfo[urn], function(radio, node_id) {
+                        if (radio.itype != "OTA") {
+                            return;
+                        }
+                        console.info(urn,node_id);
+		        var row = AddClusterRow();
+		        row.find(".cluster-select").val(urn).change();
+		        row.find(".hardware-select").val(node_id).change();
+                        row.find(".delete-cluster").attr("disabled", "disabled");
+                        row.find(".delete-cluster").hide();
+                    });
+                });
+		// OTA perm warning.
+		var pid = (editing ? current_pid : $('#pid').val());
+		if (!otaStuff.HasOtaPermission(pid)) {
+		    // OTA perm warning.
+		    $('#otalab-ota-warning').removeClass("hidden");
+		}
+                modified_callback();
+	    }
+	    else {
+                var rows = [];
+                _.each(GetClusterRows(true), function (row, uuid) {
+                    if (isOTALabNode(row.cluster, row.type)) {
+                        if (row.isnew) {
+                            $("#reserve-request-form tbody[data-uuid=" +
+                              row.uuid + "] .delete-cluster").click();
+                        }
+                        else {
+                            rows.push(row.row);
+                        }
+                    }
+                });
+                if (window.UUID && rows.length) {
+                    Delete(rows, false,
+                           // Cancel handler
+                           function () {
+                               // Reset this back to checked
+		               $('#otalab-checkbox').prop("checked", true);
+                           });
+                }
+                
+		// OTA perm warning.
+		$('#otalab-ota-warning').addClass("hidden");
+	    }
+	    RegenCombinedGraph();
+	});
+	// OTA permission request.
+	$('#otalab-ota-warning .ota-request-permission')
 	    .click(requestOtaPermission);
     }
 
@@ -1584,7 +1686,7 @@ $(function ()
     /*
      * Generate list of cluster rows for passing to the server.
      */
-    function GetClusterRows()
+    function GetClusterRows(withRow)
     {
 	var clusters = {};
 
@@ -1614,7 +1716,11 @@ $(function ()
 	    clusters[uuid] = {"cluster" : cluster,
 			      "type"    : type,
 			      "count"   : count,
-			      "uuid"    : uuid};
+			      "uuid"    : uuid,
+                              "isnew"   : tbody.hasClass("new-cluster")};
+            if (withRow) {
+                clusters[uuid]["row"] = tbody;
+            }
 	});
 	return clusters;
     }
@@ -2880,6 +2986,7 @@ $(function ()
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
 		_.each(details.clusters, function (res) {
+                    var isota = isOTALabNode(res.cluster_urn, res.type);
 		    var html = clusterRowTemplate({
 			"cluster"     : res.cluster_id,
 			"cluster_urn" : res.cluster_urn,
@@ -2889,6 +2996,7 @@ $(function ()
 			"remote_uuid" : res.remote_uuid,
 			"active"      : details.active,
 			"approved"    : res.approved,
+                        "candelete"   : !isota || isadmin,
 		    });
 		    var row = $(html);
 		    // Handler for changing node count.
@@ -2896,14 +3004,19 @@ $(function ()
 			HandleCountChange(row);
 		    });
 		    // Handler for delete row.
-		    row.find(".delete-reservation").click(function () {
-			Delete(row);
-		    });
+                    if (!isota || isadmin) {
+		        row.find(".delete-reservation").click(function () {
+			    Delete([row]);
+		        });
+                    }
 		    // This activates the tooltip subsystem.
 		    row.find('[data-toggle="tooltip"]').tooltip({
 			placement: 'auto'
 		    });
 		    $('#cluster-table').append(row);
+                    if (isota) {
+                        $('#otalab-checkbox').prop("checked", true);
+                    }
 		});
 		UpdateClustersTable(details);
 		if (canEnlarge()) {
@@ -2940,7 +3053,7 @@ $(function ()
 		    var row = $(html);
 		    // Handler for delete row.
 		    row.find(".delete-range").click(function () {
-			Delete(row);
+			Delete([row]);
 		    });
 		    // This activates the tooltip subsystem.
 		    row.find('[data-toggle="tooltip"]').tooltip({
@@ -2976,7 +3089,7 @@ $(function ()
 		    var row = $(html);
 		    // Handler for delete row.
 		    row.find(".delete-route").click(function () {
-			Delete(row);
+			Delete([row]);
 		    });
 		    // This activates the tooltip subsystem.
 		    row.find('[data-toggle="tooltip"]').tooltip({
@@ -3523,9 +3636,9 @@ $(function ()
     /*
      * Delete a reservation. Might be a group, or a single row in a group
      */
-    function Delete(row, allroutes)
+    function Delete(rows, allroutes, cancel_callback)
     {
-	console.info("Delete", row, allroutes);
+	console.info("Delete", rows, allroutes);
 	
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -3543,8 +3656,12 @@ $(function ()
 	};
 
 	var args = {"uuid" : window.UUID};
-	if (row !== undefined) {
-	    args["reservation_uuid"] = $(row).attr('data-uuid');
+	if (rows !== undefined) {
+            var uuids = [];
+            _.each(rows, function (row) {
+                uuids.push($(row).attr('data-uuid'));
+            });
+	    args["reservation_uuids"] = uuids;
 	}
 	else if (allroutes !== undefined) {
 	    args["allroutes"] = 1;
@@ -3560,12 +3677,7 @@ $(function ()
 						      "Delete", args, callback);
                              },
                              // Cancel
-                             function () {
-                                 // Reset this back to checked
-                                 if (allroutes !== undefined) {
-		                     $('#allroutes-checkbox').prop("checked", true);
-                                 }
-                             });
+                             cancel_callback);
     }
 
     /*
@@ -3772,12 +3884,16 @@ $(function ()
 	});
 	_.each(_.keys(nodelist).sort(), function(node_id) {
             var details = nodelist[node_id];
+            var hidden  = "";
 
 	    if (_.has(prunelist, node_id)) {
 		return;
 	    }
-	    options = options +
-		"<option value='" + node_id + "' >" + node_id + "</option>";
+            if (isOTALabNode(selected_cluster, node_id)) {
+                hidden = " style='display:none;' ";
+            }
+	    options = options +	"<option value='" + node_id + "' " +
+                hidden + ">" + node_id + "</option>";
 	});
 	
 	row.find(".hardware-select")	
@@ -3952,6 +4068,7 @@ $(function ()
 		if (fakeroutes) {
 		    $('#allroutes-ota-warning').addClass("hidden");
 		}
+		$('#otalab-ota-warning').addClass("hidden");
 	    }
 	    else {
 		// Only radios
@@ -4473,6 +4590,8 @@ $(function ()
 		}
 	    }
 	}
+        // OTA Lab nodes are a special case handled below
+        var needOTALab = false;
 
 	// Find all the nodes, gather up type info.
 	$(xmlDoc).find("node").each(function() {
@@ -4518,9 +4637,12 @@ $(function ()
 	    if (component_id && manager_id &&
 		_.has(amlist, manager_id) &&
 		_.has(amlist[manager_id].reservable_nodes, component_id)) {
-		var row = AddClusterRow();
 
-		console.info("row", row);
+                if (isOTALabNode(manager_id, component_id)) {
+                    needOTALab = true;
+                    return;
+                }
+		var row = AddClusterRow();
 
 		row.find(".cluster-select").val(manager_id).change();
 		row.find(".hardware-select").val(component_id).change();
@@ -4560,6 +4682,10 @@ $(function ()
 	    }
 	    tcounts[type]++;
 	});
+        if (needOTALab) {
+            $('#otalab-checkbox').prop("checked", true);
+            $('#otalab-checkbox').change();
+        }
 	_.each(tcounts, function (count, type) {
 	    // Find the cluster that has this type.
 	    _.each(amlist, function (details, urn) {

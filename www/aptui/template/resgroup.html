@@ -279,6 +279,30 @@
 		  </span>
 		</div>
 	      </div>
+	      <div class="form-group hidden" id="ota-alloc-div">
+		<div class="format-me"
+		     data-label="OTA Lab"
+		     data-optional="yep"
+		     data-key="otalab">
+		  <input name="otalab-checkbox" style="margin-top: 12px;"
+			 id="otalab-checkbox"
+			 class="ignore-unsaved"
+			 type="checkbox">
+		  <a href='#' class='btn btn-xs otalab-help'>
+		    <span class='glyphicon glyphicon-question-sign'
+		          style="margin-bottom: 6px;"></span>
+		  </a>
+		  <label id="otalab-error"
+			 class="hidden control-label"></label>
+		  <span id="otalab-ota-warning" class="has-warning hidden">
+		    <label class="control-label">
+		      Current project does not have OTA permission.
+		      <a href='' class='ota-request-permission'>
+			Request permission.</a>
+		    </label>
+		  </span>
+		</div>
+	      </div>
 	      <% if (1) { %>
 		<div class="form-group">
 		  <div class="format-me"
