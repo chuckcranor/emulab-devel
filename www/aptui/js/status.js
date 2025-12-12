@@ -484,64 +484,69 @@ $(function ()
 	GetStatus();
 	statusID = setInterval(GetStatus,
                                (window.APT_OPTIONS.slowdown ? 15000 : 5000));
+
+        $(document).on("visibilitychange", function() {
+            if (document.visibilityState === "hidden") {
+                console.info("Page is hidden, stopping activity");
+            }
+            else {
+                console.info("Page is visible, resuming activity");
+                GetStatus();
+            }
+        });        
     }
-    
+
     function GetStatus()
     {
 	//console.info("GetStatus", statusBusy, statusHold);
-	
-	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
 	    return;
-	
-	var callback = function(json) {
-            lastStatusStamp = new Date();
-            
-	    // Watch for logged out, stop the loop. User will need to reload.
-	    if (json.code == 222) {
-		clearInterval(statusID);
-		alert("You are no longer logged in, please refresh to " +
-		      "continue getting page updates");
-	    }
-	    else {
-		StatusWatchCallBack(json, function () {
-		    if (instanceStatus == 'terminated') {
-			clearInterval(statusID);
-		    }
-		    else {
-			// Okay to do again next timeout.
-			statusBusy = 0;
-		    }
-		});
-	    }
-	}
+
         /*
          * Watch for a buried tab/window. Slow down polling since it is hard
          * on the server. But not completely, switch from every five seconds
          * to every few minutes.
          */
-        if (document.hidden !== undefined &&
-            document.hidden && lastStatusStamp) {
+       if (document.hidden && lastStatusStamp) {
             var diff = (new Date().getTime() - lastStatusStamp) / 1000;
             if (0) {
                 console.info("we are hidden and have not updated status for " +
                              diff + " seconds");
             }
             if (diff < 120) {
-                //console.info("Skipping this status call");
+                console.info("Skipping this status call");
                 return;
             }
         }
+        
+	var callback = function(json) {
+            lastStatusStamp = new Date();
+
+            if (json.code < 0) {
+                console.info("Network error");
+		// Okay to try again next timeout.
+		statusBusy = 0;
+                return;
+            }
+	    else if (json.code == 222) {
+		clearInterval(statusID);
+		alert("You are no longer logged in, please refresh to " +
+		      "continue getting page updates");
+                return;
+            }
+	    StatusWatchCallBack(json, function () {
+		if (instanceStatus == 'terminated') {
+		    clearInterval(statusID);
+		}
+		else {
+		    // Okay to do again next timeout.
+		    statusBusy = 0;
+		}
+	    });
+	};
 	statusBusy = 1;
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "status",
-					    "GetInstanceStatus",
-					     {"uuid" : uuid});
-	xmlthing.fail(function(jqXHR, textStatus) {
-	    console.info("GetStatus failed: " + textStatus);
-	    statusBusy = 0;
-	});
-	xmlthing.done(callback);
+	sup.CallServerMethod(ajaxurl, "status", "GetInstanceStatus",
+			     {"uuid" : uuid}, callback);
     }
 
     // Call back for above.
