@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,31 +70,41 @@ function Do_GetStats()
         SPITAJAX_ERROR(1, "Bad value for max");
         return;
     }
-    $whereclause  = "where UNIX_TIMESTAMP(started) > $min ";
-    $whereclause .= "and UNIX_TIMESTAMP(started) < $max ";
+    $whereclause  = "where UNIX_TIMESTAMP(i.started) > $min ";
+    $whereclause .= "and UNIX_TIMESTAMP(i.started) < $max ";
     if ($forclass) {
         $whereclause .= "and p.forClass=1 ";
     }
 
     $query_result =
-        DBQueryFatal("(select i.${target},aggregate_urn,count(i.creator) as ecount, ".
-                     "   sum(physnode_count) as pcount, ".
-                     "   truncate(sum(physnode_count * ".
+        DBQueryFatal("(select i.${target},a.aggregate_urn,count(i.creator) as ecount, ".
+                     "   sum(i.physnode_count) as pcount, ".
+                     "   truncate(sum(i.physnode_count * ".
                      "     ((UNIX_TIMESTAMP(i.destroyed) - ".
                      "       UNIX_TIMESTAMP(i.started)) / 3600.0)),2) as phours ".
                      " from apt_instance_history as i ".
-                     "left join projects as p on p.pid=i.pid ".
-                       $whereclause .
-                     " group by i.${target},aggregate_urn) ".
+                     "join apt_instance_aggregate_history as a on ".
+                     "  a.uuid=i.uuid ".
+                     "join apt_aggregates as aa on ".
+                     "  aa.urn=a.aggregate_urn ".
+                     "join projects as p on p.pid=i.pid ".
+                       $whereclause . " and ".
+                     "FIND_IN_SET('cloudlab', aa.portals) ".
+                     " group by i.${target},a.aggregate_urn) ".
                      "union ".
-                     "(select i.${target},aggregate_urn,count(i.creator) as ecount,".
-                     "   sum(physnode_count) as pcount, ".
-                     "   truncate(sum(physnode_count * ".
+                     "(select i.${target},a.aggregate_urn,count(i.creator) as ecount,".
+                     "   sum(i.physnode_count) as pcount, ".
+                     "   truncate(sum(i.physnode_count * ".
                      "     ((UNIX_TIMESTAMP(now()) - ".
                      "       UNIX_TIMESTAMP(i.started)) / 3600.0)),2) as phours ".
                      " from apt_instances as i ".
-                     "left join projects as p on p.pid=i.pid ".
-                       $whereclause .
+                     "join apt_instance_aggregates as a on ".
+                     "  a.uuid=i.uuid ".
+                     "join apt_aggregates as aa on ".
+                     "  aa.urn=a.aggregate_urn ".
+                     "join projects as p on p.pid=i.pid ".
+                       $whereclause . " and " .
+                     "FIND_IN_SET('cloudlab', aa.portals) ".
                      " group by i.${target},aggregate_urn)");
 
     while ($row = mysql_fetch_array($query_result)) {
