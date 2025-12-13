@@ -1339,7 +1339,8 @@ sub handleCtrlEvent($$) {
 		/^$TBTIMEOUTREBOOT/ && do {
 		    # XXX reload the attributes so we get a current value
 		    $nodeobj->LoadNodeAttributes(1);
-		    if ($nodeobj->stated_noreboot() > 0) {
+		    my $noreboot = $nodeobj->stated_noreboot();
+		    if (defined($noreboot) && $noreboot > 0) {
 			info("Node $node: Ignoring timeout reboot as directed\n");
 		    }
 		    elsif ($timedout>3) {
