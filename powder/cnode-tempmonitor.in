@@ -87,6 +87,7 @@ my %cnodes = (
 	"enclosure"    => "10.11.13.192",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
+	"ulport"       => 4,
     },
     "cnode-guesthouse" => {
 	"enabled"      => 1,
@@ -94,6 +95,7 @@ my %cnodes = (
 	"switch"       => "powder-mgmt-dbs6",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
+	"ulport"       => 4,
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
@@ -101,6 +103,8 @@ my %cnodes = (
 	"switch"       => "powder-mgmt-dbs2",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
+	# XXX currently has different ptech model
+	"ulport"       => 2,
     },
     "cnode-ustar"      => {
 	"enabled"      => 1,
@@ -108,6 +112,7 @@ my %cnodes = (
 	"switch"       => "powder-mgmt-dbs8",
 	"autocyclefe"  => 0,
 	"alsocycle"    => [],
+	"ulport"       => 4,
     },
     "cnode-wasatch"    => {
 	"enabled"      => 1,
@@ -115,6 +120,7 @@ my %cnodes = (
 	"switch"       => "powder-mgmt-dbs1",
 	"autocyclefe"  => 0,
 	"alsocycle"    => [  "bru-650-4" ],
+	"ulport"       => 4,
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
@@ -122,6 +128,7 @@ my %cnodes = (
 	"switch"       => "powder-mgmt-dbs5",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
+	"ulport"       => 4,
     },
     "cnode-ebc"        => {
 	"enabled"      => 1,
@@ -129,6 +136,7 @@ my %cnodes = (
 	"switch"       => "powder-mgmt-dbs7",
 	"autocyclefe"  => 0,
 	"alsocycle"    => [],
+	"ulport"       => 4,
     },
 );
 
@@ -157,7 +165,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 sub GrabTemp($);
 sub GrabRFFETemp($);
 sub GrabRPITemp($);
-sub GrabSwitchTemp($);
+sub GrabSwitchTemp($$);
 sub UploadTemp($$);
 sub UploadSwitchTemp($$);
 sub TempConvert($);
@@ -299,7 +307,8 @@ while (1) {
 	    # XXX even if the FE is unreachable, we want to report
 	    # switch temps.
 	    #
-	    my $switchtemp = GrabSwitchTemp($details->{'switch'});
+	    my $switchtemp =
+		GrabSwitchTemp($details->{'switch'}, $details->{'ulport'});
 	    if ($switchtemp) {
 		UploadSwitchTemp($cnode, $switchtemp);
 	    }
@@ -318,7 +327,8 @@ while (1) {
 	$details->{'failcount'}   = 0;
 
 	# Grab switch temp.
-	my $switchtemp = GrabSwitchTemp($details->{'switch'});
+	my $switchtemp =
+	    GrabSwitchTemp($details->{'switch'}, $details->{'ulport'});
 
 	#
 	# The old RFFE sensors return bogus results when the temp goes
@@ -335,6 +345,11 @@ while (1) {
 		$msg .= "transceiver: " . TempConvert($switchtemp);
 	    }
 	    logit($msg);
+	}
+	# XXX Throw away obviously bogus temps, which happen.
+	if ($temperature > 200) {
+	    logit("$cnode : ignoring bogus temperature");
+	    next;
 	}
 
 	#
@@ -525,22 +540,22 @@ sub GrabRPITemp($)
 #
 # Grab switch temp. 
 #
-sub GrabSwitchTemp($)
+sub GrabSwitchTemp($$)
 {
-    my ($switch) = @_;
+    my ($switch, $port) = @_;
     
-    logit("Getting transceiver temp from $switch") if ($debug > 1);
+    logit("Getting transceiver temp from $switch ($port)") if ($debug > 1);
 
-    my $celcius = `$EXPECT $PTECHEXPECT $switch`;
+    my $celcius = `$EXPECT $PTECHEXPECT $switch $port`;
     if ($?) {
-	logit("Could not get transceiver temp from $switch");
+	logit("Could not get transceiver temp from $switch ($port)");
 	return undef;
     }
     if ($celcius =~ /^(\-?[\d\.]+)$/) {
 	$celcius = $1;
     }
     else {
-	logit("Bogus transceiver temperature from $switch: $celcius");
+	logit("Bogus transceiver temperature from $switch ($port): $celcius");
 	return undef;
     }
     return $celcius;
@@ -701,10 +716,10 @@ sub Power($$$)
 	}
 	else {
 	    logit("Powering $onoff $node_id");
-	    system("$POWER -a $onoff $node");
+	    system("$POWER -a $onoff $node_id");
 	    if ($?) {
-		NotifyTBOPS("power $onoff $node failed",
-			    "Could not power $onoff $node");
+		NotifyTBOPS("power $onoff $node_id failed",
+			    "Could not power $onoff $node_id");
 	    }
 	}
     }

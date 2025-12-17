@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -477,9 +477,15 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 			 * XXX we check this for just default boot, which is
 			 * assumed to be the only on-disk boot (next and temp
 			 * likely being MFSes).
+			 *
+			 * We do the same for so-called "cloud images" which
+			 * use cloudinit tools to setup. Since they are not
+			 * intended specifically for Emulab, they will assume
+			 * they are booting via the MBR or EFI partition.
 			 */
 			int bootpart = TOINT(DEF_BOOT_PARTITION);
 			if (bootpart > 0) {
+				/* Emulab boot images */
 				res2 = mydb_query("select isbootimage from"
 						  " interfaces as i,partitions as p,"
 						  " image_versions as iv where"
@@ -492,6 +498,26 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 					row2 = mysql_fetch_row(res2);
 					if (row2[0] && atoi(row2[0]) != 0) {
 						warning("%s: bootimage, change part from %d to 0\n",
+							inet_ntoa(ipaddr), bootpart);
+						bootpart = 0;
+					}
+				}
+				if (res2)
+					mysql_free_result(res2);
+
+				/* Cloudinit images */
+				res2 = mydb_query("select FIND_IN_SET('cloud-init', osfeatures) from"
+						  " interfaces as i,partitions as p,"
+						  " os_info_versions as oiv "
+						  "where"
+						  " i.IP='%s' and i.node_id=p.node_id"
+						  " and p.osid=oiv.osid"
+						  " and p.osid_vers=oiv.vers",
+						  1, inet_ntoa(ipaddr));
+				if (res2 && mysql_num_rows(res2) == 1) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] && atoi(row2[0]) != 0) {
+						warning("%s: cloudinit image, change part from %d to 0\n",
 							inet_ntoa(ipaddr), bootpart);
 						bootpart = 0;
 					}
