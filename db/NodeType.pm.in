@@ -526,6 +526,9 @@ sub snmpitafterossetup($;$) {
 sub snmpitbeforeossetup($;$) {
     return GetAttribute($_[0], "snmpitafterossetup", $_[1]);
 }
+sub noidle_detection($;$) {
+    return GetAttribute($_[0], "noidle_detection", $_[1]);
+}
 sub control_interface($;$) { return control_iface($_[0], $_[1]); }
 
 #

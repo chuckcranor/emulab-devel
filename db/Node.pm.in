@@ -2165,6 +2165,14 @@ sub jailipbase_value($) {
     return $val;
 }
 
+sub noidle_detection($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "noidle_detection", \$val);
+    return $val;
+}
+
 #
 # And these are the less common attributes, but still common enough to
 # warrant shortcuts.
