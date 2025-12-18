@@ -31,9 +31,9 @@ include $(OBJDIR)/Makeconf
 
 SBIN_STUFF	= tbacct addsfskey addpubkey mkusercert quotamail genpubkeys \
 		  newuser newproj mksyscert spewcert dumpuser dumpproject \
-		  manageremote regencerts deactivate-users getipinfo
+		  manageremote regencerts deactivate-users getipinfo reactivate-user
 LIBEXEC_STUFF	= webtbacct webaddsfskey webaddpubkey webmkusercert \
-		  webnewuser webnewproj webspewcert webmanageremote
+		  webnewuser webnewproj webspewcert webmanageremote webreactivate-user
 CTRLSBIN_STUFF  = adduserhook accountsetup
 
 # These scripts installed setuid, with sudo. 

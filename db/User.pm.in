@@ -2115,6 +2115,24 @@ sub BumpActivity($)
 }
 
 #
+# Last web login.
+#
+sub LastWebLogin($)
+{
+    my ($self) = @_;
+    my $uid_idx = $self->uid_idx();
+    
+    my $query_result =
+	DBQueryWarn("select UNIX_TIMESTAMP(weblogin_last) from user_stats ".
+		    "where uid_idx='$uid_idx'");
+    return undef
+	if (! ($query_result && $query_result->numrows));
+
+    my ($when) = $query_result->fetchrow_array();
+    return $when;
+}
+
+#
 # Check permissions.
 #
 sub AccessCheck($$$)

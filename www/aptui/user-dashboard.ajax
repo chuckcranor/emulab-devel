@@ -409,13 +409,8 @@ function Do_Toggle()
         }
     }
     elseif ($toggle == "inactive") {
-        $newstatus = ($target_user->IsActive() ?
-                      TBDB_USERSTATUS_INACTIVE : TBDB_USERSTATUS_ACTIVE);
-        $command   = ($target_user->IsActive() ? "deactivate" : "reactivate");
-    
-        $target_user->SetStatus($newstatus);
         if (SUEXEC($this_uid, $TBADMINGROUP,
-                   "webtbacct $command $target_uid", SUEXEC_ACTION_CONTINUE)) {
+                   "webreactivate-user $target_uid", SUEXEC_ACTION_CONTINUE)) {
             SPITAJAX_ERROR(-1, $suexec_output);
             return -1;
         }

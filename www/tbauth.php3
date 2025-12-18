@@ -1004,27 +1004,19 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
           return DOLOGIN_STATUS_FROZEN;
         }
 	elseif ($user->status() == TBDB_USERSTATUS_INACTIVE) {
-            if (1) {
-                TBMAIL($user->email(),
-                       "Web Login Inactivity Alert: '$uid'",
-                       "Login attempt by $uid ($uid_idx) after extended ".
-                       "period of inactivity!\n".
-                       "Login was denied, last activity was $lastlogin\n\n".
-                       "$url\n",
-                       "From: $TBMAIL_OPS\n".
-                       "Bcc: $TBMAIL_AUDIT\n".
-                       "CC: $TBMAIL_OPS\n".
-                       "Errors-To: $TBMAIL_WWW");
+            TBMAIL($user->email(),
+                   "Web Login Inactivity Alert: '$uid'",
+                   "Login attempt by $uid ($uid_idx) after extended ".
+                   "period of inactivity!\n".
+                   "Login was denied, last activity was $lastlogin\n\n".
+                   "$url\n",
+                   "From: $TBMAIL_OPS\n".
+                   "Bcc: $TBMAIL_AUDIT\n".
+                   "CC: $TBMAIL_OPS\n".
+                   "Errors-To: $TBMAIL_WWW");
                 
-                return DOLOGIN_STATUS_INACTIVE;
-            }
-            # Try to reactivate the user. If we fail for some reason, fall
-            # back to just telling them they are inactive. Otherwise we can
-            # proceed with login.
-            if (ReactivateUser($user)) {
-                return DOLOGIN_STATUS_INACTIVE;
-            }
-	}
+            return DOLOGIN_STATUS_INACTIVE;
+        }
 
 	#
 	# Set adminmode off on new logins, unless user requested to be
