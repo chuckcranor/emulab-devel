@@ -242,19 +242,6 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             }
         }
     }
-    #
-    # If not logged in and not the login/logout page, set a referrer cookie
-    # in case the user clicks the login button on the page.
-    #
-    if (!$login_user && !NOLOGINS()) {
-        if ($script != "login.php" && $script != "logout.php" &&
-            $script != "frontpage.php") {
-            if (REMEMBERED_ID()) {
-                SetReferrer($_SERVER['REQUEST_URI']);
-            }
-        }
-    }
-    }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
     header("Cache-Control: no-cache, must-revalidate");
