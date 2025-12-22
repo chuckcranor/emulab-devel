@@ -94,6 +94,25 @@ window.APT_OPTIONS.initialize = function (sup)
 	// First check for announcements very quickly. Indicate first load
 	setTimeout(function f() { window.APT_OPTIONS.Announcements(true) }, 2000);
     }
+
+    /*
+     * Set our referrer cookie if not logged in and user clicks login.
+     * So we go back to the page they were on.
+     */
+    if (!window.LOGINUID) {
+        $('#loginbutton').click(function (event) {
+            event.preventDefault();
+
+	    var date = new Date();
+	    date.setTime(date.getTime()+300);
+
+	    var cookie = 'referrer=' + window.location.href +
+		'; expires=' + date.toGMTString() + '; path=/';
+            
+	    document.cookie = cookie;
+            window.location.href = "login.php";
+        });
+    }
     
     window.APT_OPTIONS.startPage();
     $(window).on('beforeunload.common', APT_OPTIONS.endPage);

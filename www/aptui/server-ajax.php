@@ -50,6 +50,12 @@ $routing = array("geni-login" =>
 			      "methods" => array("NoMoreGeniLogin" =>
                                                      "Do_NoMoreGeniLogin"),
                         ),
+                 "login" =>
+			array("file"    => "login.ajax",
+			      "guest"   => true,
+			      "methods" => array("DoLogin" =>
+                                                     "Do_Login"),
+                        ),                 
 		 "dashboard" =>
 			array("file"    => "dashboard.ajax",
 			      "guest"   => false,
