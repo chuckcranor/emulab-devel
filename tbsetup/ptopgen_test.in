@@ -1885,7 +1885,7 @@ foreach $node (@nodenames) {
     } else {
 	for my $feature (@{$typemap{$type}->{'FEATURES'}}) {
 	    # TODO: Un-hardcode this. Ugh.
-	    if ($feature =~ /highvlan/) {
+	    if ($feature =~ /highvlan/ || $feature =~ /fpga/i) {
 		push(@features, $feature);
 	    }
 	    elsif ($feature =~ /disk_any:([\d\.]+)$/) {
