@@ -4762,6 +4762,10 @@ sub FindFirstFit($$$$$$$)
 	my $type      = $cluster->{"type"};
 	my $aggregate = APT_Aggregate->Lookup($urn);
 
+	if (!$aggregate) {
+	    $$perrmsg = "Not a valid aggregate: $urn";
+	    return undef;
+	}
 	next
 	    if (!$aggregate->IsReservableNode($type));
 
