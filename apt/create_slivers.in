@@ -558,6 +558,7 @@ if (defined($instance->rdz_status())) {
 		$instance->Defer("RDZ: $error");
 		$webtask->output("RDZ: $error");
 		$webtask->Exited(0);
+		$rval = 0;
 	    }
 	    if (defined($logfile)) {
 		$logfile->Close();
