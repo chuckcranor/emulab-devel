@@ -346,7 +346,7 @@ while (1) {
 	    }
 	    logit($msg);
 	}
-	# XXX Throw away obviously bogus temps, which happen.
+	# Throw away obviously bogus temps, which happen.
 	if ($temperature > 200) {
 	    logit("$cnode : ignoring bogus temperature");
 	    next;

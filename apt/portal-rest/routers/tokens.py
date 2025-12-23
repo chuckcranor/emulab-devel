@@ -172,6 +172,10 @@ def get_redeem(
         raise PortalException(
             status.HTTP_400_BAD_REQUEST, "Code has expired")
 
+    # Use once, no errors tolerated
+    DBQueryFatal("delete from user_sso_codes where idx=%s",
+                 (dbcode.idx,))
+
     # Now create the auth0 token (which is not stored in the DB).
     webtask = WebTask.CreateAnonymous()
     command = MANAGETOKENS + " -t " + webtask.task_id + " "

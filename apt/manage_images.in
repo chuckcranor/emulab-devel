@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -336,6 +336,8 @@ sub DoListImages()
 	my $urn = $ref->{'urn'};
 	my @versions = @{$ref->{'versions'}};
 	my $image0 = $versions[0];
+	my $image_project;
+	my $image_creator;
 
 	#
 	# Use version zero of the image to map the local project. 
@@ -344,18 +346,16 @@ sub DoListImages()
 	    my $projhrn = GeniHRN->new($image0->{'project_urn'});
 	    
 	    if ($projhrn->domain() eq $OURDOMAIN) {
-		my $project;
-		
 		if (defined($projhrn->project())) {
-		    $project = Project->Lookup($projhrn->project());
+		    $image_project = Project->Lookup($projhrn->project());
 		}
 		else {
 		    # Backwards compat; we did not always send project urns.
-		    $project = Project->Lookup($image0->{'pid'});
+		    $image_project = Project->Lookup($image0->{'pid'});
 		}
-		if (defined($project)) {
-		    $ref->{'pid'}     = $project->pid();
-		    $ref->{'pid_idx'} = $project->pid_idx();
+		if (defined($image_project)) {
+		    $ref->{'pid'}     = $image_project->pid();
+		    $ref->{'pid_idx'} = $image_project->pid_idx();
 		}
 	    }
 	    $ref->{"project_urn"} = $image0->{'project_urn'};
@@ -366,8 +366,13 @@ sub DoListImages()
 	}
 	if (defined($project)) {
 	    $ref->{'creator_uid'} = $image0->{'creator_uid'};
-	    $ref->{'creator_idx'} = $image0->{'creator_idx'}
-	        if (exists($image0->{'creator_idx'}));
+	    if (exists($image0->{'creator_idx'})) {
+		$ref->{'creator_idx'} = $image0->{'creator_idx'};
+		$image_creator = User->Lookup($image0->{'creator_idx'});
+	    }
+	}
+	else {
+	    $image_creator = $target_user;
 	}
 	$ref->{'imagename'}   = $image0->{'imagename'};
 	
@@ -378,6 +383,26 @@ sub DoListImages()
 	my @nakedusing  = ();
 	next
 	    if (APT_Profile::ImageInfo::FindProfilesUsing($urn, \@nakedusing));
+
+	#
+	# Weed out profiles in projects that do not overlap with the
+	# project membership of the image creator. Otherwise the image
+	# creator might not be able to delete an image used by someone
+	# they do not know. 
+	#
+	if (defined($image_project) && defined($image_creator)) {
+	    my @tmp = ();
+	    foreach my $profile (@nakedusing) {
+		my $profile_project = $profile->GetProject();
+		my $profile_creator = $profile->GetCreator();
+
+		next
+		    if (! $profile_project->IsMember($image_creator));
+
+		push(@tmp, $profile);
+	    }
+	    @nakedusing = @tmp;
+	}
 
 	#
 	# If no profiles using the naked image, mark it for delete, but

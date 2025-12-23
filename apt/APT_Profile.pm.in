@@ -59,6 +59,7 @@ use GeniResponse;
 use libtestbed;
 use EmulabFeatures;
 use Project;
+use User;
 use Lease;
 use OSImage;
 use Image;
@@ -634,6 +635,20 @@ sub Stringify($)
     my $version   = $self->version();
 
     return "[Profile: $pid,$name:$version]";
+}
+
+sub GetProject($)
+{
+    my ($self) = @_;
+
+    return Project->Lookup($self->pid_idx());
+}
+
+sub GetCreator($)
+{
+    my ($self) = @_;
+
+    return User->Lookup($self->creator_idx());
 }
 
 #

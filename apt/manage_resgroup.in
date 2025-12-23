@@ -4762,6 +4762,10 @@ sub FindFirstFit($$$$$$$)
 	my $type      = $cluster->{"type"};
 	my $aggregate = APT_Aggregate->Lookup($urn);
 
+	if (!$aggregate) {
+	    $$perrmsg = "Not a valid aggregate: $urn";
+	    return undef;
+	}
 	next
 	    if (!$aggregate->IsReservableNode($type));
 
@@ -4897,12 +4901,16 @@ sub FindFirstFit($$$$$$$)
 	my $type      = $cluster->{'type'};
 	my $count     = $cluster->{'count'};
 	my $urn       = $cluster->{'cluster'};
+	my @tmp       = ();
 
 	&$dprint("findfirst: $type, $count, $minstart\n");
 
-	my @tmp = @{ $forecasts->{$urn}->{$type} };
-	foreach my $data (@tmp) {
-	    $data->{'stamp'} = TBDateStringLocal($data->{'t'});
+	# Very possible that there is no prediction info for a type.
+	if (exists($forecasts->{$urn}->{$type})) {
+	    @tmp = @{ $forecasts->{$urn}->{$type} };
+	    foreach my $data (@tmp) {
+		$data->{'stamp'} = TBDateStringLocal($data->{'t'});
+	    }
 	}
 	while (@tmp && !$starttime) {
 	    my $data = shift(@tmp);

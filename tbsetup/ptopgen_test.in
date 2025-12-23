@@ -820,6 +820,9 @@ if( defined( $pid ) ) {
 	# look to see if it is marked as requiring a reservation to use.
 	# If it requires a reservation, prune it.
 	#
+	next
+	    if ($project->expert_mode());
+	
 	if (!exists($reserved_nodes{$node_id}) &&
 	    !exists($pruned_nodes{$node_id}) && $node->requires_reservation()) {
 	    print STDERR
@@ -1882,7 +1885,7 @@ foreach $node (@nodenames) {
     } else {
 	for my $feature (@{$typemap{$type}->{'FEATURES'}}) {
 	    # TODO: Un-hardcode this. Ugh.
-	    if ($feature =~ /highvlan/) {
+	    if ($feature =~ /highvlan/ || $feature =~ /fpga/i) {
 		push(@features, $feature);
 	    }
 	    elsif ($feature =~ /disk_any:([\d\.]+)$/) {

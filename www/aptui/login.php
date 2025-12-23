@@ -102,7 +102,7 @@ function SPITFORM($error)
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN;
     global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $PROTOGENI_GENIWEBLOGIN;
-    global $adminmode, $cleanmode;
+    global $adminmode, $cleanmode, $client_id, $redirect_uri;
     global $UI_EXTERNAL_ACCOUNTS, $TBMAINSITE;
 
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
@@ -131,6 +131,12 @@ function SPITFORM($error)
     }
     echo "<form id='quickvm_login_form' role='form'
             method='post' action='$action'>\n";
+    if (isset($redirect_uri) && isset($client_id)) {
+        echo "<input name='client_id'
+	       type='hidden' value='$client_id'>\n";
+        echo "<input name='redirect_uri'
+	       type='hidden' value='$redirect_uri'>\n";
+    }
     echo "<div class='panel panel-default'>
            <div class='panel-heading'>
               <h3 class='panel-title'>
@@ -237,15 +243,15 @@ function SPITFORM($error)
 #
 # Handle RDZ SSO.
 #
-function RedirectSSO()
+function RedirectSSO($user)
 {
-    global $this_user, $redirect_uri, $client_id;
+    global $redirect_uri, $client_id;
     
     #
     # Generate a shortlived code that allows the endpoint to redeem a
     # descoped token for this user.
     #
-    $code = $this_user->GetSSOCode();
+    $code = $user->GetSSOCode();
     header("Location: $redirect_uri?code=$code&client_id=$client_id");
     ClearReferrer();
     return;
@@ -257,7 +263,7 @@ function RedirectSSO()
 if (!$ajax_request && !isset($login)) {
     if ($this_user) {
         if (isset($client_id) && isset($redirect_uri)) {
-            RedirectSSO();
+            RedirectSSO($this_user);
             return;
         }
 	header("Location: $APTBASE/landing.php");
@@ -425,7 +431,7 @@ if ($CHECKLOGIN_USER->IsActive() && $CHECKLOGIN_USER->isClassic() &&
 }
 
 if (isset($client_id) && isset($redirect_uri)) {
-    RedirectSSO();
+    RedirectSSO($CHECKLOGIN_USER);
     return;
 }
 if ($ajax_request) {
