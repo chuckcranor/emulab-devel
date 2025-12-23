@@ -951,6 +951,10 @@ function Do_Approve()
     if (isset($ajax_args["override"]) && $ajax_args["override"] != 0) {
         $opt .= " -O ";
     }
+    # Allow for form precheck only. So JS code knows it will be fast.
+    if (isset($ajax_args["checkonly"]) && $ajax_args["checkonly"]) {
+        $opt .= " -n ";
+    }
     
     $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();

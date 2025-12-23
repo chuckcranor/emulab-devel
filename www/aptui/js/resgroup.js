@@ -598,13 +598,7 @@ $(function ()
 	if (editing) {
 	    PopulateReservation();
 	    // Start out with button disabled until a change.
-            if (isadmin) {
-                // For Mike. :-)
-                ToggleSubmit(true, "check");
-            }
-            else {
-	        ToggleSubmit(false, "check");
-            }
+	    ToggleSubmit(false, "check");
 	    
 	    $('#reserve-delete-button').click(function (e) {
 		e.preventDefault();
@@ -3195,6 +3189,13 @@ $(function ()
 			    event.preventDefault();
 			    Approve();
 			});
+		    $('#reserve-recheck-button')
+			.removeClass("hidden")
+			.removeAttr("disabled")
+			.click(function(event) {
+			    event.preventDefault();
+			    ReCheck();
+			});
                     LoadResGroups(details.uid);
 		}
 		var now   = new Date();
@@ -3683,7 +3684,7 @@ $(function ()
     /*
      * Approve a reservation
      */
-    function Approve()
+    function Approve(checkonly)
     {
 	var callback = function (json) {
 	    console.info("Approve: ", json);
@@ -3707,6 +3708,12 @@ $(function ()
 	if ($('#admin-override').is(":checked")) {
 	    args["override"] = 1;
 	}
+        if (checkonly) {
+            args["checkonly"] = 1;
+	    sup.ShowModal('#waitwait-modal');
+	    sup.CallServerMethod(null, "resgroup", "Approve", args, callback);
+            return;
+        }
 	// Bind the confirm button in the modal. Do the approval.
 	$('#approve-modal #confirm-approve').click(function () {
 	    sup.HideModal('#approve-modal', function () {
@@ -3725,6 +3732,11 @@ $(function ()
 	    $('#approve-modal').off('hidden.bs.modal');
 	})
 	sup.ShowModal("#approve-modal");
+    }
+    // ReCheck uses the checkonly option of approve.
+    function ReCheck()
+    {
+        Approve(true);
     }
 
     /*
