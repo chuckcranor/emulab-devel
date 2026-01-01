@@ -14,6 +14,9 @@ window.ShareProfile = (function ()
     function InitShareProfile()
     {
         console.info("InitShareProfile");
+        if (! window.LOGINUID) {
+            return;
+        }
         $('#share-profile-modal-div').html(templates['share-profile-modal']);
         InitShareModal();
 	$(shareButton).click(function (event) {
