@@ -36,8 +36,8 @@ class User
     #
     # For pedantic checks early in pages.
     #
-    function ValidWebID($token) {
-	if (! preg_match("/^[-\w]+$/", $token)) {
+    public static function ValidWebID($token) {
+	if (! preg_match("/^[-\w\.\@]+$/", $token)) {
 	    return 0;
 	}
 	return 1;
