@@ -104,11 +104,12 @@ window.APT_OPTIONS.initialize = function (sup)
             event.preventDefault();
 
 	    var date = new Date();
-	    date.setTime(date.getTime()+300);
+	    date.setTime(date.getTime()+(300*1000));
+            var path = window.location.pathname + window.location.search;
 
-	    var cookie = 'referrer=' + window.location.href +
+	    var cookie = 'referrer=' + path +
 		'; expires=' + date.toGMTString() + '; path=/';
-            
+
 	    document.cookie = cookie;
             window.location.href = "login.php";
         });
