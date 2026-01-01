@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ function Do_Login()
         $errors["uid"] = "Please supply a username";
     }
     elseif (!(TBvalid_uid($ajax_args["uid"]) ||
-              !TBvalid_email($ajax_args["uid"]))) {
+              TBvalid_email($ajax_args["uid"]))) {
         $errors["uid"] = "Illegal characters";
     }
     $uid = $ajax_args["uid"];
