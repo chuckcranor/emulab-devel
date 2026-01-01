@@ -49,7 +49,7 @@ my $debug       = 0;
 my $impotent    = 0;
 my $webtask_id;
 my $webtask;
-my $DEFAULTEXP  = 180; # days
+my $DEFAULTEXP  = 360; # days
 
 #
 # Configure variables
