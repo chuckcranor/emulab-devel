@@ -1573,7 +1573,7 @@ function CheckReferrer($referrer)
         $UID = REMEMBERED_ID();
     }
     if (!preg_match("/^\/[-\w\?\/\&\.=\+\:\*]+$/", $referrer)) {
-        error_log("Invalid LOGIN REFERRER (IP:$IP, UID:$UID): " . $referrer);
+        error_log("Invalid LOGIN REFERRER (IP:$IP, UID:$UID): '$referrer'");
         return -1;
     }
     #error_log("LOGIN REFERRER COOKIE (IP:$IP, UID:$UID): " . $referrer);
