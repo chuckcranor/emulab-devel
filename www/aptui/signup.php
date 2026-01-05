@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -693,8 +693,10 @@ if (isset($formfields["proj_nsf"])) {
     $args["nsf_funded"] = $formfields["proj_nsf"];
     if ($formfields["proj_nsf"] == 1) {
         $args["nsf_awards"] = trim($formfields["proj_nsf_awards"]);
-        $args["nsf_supplement"] =
-                    $formfields["proj_nsf_supplement"] == 1 ? 1 : 0;
+        if (isset($formfields["proj_nsf_supplement"])) {
+            $args["nsf_supplement"] =
+                        $formfields["proj_nsf_supplement"] == 1 ? 1 : 0;
+        }
     }
 }
 
