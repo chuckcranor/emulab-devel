@@ -58,5 +58,27 @@
     </form>
   </div>
 </div>
+<div id='sso-modal' class='modal fade'
+     data-keyboard='false' data-backdrop='static'>     
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	You are currently logged into Powder as
+	'<span id="sso-current-user"></span>'. Do you wish to continue
+	with this account, or use a different Powder account?
+	<center style="margin-top: 10px; margin-bottom: 10px;">
+          <button class='btn btn-primary btn-sm'
+                  id='sso-existing-account'
+                  type='submit'>Continue with current Powder account</button>
+	</center>
+	<center>
+          <button class='btn btn-sm'
+                  id='sso-different-account'
+                  type='submit'>Use a different Powder account</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
 <div id='waitwait_div'></div>
 <div id='nomore_genilogin_div'></div>

@@ -32,6 +32,11 @@ AddTemplate("waitwait-modal");
 # Get current user in case we need an error message.
 #
 $this_user = CheckLogin($check_status);
+if ($this_user) {
+    if (($check_status & CHECKLOGIN_MAYBEVALID) == CHECKLOGIN_MAYBEVALID) {
+        $this_user = null;
+    }
+}
 
 #
 # Verify page arguments.
@@ -47,13 +52,18 @@ if (GetReferrer($referrer) != 0) {
     PAGEARGERROR("Invalid REFERRER");        
 }
 if ($referrer) {
-    #error_log("login: " . $referrer);
+    error_log("login: " . $referrer);
 }
 
-if (isset($client_id) && isset($redirect_uri)) {
-    if ($client_id != $SSO_CLIENT_ID ||
-        $redirect_uri != $SSO_REDIRECT_URI) {
-        PAGEARGERROR("Invalid AUTH0 arguments");        
+# For devel tree debugging.
+$debug = 0;
+
+if (!$debug) {
+    if (isset($client_id) && isset($redirect_uri)) {
+        if ($client_id != $SSO_CLIENT_ID ||
+            $redirect_uri != $SSO_REDIRECT_URI) {
+            PAGEARGERROR("Invalid AUTH0 arguments");        
+        }
     }
 }
 
@@ -72,6 +82,18 @@ if (isset($_GET['cleanmode']) && $_GET['cleanmode']) {
 }
 else {
     $cleanmode = 0;
+}
+
+#
+# Logged in user goes to the landing page unless its an SSO login
+# since we want to give the user a chance to switch accounts.
+#
+if (0 && $this_user) {
+    if (! (isset($client_id) && isset($redirect_uri))) {
+	header("Location: $APTBASE/landing.php");
+        ClearReferrer();
+	return;
+    }
 }
 
 if (NOLOGINS() && !$adminmode) {
@@ -98,6 +120,11 @@ echo "    window.UI_EXTERNAL_ACCOUNTS  = $UI_EXTERNAL_ACCOUNTS;\n";
 echo "    window.PORTAL_PASSWORD_HELP = '$PORTAL_PASSWORD_HELP';\n";
 echo "    window.CLEANMODE = $cleanmode;\n";
 echo "    window.ADMINMODE = $adminmode;\n";
+if ($this_user) {
+    $this_uid = $this_user->uid();
+        
+    echo "    window.CURRENT_UID = '$this_uid';\n";
+}
 if (isset($redirect_uri) && isset($client_id)) {
     echo "    window.REDIRECT_URI = '$redirect_uri';\n";
     echo "    window.CLIENT_ID = '$client_id';\n";

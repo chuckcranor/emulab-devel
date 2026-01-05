@@ -35,6 +35,7 @@ $CHECKLOGIN_WIKINAME            = "";
 $CHECKLOGIN_HASHKEY             = null;
 $CHECKLOGIN_HASHHASH            = null;
 $CHECKLOGIN_USER                = null;
+$CHECKLOGIN_AUTHUSER            = null;
 
 #
 # New Mapping. 
@@ -868,11 +869,11 @@ function ISPLABUSER() {
 #
 # Attempt a login.
 # 
-function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
+function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0, $nocookies = 0) {
     global $TBAUTHCOOKIE, $TBAUTHDOMAIN, $TBAUTHTIMEOUT;
     global $TBNAMECOOKIE, $TBLOGINCOOKIE, $TBSECURECOOKIES;
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
-    global $WIKISUPPORT, $WIKICOOKIENAME;
+    global $WIKISUPPORT, $WIKICOOKIENAME, $CHECKLOGIN_AUTHUSER;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $CHECKLOGIN_USER;
     global $TB_PROJECT_READINFO, $TUTORIALSTATS, $APTBASE, $TBBASE;
     
@@ -1016,6 +1017,12 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
                    "Errors-To: $TBMAIL_WWW");
                 
             return DOLOGIN_STATUS_INACTIVE;
+        }
+
+        # For SSO
+        if ($nocookies) {
+            $CHECKLOGIN_AUTHUSER = $user;
+            return DOLOGIN_STATUS_OKAY;
         }
 
 	#

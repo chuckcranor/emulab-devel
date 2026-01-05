@@ -11,6 +11,9 @@ $(function ()
     var STATUS_LOGINFAIL  = 3;      
     var STATUS_INVALID    = 4;
     var STATUS_ERROR      = -1;
+    // For RDZ SSO
+    var ssoContinue   = 0;
+    var ssoSwitchUser = 0;
     
     function initialize()
     {
@@ -39,8 +42,31 @@ $(function ()
             DoLogin();
 	});
 
-	// Move focus to username
-        $('#quickvm_login_form input[name="uid"]')[0].focus();
+        if (window.CLIENT_ID !== undefined && 
+            window.REDIRECT_URI !== undefined &&
+            window.CURRENT_UID !== undefined) {
+            $('#sso-current-user').html(window.CURRENT_UID);
+            $('#sso-existing-account').click(function (event) {
+                event.preventDefault();
+                sup.HideModal('#sso-modal', function () {
+                    ssoContinue = 1;
+                    DoLogin();
+                });
+            });
+            $('#sso-different-account').click(function (event) {
+                event.preventDefault();
+                ssoSwitchUser = 1;
+                sup.HideModal('#sso-modal', function () {
+	            // Move focus to username
+                    $('#quickvm_login_form input[name="uid"]')[0].focus();
+                });
+            });
+            sup.ShowModal('#sso-modal');
+        }
+        else {
+	    // Move focus to username
+            $('#quickvm_login_form input[name="uid"]')[0].focus();
+        }
     }
 
     /*
@@ -48,15 +74,24 @@ $(function ()
      */
     function DoLogin()
     {
-        var args = {
-            "uid" : $('#quickvm_login_form input[name="uid"]').val(),
-            "password" : $('#quickvm_login_form input[name="password"]').val(),
-        };
-        if (window.CLEANMODE !== undefined) {
-            args["cleanmode"] = window.CLEANMODE;
+        var args = {};
+        
+        if (ssoContinue) {
+            args["sso-continue"] = 1;
         }
-        if (window.ADMINMODE !== undefined) {
-            args["adminmode"] = window.ADMINMODE;
+        else {
+            args["uid"] = $('#quickvm_login_form input[name="uid"]').val(),
+            args["password"] = $('#quickvm_login_form input[name="password"]').val();
+
+            if (window.CLEANMODE !== undefined) {
+                args["cleanmode"] = window.CLEANMODE;
+            }
+            if (window.ADMINMODE !== undefined) {
+                args["adminmode"] = window.ADMINMODE;
+            }
+            if (ssoSwitchUser) {
+                args["sso-switchuser"] = 1;
+            }
         }
         if (window.CLIENT_ID !== undefined) {
             args["client_id"] = window.CLIENT_ID;

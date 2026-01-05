@@ -26,9 +26,10 @@ function Do_Login()
 {
     global $this_user, $ajax_args;
     global $SSO_CLIENT_ID, $SSO_REDIRECT_URI, $SUPPORT, $CHECKLOGIN_USER;
-    global $APTBASE, $TBAUTHDOMAIN;
+    global $APTBASE, $TBAUTHDOMAIN, $CHECKLOGIN_AUTHUSER;
     $cleanmode = 0;
     $adminmode = 0;
+    $nocookies = 0;
     $referrer  = null;
     $client_id = null;
     $redirect_uri = null;
@@ -40,6 +41,39 @@ function Do_Login()
     $STATUS_INVALID    = 4;
     $STATUS_ERROR      = -1;
 
+    # For devel tree debugging.
+    $debug = 0;
+    
+    if (isset($ajax_args["client_id"]) && isset($ajax_args["redirect_uri"])) {
+        $client_id = $ajax_args["client_id"];
+        $redirect_uri = $ajax_args["redirect_uri"];
+        if (!$debug) {
+            if ($client_id != $SSO_CLIENT_ID ||
+                $redirect_uri != $SSO_REDIRECT_URI) {
+                SPITAJAX_ERROR(-1, "Invalid SSO values");
+                return;
+            }
+        }
+        
+        #
+        # User already logged in and has indicated they want to continue
+        # SSO with this login ID.
+        #
+        if ($this_user) {
+            if (isset($ajax_args["sso-continue"])) {
+                $code = $this_user->GetSSOCode();
+                ClearReferrer();
+                SPITAJAX_RESPONSE("$redirect_uri?code=$code&client_id=$client_id");
+                return;
+            }
+            if (isset($ajax_args["sso-switchuser"])) {
+                # Do not log the user into Powder after authentication.
+                $nocookies = 1;
+            }
+        }
+        # Fall through to normal login and redirect, 
+    }
+    
     if (!isset($ajax_args["uid"]) || $ajax_args["uid"] == "") {
         $errors["uid"] = "Please supply a username";
     }
@@ -59,16 +93,6 @@ function Do_Login()
 	return;
     }
 
-    if (isset($ajax_args["client_id"]) && isset($ajax_args["redirect_uri"])) {
-        $client_id = $ajax_args["client_id"];
-        $redirect_uri = $ajax_args["redirect_uri"];
-        if ($client_id != $SSO_CLIENT_ID ||
-            $redirect_uri != $SSO_REDIRECT_URI) {
-            SPITAJAX_ERROR(-1, "Invalid SSO values");
-            return;
-        }
-    }
-    
     if (GetReferrer($referrer) != 0) {
         SPITAJAX_ERROR(-1, "Invalid REFERRER");
         return;
@@ -80,8 +104,8 @@ function Do_Login()
         $adminmode = 1;
     }
     $login_status = 0;
-    
-    $dologin_status = DOLOGIN($uid, $password, $adminmode);
+
+    $dologin_status = DOLOGIN($uid, $password, $adminmode, 0, $nocookies);
     if ($dologin_status == DOLOGIN_STATUS_WEBFREEZE) {
         $error =
                "Your account has been frozen due to earlier login attempt ".
@@ -142,7 +166,6 @@ function Do_Login()
 	SPITAJAX_ERROR($login_status, $error);
         return;
     }
-    $this_user = $CHECKLOGIN_USER;
 
     # ZMS SSO
     if ($client_id && $redirect_uri) {
@@ -150,12 +173,18 @@ function Do_Login()
         # Generate a shortlived code that allows the endpoint to redeem a
         # descoped token for this user.
         #
-        $code = $this_user->GetSSOCode();
+        if ($nocookies) {
+            $code = $CHECKLOGIN_AUTHUSER->GetSSOCode();
+        }
+        else {
+            $code = $CHECKLOGIN_USER->GetSSOCode();
+        }
         ClearReferrer();
         SPITAJAX_RESPONSE("$redirect_uri?code=$code&client_id=$client_id");
         return;
     }
 
+    $this_user = $CHECKLOGIN_USER;
     #
     # Watch for a classic user logging in but without an encrypted certificate.
     # We really want to generate one so stuff does not break.
