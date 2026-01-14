@@ -1,0 +1,187 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+
+#
+# Reactivate a single user.
+# The main reason for this script is to check the user's permissions
+# and if not leading a project, and has not logged in for a "long" time,
+# their permissions are reset to "user" in their projects. This throws
+# the decision to the PI(s) to determine if a long absent user 
+#
+my $interval = 24;	# months
+
+sub usage()
+{
+    print("Usage: reactivate-user [-n] [-I interval] <user>\n".
+	  "Options:\n".
+	  " -n       - Just show what would be done\n".
+	  " -I <int> - Number of months to consider setting perms to 'user'\n".
+	  "            Defaults to $interval months\n");
+    exit(-1);
+}
+my $optlist    = "nI:";
+my $impotent   = 0;
+my @projects   = ();
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $OURDOMAIN   = "@OURDOMAIN@";
+my $WAP         = "$TB/sbin/withadminprivs";
+my $TBACCT      = "$TB/sbin/tbacct";
+my $MODGROUPS   = "$TB/sbin/modgroups";
+my $SUDO	= "/usr/local/bin/sudo";
+my $PROTOUSER   = "elabman";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+use User;
+use Project;
+use Group;
+sub fatal($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"I"})) {
+    $interval = int($options{"I"});
+    if (!$interval || $interval < 12) {
+	print STDERR "I don't think so...\n";
+	exit(0);
+    }
+}
+usage()
+    if (@ARGV != 1);
+
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+if (!$this_user->IsAdmin()) {
+    fatal("Only admins can use this script!");
+}
+
+my $target_user = User->Lookup($ARGV[0]);
+if (!defined($target_user)) {
+    fatal("Target user does not exist");
+}
+if ($target_user->status() ne USERSTATUS_INACTIVE) {
+    fatal("User is not inactive");
+}
+
+#
+# Determine if we are going to change perms to "user" and projects;
+#
+my $lastlogin = $target_user->LastWebLogin();
+if (!defined($lastlogin)) {
+    fatal("Error getting user last web login");
+}
+if (time() - $lastlogin > (30 * 24 * 3600 * $interval)) {
+    my @tmp;
+    
+    if ($target_user->ProjectMembershipList(\@tmp)) {
+	fatal("Could not get project membership list");
+    }
+    foreach my $project (@tmp) {
+	#
+	# If the user is a leader of a project, do not reset perms.
+	#
+	if ($project->IsLeader($target_user)) {
+	    @projects = ();
+	    last;
+	}
+	push(@projects, $project);
+    }
+}
+
+#
+# Must reactivate before doing the project membership changes.
+# Cause a deactivated user homedir is not mounted on ops.
+#
+# Need force so that tbacct changes the user status from inactive.
+#
+if ($impotent) {
+    print "Would reactivate (with -f) $target_user\n";
+}
+else {
+    system("$TBACCT -f reactivate " . $target_user->uid());
+    if ($?) {
+	fatal("Could not reactivate user account");
+
+    }
+}
+
+foreach my $project (@projects) {
+    my $pid = $project->pid();
+    my $t = $Group::MemberShip::TRUSTSTRING_USER;
+
+    if ($impotent) {
+	print "Would reset perms to 'user' in $pid\n";
+	next;
+    }
+    system("$MODGROUPS -s -m $pid:$pid:$t " . $target_user->uid());
+    if ($?) {
+	# Ick, deactivated again
+	system("$TBACCT -f deactivate " . $target_user->uid());
+	fatal("Could not reactivate user");
+    }
+}
+exit(0);
+
+sub fatal($) {
+    my($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
