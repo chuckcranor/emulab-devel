@@ -52,7 +52,7 @@ if (GetReferrer($referrer) != 0) {
     PAGEARGERROR("Invalid REFERRER");        
 }
 if ($referrer) {
-    error_log("login: " . $referrer);
+    #error_log("login: " . $referrer);
 }
 
 # For devel tree debugging.
