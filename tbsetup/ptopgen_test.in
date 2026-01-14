@@ -1893,6 +1893,12 @@ foreach $node (@nodenames) {
 		push(@features, "?+disk_any:$disk_any");
 	    }
 	}
+	# Odd that we have not been putting node_features into the
+	# ptop for a very long time. So now I am hesitant to do it
+	# for normal nodes, it will probably break experiments. :-(
+        for my $feature (@{$features{$node}}) {
+            push(@features, $feature);
+        }
     }
 
     #
