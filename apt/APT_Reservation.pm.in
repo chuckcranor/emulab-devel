@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2684,7 +2684,7 @@ sub MaxExtension($$)
     my $pid_idx = $project->pid_idx();
     my $expires = str2time($slice->expires());
     # This matches what MaxSliceExtension() does
-    my $newmax  = $expires + (60 * 60 * 24 * 180);
+    my $newmax  = $expires + (60 * 60 * 24 * 360);
 
     #
     # If the instance is not using any spectrum, we are done. Note,
@@ -3442,7 +3442,7 @@ sub MaxExtension($)
 	return undef;
     }
     # This matches what MaxSliceExtension() does
-    return $expires + (60 * 60 * 24 * 180)
+    return $expires + (60 * 60 * 24 * 360)
 	if (! @$routes);
 
     #
