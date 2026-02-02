@@ -386,7 +386,7 @@ class BenetelWrapper(object):
     RADIO_SETUP_SCRIPT = "/usr/sbin/radio_setup_a.sh"
     RADIO_SETUP_SCRIPT_PATTERN = r'-w (C[0-9A-Fa-f]+) -x 0x([0-9A-Fa-f]+)'
     RADIO_CONFIG_FILE = "/etc/ru_config.cfg"
-    RADIO_CONFIG_FILE_PATTERN = r'^\s*(\w+)\s*=\s*(\w+)'
+    RADIO_CONFIG_FILE_PATTERN = r'^\s*(\w+)\s*=\s*([.:\w]+)'
     SINGLE_FILE_SETTINGS_MAP = {
         'center_frequency': '/etc/ru-center-frequency-mhz',
         'bandwidth': '/etc/ru-bandwidth',
@@ -443,7 +443,7 @@ class BenetelWrapper(object):
         return self._ssh.is_connected()
 
     def _parse_fwversion(self, fwstr):
-        hw, version, hsh = fwstr.split("-")
+        hw, version, *other = fwstr.split("-")
         major, minor, rev = version.split(".")
         major = major.split("v")[1]
         self._hardware = hw
@@ -579,9 +579,9 @@ class BenetelWrapper(object):
                 key = m[1]
                 val = settings[self.RADIO_CONFIG_FILE_MAP[key]]
                 if key in ("centre_frequency_hz", "bandwidth_hz"):
-                    val *= 1e6  # Convert these to Hz for radio config file
+                    val = int(val*1e6)  # Convert these to Hz and round to int
                 elif key in ("c_plane_du_vlan", "u_plane_du_vlan_downlink",
-                             "u_plane_du_vlan_downlink"):
+                             "u_plane_du_vlan_uplink"):
                     val = format(val, "x")  # Convert to hex for Benetel...
                 elif key in ("c_plane_du_mac", "u_plane_du_mac"):
                     val = ":".join(re.findall("..", val)) # "Normal" mac string
@@ -596,9 +596,10 @@ class BenetelWrapper(object):
 
     def fetch_settings(self):
         settings = BenetelConfig()
-        for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
-            settings[stg] = self._fetch_single_file_setting(stg)
-        settings.update(self._fetch_radio_setup_script_settings())
+        if self._fwversion['major'] == 0 or self._fwversion['major'] == 1 and self._fwversion['minor'] < 4:
+            for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
+                settings[stg] = self._fetch_single_file_setting(stg)
+            settings.update(self._fetch_radio_setup_script_settings())
         settings.update(self._fetch_radio_config_file_settings())
         return settings
 
