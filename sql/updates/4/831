@@ -1,0 +1,23 @@
+#
+# XXX Do what 828 was supposed to do.
+# It only applied this change if user_jwt_tokens did not exist, which it does.
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("user_jwt_tokens", "scope_type") !~ /project/) {
+	DBQueryFatal("ALTER TABLE user_jwt_tokens change `scope_type` ".
+		     " `scope_type` enum('global','experiment','project') ".
+		     "  default 'global'");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
