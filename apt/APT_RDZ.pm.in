@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2025 University of Utah and the Flux Group.
+# Copyright (c) 2007-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2162,6 +2162,14 @@ sub WatchExperiment($$;$)
 	       $grant_status eq "active") {
 	    $rfrange->Update({"rdz_status" => "pending"});
 
+	    # Temp special case for ZMS demos. Needs to be generalized
+	    if ($status eq "paused" &&
+		($instance->pid() eq "RDZ-demo" ||
+		 $instance->pid() eq "openzms-demo")) {
+		logit("Not powering off nodes in demo experiment");
+		return 0;
+	    }
+
 	    if (!$impotent && $status eq "paused" &&
 		PowerControl($instance, "off", \$errmsg)) {
 		&$notify($grant, "off", $errmsg);
@@ -2182,6 +2190,14 @@ sub WatchExperiment($$;$)
 	       ($grant_status eq "pending" || $grant_status eq "paused")) {
 	    $rfrange->Update({"rdz_status" => "active"});
 	    
+	    # Temp special case for ZMS demo. Needs to be generalized
+	    if ($grant_status eq "paused" &&
+		($instance->pid() eq "RDZ-demo" ||
+		 $instance->pid() eq "openzms-demo")) {
+		logit("Not powering on nodes in demo experiment");
+		return 0;
+	    }
+
 	    # Do not change current status if this fails
 	    if (!$impotent && PowerControl($instance, "on", \$errmsg)) {
 		&$notify($grant, "on", $errmsg);
