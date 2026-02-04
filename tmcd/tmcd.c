@@ -14133,7 +14133,7 @@ static char *getgenistatus( tmcdreq_t *reqp ) {
 	row = mysql_fetch_row( res );
 
 	p = buf + snprintf( buf, sizeof buf, "{\"geni_urn\":\"%s\","
-			    "geni_slivers\":[", row[ 0 ] );
+			    "\"geni_slivers\":[", row[ 0 ] );
 	strcpy( expires, row[ 1 ] );
 
 	mysql_free_result( res );
