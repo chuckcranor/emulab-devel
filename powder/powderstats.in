@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -33,14 +33,34 @@ use Getopt::Std;
 use File::Basename;
 use Date::Parse;
 
+sub ShowActive();
 sub usage()
 {
-    print STDERR "Usage: powderstats [-s YYYY-MM-DD] -e YYYY-MM-DD\n";
+    print STDERR "Usage: powderstats [-A] [-s YYYY-MM-DD] -e YYYY-MM-DD\n";
+    print STDERR "    Print stats for projects/users/experiments created\n";
+    print STDERR "    during the time period.\n";
+    print STDERR "    -A   Print stats for projects/users/experiments that\n";
+    print STDERR "         were active at any point in the time period.\n";
+    print STDERR "    -v   Verbose output (for debugging)\n";
     exit(-1);
 }
-my $optlist   = "e:s:";
+my $optlist   = "Ae:s:v";
 my $STARTTIME;
 my $ENDTIME;
+my $showactive = 0;
+my $verbose = 0;
+
+#
+# Emulab start:    2000-11-09
+#    Oldest experiment_stats.created value.
+#
+# Cloudlab start:  2014-09-04
+#    Oldest apt_instance_history.created where portal='cloudlab'
+#
+# Powder start:    2017-10-26
+#    Oldest apt_instance_history.created where portal='powder'
+#
+my $EPOCH = "2017-10-26";
 
 #
 # Configure variables
@@ -73,12 +93,20 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
+if (defined($options{"A"})) {
+    $showactive = 1;
+}
 if (defined($options{"s"})) {
     $STARTTIME = $options{"s"};
     if (!str2time($STARTTIME)) {
 	print STDERR "Cannot parse -s argument\n";
 	exit(-1);
     }
+} else {
+    $STARTTIME = $EPOCH;
 }
 if (defined($options{"e"})) {
     $ENDTIME = $options{"e"};
@@ -86,10 +114,26 @@ if (defined($options{"e"})) {
 	print STDERR "Cannot parse -e argument\n";
 	exit(-1);
     }
-}
-else {
+} else {
     usage();
 }
+
+my $start = str2time($STARTTIME);
+my $end = str2time($ENDTIME);
+if ($start > $end) {
+    print STDERR "Start date after end date\n";
+    exit(1);
+}
+if ($start > time()) {
+    print STDERR "Start date in the future\n";
+    exit(1);
+}
+print "Stats from $STARTTIME to $ENDTIME\n\n";
+
+if ($showactive) {
+    exit(ShowActive());
+}
+
 my $query_result;
 
 #
@@ -173,4 +217,138 @@ $query_result =
 print "Top 20 powder projects:\n";
 while (my ($pid,$ecount) = $query_result->fetchrow_array()) {
     print "  $pid, $ecount\n";
+}
+
+exit(0);
+
+#
+# The traditional Powder stats report is based around projects, users, and
+# experiments *created* during the given time period with the Top 20 users
+# and projects computed from experiments that started *and* ended during
+# that period.
+#
+# "Active" experiments are those whose lifetime overlapped with the time
+# period, possibly starting before the time period or ending after (or still
+# running). The Top 20 users and project are then based on those experiments.
+#
+sub ShowActive()
+{
+    my %proj = ();
+    my %user = ();
+    my %uname = ();
+    my %uproj = ();
+    my $query_result;
+
+    #
+    # Experiments active.
+    #
+    $query_result =
+	DBQueryFatal("select h.creator,u.usr_name,h.pid ".
+		     "from apt_instance_history as h ".
+		     "left join users as u on u.uid_idx=h.creator_idx ".
+		     "where h.portal='powder' and ".
+		     "    h.pid!='PMonitor' and ".
+		     "    h.pid!='emulab-ops' and ".
+		     "    h.pid!='testbed' and ".
+		     "    h.created < '$ENDTIME' and ".
+		     "    h.destroyed > '$STARTTIME' and ".
+		     "    u.usr_email not like '%utah.edu' and ".
+		     "    u.usr_email not like '%rice.edu'");
+    my $pastexp = $query_result->numrows;
+
+    my $numproj = 0;
+    my $numuser = 0;
+
+    # Loop thru the experiments and record the projects and users (creators)
+    while (my ($uid,$uname,$pid) = $query_result->fetchrow_array()) {
+	if (!exists($proj{$pid})) {
+	    $proj{$pid} = 1;
+	    $numproj++;
+	} else {
+	    $proj{$pid}++;
+	}
+	if (!exists($user{$uid})) {
+	    $user{$uid} = 1;
+	    $uname{$uid} = $uname;
+	    $uproj{$uid} = $pid;
+	    $numuser++;
+	} else {
+	    $user{$uid}++;
+	    # XXX users can be in multiple projects
+	    if (!exists($uproj{$uid})) {
+		$uproj{$uid} = $pid;
+	    } elsif ($uproj{$uid} !~ /$pid/) {
+		$uproj{$uid} .= "/$pid";
+	    }
+	}
+    }
+
+    $query_result =
+	DBQueryFatal("select h.creator,u.usr_name,h.pid ".
+		     "from apt_instances as h ".
+		     "left join users as u on u.uid_idx=h.creator_idx ".
+		     "where h.portal='powder' and ".
+		     "    h.pid!='PMonitor' and ".
+		     "    h.pid!='emulab-ops' and ".
+		     "    h.pid!='testbed' and ".
+		     "    h.started is not null and ".
+		     "    h.started < '$ENDTIME' and ".
+		     "    u.usr_email not like '%utah.edu' and ".
+		     "    u.usr_email not like '%rice.edu'");
+    my $curexp = $query_result->numrows;
+
+    # Loop thru the experiments and record the projects and users (creators)
+    while (my ($uid,$uname,$pid) = $query_result->fetchrow_array()) {
+	if (!exists($proj{$pid})) {
+	    $proj{$pid} = 1;
+	    $numproj++;
+	} else {
+	    $proj{$pid}++;
+	}
+	if (!exists($user{$uid})) {
+	    $user{$uid} = 1;
+	    $uname{$uid} = $uname;
+	    $uproj{$uid} = $pid;
+	    $numuser++;
+	} else {
+	    $user{$uid}++;
+	    # XXX users can be in multiple projects
+	    if (!exists($uproj{$uid})) {
+		$uproj{$uid} = $pid;
+	    } elsif ($uproj{$uid} !~ /$pid/) {
+		$uproj{$uid} .= "/$pid";
+	    }
+	}
+    }
+
+    # Number of projects and users
+    print "Powder Portal projects: $numproj\n";
+    print "Powder Portal users: $numuser\n";
+
+    # Number of experiments
+    my $numexp = $pastexp + $curexp;
+    print "Powder Portal experiments: $numexp";
+    if ($verbose) {
+	print " (past=$pastexp, current=$curexp)";
+    }
+    print "\n";
+
+    # Top 20 users
+    my @list = sort { $user{$b} <=> $user{$a} } keys %user;
+    print "Top 20 powder users:\n";
+    my $limit = int(@list) > 20 ? 20 : int(@list);
+    for (my $i = 0; $i < $limit; $i++) {
+	my $uid = $list[$i];
+	print "  $uid, $uname{$uid}, $uproj{$uid}, $user{$uid}\n";
+    }
+
+    # Top 20 projects
+    @list = sort { $proj{$b} <=> $proj{$a} } keys %proj;
+    print "Top 20 powder projects:\n";
+    $limit = int(@list) > 20 ? 20 : int(@list);
+    for (my $i = 0; $i < $limit; $i++) {
+	print "  $list[$i], $proj{$list[$i]}\n";
+    }
+
+    return(0);
 }
