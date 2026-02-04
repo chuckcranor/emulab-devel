@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2025 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -2092,7 +2092,6 @@ COMMAND_PROTOTYPE(doifconfig)
 	char		clause[BUFSIZ];
 	char		buf[MYBUFSIZE], *ebufp = &buf[MYBUFSIZE];
 	int		nrows;
-	int		num_interfaces=0;
 	int		cookedgeninode = (reqp->geniflags & 0x2);
 	int		allowjumboframes = 0;
 
@@ -2322,7 +2321,6 @@ COMMAND_PROTOTYPE(doifconfig)
 
 			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
-			num_interfaces++;
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
 		}
@@ -6998,7 +6996,7 @@ COMMAND_PROTOTYPE(donseconfigs)
  */
 COMMAND_PROTOTYPE(dostate)
 {
-	char 		newstate[128];	/* More then we will ever need */
+	char 		newstate[128+1]; /* More then we will ever need */
 	MYSQL_RES	*res;
 	int		nrows;
 	int		i;
@@ -7433,7 +7431,7 @@ COMMAND_PROTOTYPE(dosecurestate)
  */
 COMMAND_PROTOTYPE(doquoteprep)
 {
-	char            newstate[128];	/* More then we will ever need */
+	char            newstate[128+1]; /* More then we will ever need */
         ETPM_NONCE       nonce;
         char            nonce_hex[2*TPM_NONCE_BYTES + 1];
         int             i;
