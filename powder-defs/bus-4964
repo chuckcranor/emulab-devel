@@ -116,11 +116,12 @@ MIN_UNIX_GID=2000
 
 # use ZFS
 WITHZFS=1
+ZFS_NOEXPORT=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
 ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
-WITHAMD=1
+WITHAMD=0
 # This will default to /.amd_mnt/ops in configure
 AMD_ROOT=""""
 
@@ -180,5 +181,7 @@ POWDER_BUS_P0WER_VERSION=2
 # Image updates take a long time on buses, this makes it smoother since
 # updates will not prevent experiments starting.
 IMAGEPROVENANCE=1
+
+POWDER_NICKNAME="Bus4964"
 
 # End of Emulab added section
