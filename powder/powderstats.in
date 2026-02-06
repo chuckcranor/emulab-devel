@@ -41,14 +41,14 @@ sub usage()
     print STDERR "    during the time period.\n";
     print STDERR "    -A   Print stats for projects/users/experiments that\n";
     print STDERR "         were active at any point in the time period.\n";
-    print STDERR "    -v   Verbose output (for debugging)\n";
+    print STDERR "    -d   Debug output\n";
     exit(-1);
 }
-my $optlist   = "Ae:s:v";
+my $optlist   = "Ade:s:";
 my $STARTTIME;
 my $ENDTIME;
 my $showactive = 0;
-my $verbose = 0;
+my $debug = 0;
 
 #
 # Emulab start:    2000-11-09
@@ -61,6 +61,26 @@ my $verbose = 0;
 #    Oldest apt_instance_history.created where portal='powder'
 #
 my $EPOCH = "2017-10-26";
+
+#
+# Projects to exclude from consideration. These are largely projects
+# where we do debugging and development of the infrastructure.
+#
+#my @EXPROJ = ("emulab-ops", "testbed", "PMonitor");
+my @EXPROJ = ("emulab-ops", "testbed", "PMonitor", "openzms-demo");
+
+#
+# Users who should not be included.
+#
+my @EXUSER = ();
+
+#
+# Email domains that should not be included.
+# XXX this is a catch-all for "local users", but is not terribly accurate
+# as many people use gmail or other external mail providers.
+#
+#my @EXMAIL = ("utah.edu", "rice.edu");
+my @EXMAIL = ();
 
 #
 # Configure variables
@@ -93,8 +113,8 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
-if (defined($options{"v"})) {
-    $verbose = 1;
+if (defined($options{"d"})) {
+    $debug = 1;
 }
 if (defined($options{"A"})) {
     $showactive = 1;
@@ -135,6 +155,12 @@ if ($showactive) {
 }
 
 my $query_result;
+
+#
+# Legacy counts. So Kobus can get consistent numbers if needed.
+# XXX note the hardwired projects and mail addresses to exclude, this is
+# intentional.
+#
 
 #
 # Number of projects.
@@ -240,20 +266,62 @@ sub ShowActive()
     my $query_result;
 
     #
+    # Build up sets of projects/users/email-addresses to exclude in the
+    # counts. Maybe it would be better to fetch everything and exlude them
+    # when we loop through the returned rows.
+    #
+    my $exprojclause = "";
+    my $exuserclause = "";
+    my $exmailclause = "";
+if (0) {
+    $exprojclause =
+	"h.pid!='PMonitor' and ".
+	"h.pid!='emulab-ops' and ".
+	"h.pid!='testbed' and ";
+    $exuserclause = "";
+    $exmailclause =
+	"u.usr_email not like '%utah.edu' and ".
+	"u.usr_email not like '%rice.edu' and ";
+} else {
+    if (@EXPROJ) {
+	my $list = join("','", @EXPROJ);
+	$exprojclause = "not h.pid in ('$list') and ";
+    }
+    if (@EXUSER) {
+	my $list = join("','", @EXUSER);
+	$exuserclause = "not u.uid in ('$list') and ";
+    }
+    if (@EXMAIL) {
+	my $list = join("','", @EXMAIL);
+	foreach my $exm (@EXMAIL) {
+	    $exmailclause .= "u.usr_email not like '%$exm' and ";
+	}
+    }
+    if ($debug) {
+	print STDERR "Proj clause: |$exprojclause|\n";
+	print STDERR "User clause: |$exuserclause|\n";
+	print STDERR "Mail clause: |$exmailclause|\n";
+    }
+}
+    
+    #
     # Experiments active.
     #
-    $query_result =
-	DBQueryFatal("select h.creator,u.usr_name,h.pid ".
-		     "from apt_instance_history as h ".
-		     "left join users as u on u.uid_idx=h.creator_idx ".
-		     "where h.portal='powder' and ".
-		     "    h.pid!='PMonitor' and ".
-		     "    h.pid!='emulab-ops' and ".
-		     "    h.pid!='testbed' and ".
-		     "    h.created < '$ENDTIME' and ".
-		     "    h.destroyed > '$STARTTIME' and ".
-		     "    u.usr_email not like '%utah.edu' and ".
-		     "    u.usr_email not like '%rice.edu'");
+    my $query = 
+	"select h.creator,u.usr_name,h.pid ".
+	"from apt_instance_history as h ".
+	"left join users as u on u.uid_idx=h.creator_idx ".
+	"where h.portal='powder' and ".
+	"    $exprojclause ".
+	"    $exuserclause ".
+	"    $exmailclause ".
+	"    h.started is not NULL and h.started < '$ENDTIME' and ".
+	"    h.destroyed > '$STARTTIME'";
+    if ($debug) {
+	print STDERR "Query: |$query|\n";
+    }
+    
+    $query_result = DBQueryFatal($query);
     my $pastexp = $query_result->numrows;
 
     my $numproj = 0;
@@ -283,18 +351,20 @@ sub ShowActive()
 	}
     }
 
+    $query =
+	"select h.creator,u.usr_name,h.pid ".
+	"from apt_instances as h ".
+	"left join users as u on u.uid_idx=h.creator_idx ".
+	"where h.portal='powder' and ".
+	"    $exprojclause ".
+	"    $exuserclause ".
+	"    $exmailclause ".
+	"    h.started is not NULL and h.started < '$ENDTIME'";
+    if ($debug) {
+	print STDERR "Query: |$query|\n";
+    }
     $query_result =
-	DBQueryFatal("select h.creator,u.usr_name,h.pid ".
-		     "from apt_instances as h ".
-		     "left join users as u on u.uid_idx=h.creator_idx ".
-		     "where h.portal='powder' and ".
-		     "    h.pid!='PMonitor' and ".
-		     "    h.pid!='emulab-ops' and ".
-		     "    h.pid!='testbed' and ".
-		     "    h.started is not null and ".
-		     "    h.started < '$ENDTIME' and ".
-		     "    u.usr_email not like '%utah.edu' and ".
-		     "    u.usr_email not like '%rice.edu'");
+	DBQueryFatal($query);
     my $curexp = $query_result->numrows;
 
     # Loop thru the experiments and record the projects and users (creators)
@@ -321,17 +391,17 @@ sub ShowActive()
 	}
     }
 
-    # Number of projects and users
-    print "Powder Portal projects: $numproj\n";
-    print "Powder Portal users: $numuser\n";
-
     # Number of experiments
     my $numexp = $pastexp + $curexp;
     print "Powder Portal experiments: $numexp";
-    if ($verbose) {
+    if ($debug) {
 	print " (past=$pastexp, current=$curexp)";
     }
     print "\n";
+
+    # Number of projects and users
+    print "Powder Portal projects: $numproj\n";
+    print "Powder Portal users: $numuser\n";
 
     # Top 20 users
     my @list = sort { $user{$b} <=> $user{$a} } keys %user;
