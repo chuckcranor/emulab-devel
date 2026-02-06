@@ -1207,7 +1207,7 @@ fixone() {
 	dofreebsd
 	return $?
 	;;
-    131|0x83|8300)
+    131|0x83|8300|8304)
 	dolinux
 	return $?
 	;;
