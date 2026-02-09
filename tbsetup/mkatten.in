@@ -512,7 +512,7 @@ if( !$impotent ) {
 my %allpaths = ();
 for( my $i = 1; $i <= 32; $i++ ) {
     if( defined( $ins[ $i ] ) ) {
-	for( my $o = $i % 4; $o < 16; $o += 4 ) {
+	for( my $o = $i % 4; $o <= 16; $o += 4 ) {
 	    if( defined( $outs[ $o ] ) ) {			
 		my ($inode, $igroup, $ilabel) = @{ $ins[ $i ] };
 		my ($onode, $ogroup, $olabel) = @{ $outs[ $o ] };
