@@ -417,6 +417,7 @@ sub find_default_grub_entry
 	my ($kernel, $cmdline, $initrd);
 
 	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";
+	print STDERR "Imageroot: $imageroot, Conf: $conf";
 	while (<FILE>) {
 		if (/^default\s+(\d+)$/) {
 			$default = $1;
@@ -440,7 +441,7 @@ sub find_default_grub_entry
 		}
 	}
 	close FILE;
-
+	print STDERR "cmdline: $cmdline";
 	return ($kernel, $cmdline, $initrd);
 }
 
@@ -452,7 +453,7 @@ sub find_default_grub2_entry
 	my $current_entry = -1;
 	my ($kernel, $cmdline, $initrd);
 
-	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";
+	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";	
 	while (<FILE>) {
 		if (/^\s*set\s+default\s*=\s*["']?(\d+)["']?$/) {
 			$default = $1;
@@ -476,7 +477,7 @@ sub find_default_grub2_entry
 		}
 	}
 	close FILE;
-
+	
 	return ($kernel, $cmdline, $initrd);
 }
 
@@ -985,16 +986,85 @@ sub mount_image
 {
 	my ($root, $imageroot) = @_;
 	my $fstype;
+	my @types = ("ext4", "ext3", "ext2");
+	
+	my $cloudinit = $ENV{"SLICEFIX_CLOUDINIT"};
+	if ($cloudinit) {
+	    @types = ("ext4", "xfs");
+	}
 
-	for my $type (qw/ext4 ext3 ext2/) {
-		`mount -t $type $root $imageroot`;
+	for my $type (@types) {
+		`mount -t $type $root $imageroot >/dev/null 2>&1`;
+		my $stat = $?;
 		if (!($? >> 8)) {
 			$fstype = $type;
 			last;
 		}
+		sleep(1);
 	}
 
+	if ($fstype) {
+		print "Mounted $root on $imageroot as type $fstype\n";
+	} else {
+		print "Could not mount $root on $imageroot!\n";
+	}
 	return $fstype;
+}
+
+#
+# Identify and return the path to the grub configfile.
+#
+# With cloud-init based images, /boot might be on a separate filesystem
+# that we need to find and mount in order to locate the grub configfile.
+#
+sub find_grub_configfile
+{
+	my ($root, $imageroot) = @_;
+	my $ismounted = 0;
+
+	#
+	# First look to see if /boot is a mounted filesystem and mount that.
+	#
+	if (-e "$imageroot/etc/fstab" && open(FD, "<$imageroot/etc/fstab")) {
+		my ($fstype, $fsid);
+		while (<FD>) {
+			next if (/^#/);
+			my @f = split /\s+/;
+			if ($f[1] eq "/boot") {
+				$fsid = $f[0];
+				$fstype = $f[2];
+				last;
+			}
+		}
+		close(FD);
+		if ($fstype) {
+			my $bfsdev = "";
+			if ($fsid =~ /^UUID=(.*)/) {
+				$bfsdev = `$BLKID -U $1`;
+			} elsif ($fsid =~ /^LABEL=(.*)/) {
+				$bfsdev = `$BLKID -L $1`;
+			}
+			chomp($bfsdev);
+			# even if this does not work, we continue
+			if ($bfsdev) {
+				print "Mounting $fstype FS $bfsdev on $imageroot/boot\n";
+				if (system("$MOUNT -t $fstype $bfsdev $imageroot/boot") == 0) {
+				    $ismounted = 1;
+				}
+			}
+		}
+
+	}
+
+	#
+	# If /boot/grub/grub.cfg or /boot/grub2/grub.cfg exists, use it.
+	#
+	for my $gcf ("grub/grub.cfg", "grub2/grub.cfg") {
+		return ("/boot/$gcf", $ismounted)
+		    if (-f "$imageroot/boot/$gcf");
+	}
+
+	return ("", 0);
 }
 
 sub update_random_seed
@@ -1108,6 +1178,60 @@ sub fix_console
     }
 }
 
+sub generate_cloudinit_network_config
+{
+	my ($cnetmacaddr) = @_;
+	my $cloudinitcfg = "";
+
+	print STDERR "Using cloud-init to configure the node\n";
+
+	# Fetch the network config from the metadata server running on boss node.
+	my $network_config_url = "http://155.98.32.70:8000/network-config?source=initramfs";
+	my $network_config = `wget -qO- '$network_config_url'`;
+	my $status = $? >> 8;
+
+	# Noticed that sometimes immediate fetch fails as node is still not allocated, so retry a x times.
+	my $retry = 1;
+	while ($status != 0 && $retry > 0) {
+		print STDERR "Retrying to fetch network config from $network_config_url\n";
+		sleep(1);
+		$network_config = `wget -qO- '$network_config_url?retry=$retry&src=initramfs'`;
+		$status = $? >> 8;
+		$retry--;
+	}
+
+	if ($? != 0 || !$network_config) {
+		print STDERR "TMCD returned empty network config, will only configure cnet\n";
+	}
+
+	# If we don't have rest of network config, we can at least configure the control interface.
+	my $cloudinitcfg = "network:\n".
+		"  version: 2\n".
+		"  ethernets:\n".
+		"    ctlnet:\n".
+		"      match:\n".
+		"        macaddress: $cnetmacaddr\n".
+		"      dhcp4: true\n".
+		"      set-name: ctlnet\n";
+
+	if ($network_config) {
+		print STDERR "Using network config from $network_config_url\n";
+		print STDERR "Orignal netconfig $network_config\n";
+		$network_config =~ s/^/    /mg;
+		$network_config =~ s/^ {4}(vlans:)/  $1/mg;
+		$cloudinitcfg .= $network_config;
+		print STDERR "After processing netconfig $cloudinitcfg\n";
+	}
+
+	$cloudinitcfg = `echo "$cloudinitcfg" | base64 -w 0`;
+
+	chomp($cloudinitcfg);
+	
+	$cloudinitcfg = " cloud-init=enabled ds='nocloud\;s=http://155.98.32.70:8000/' network-config=$cloudinitcfg";
+
+	return $cloudinitcfg;
+}
+
 #
 # Handle default settings file for grub since package installation
 # might cause the grub.cfg file to get recreated.
@@ -1129,7 +1253,7 @@ sub fix_console
 #
 sub fix_grub_defaults
 {
-    my ($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch) = @_;
+    my ($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch, $cloudinitcfg) = @_;
     my $gdef = "$imageroot/etc/default/grub";
 
     if (! -e $gdef) {
@@ -1149,6 +1273,29 @@ sub fix_grub_defaults
 	$cnetstr = " emulabcnet=$cnetmacaddr";
     }
 
+    my $consolestr = "";
+    if ($sunit < 0 && $console =~ /^hvc/) {
+	$consolestr = "console=tty0 console=$console";
+    } elsif ($sunit < 0) {
+	if ($arch eq "aarch64") {
+	    $consolestr = "console=ttyAMA0";
+	} else {
+	    $consolestr = "console=tty0";
+	}
+    } else {
+	$consolestr = "console=ttyS$sunit,$sspeed";
+    }
+
+    #
+    # For cloud-init images, make sure SELinux is disabled.
+    # XXX our messing with /etc/ssh files upsets SELinux.
+    # 
+    if ($cloudinitcfg) {
+	$cloudinitcfg = " selinux=0 $cloudinitcfg";
+    }
+
+    my $cmdline = "$consolestr$cnetstr$cloudinitcfg";
+
     my @buffer = ();
     while (<FILE>) {
 	if (/^$esig/) {
@@ -1161,20 +1308,15 @@ sub fix_grub_defaults
     push @buffer, "$esig\n";
     push @buffer, "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
     if ($sunit < 0 && $console =~ /^hvc/) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console$cnetstr\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"$cmdline\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } elsif ($sunit < 0) {
-	if ($arch eq "aarch64") {
-	    # XXX hack for Nvidia Grace Hopper nodes
-	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyAMA0$cnetstr\"\n";
-	} else {
-	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr\"\n";
-	}
+	push @buffer, "GRUB_CMDLINE_LINUX=\"$cmdline\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } else {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed$cnetstr\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"$cmdline\"\n";
 	push @buffer, "GRUB_TERMINAL=serial\n";
 	if ($sport) {
 	    push @buffer, "GRUB_SERIAL_COMMAND=\"serial --unit=$sunit --port=$sport --speed=$sspeed\"\n";
@@ -1189,6 +1331,53 @@ sub fix_grub_defaults
     print FILE @buffer;
 
     close FILE;
+
+    #
+    # XXX Newer (RHEL?) releases might have the kernel command line in
+    # /etc/kernel/cmdline. This seems to be used on the initial boot.
+    #
+    # If using grubby, then there will also be a command line in
+    # /boot/loader/entries/*. This seems to be used on every boot _after_
+    # the first boot.
+    #
+    my $cmdlinefile = "$imageroot/etc/kernel/cmdline";
+    if (-e "$cmdlinefile" && open(FILE, "+<$cmdlinefile")) {
+	# should be only a single line
+	my $ocmdline = <FILE>;
+	chomp($ocmdline);
+	# XXX need to get rid of any old console settings
+	if ($consolestr) {
+	    $ocmdline =~ s/console=\S+//g;
+	}
+	seek(FILE, 0, 0);
+	truncate(FILE, 0);
+	print FILE "$ocmdline $cmdline\n";
+	close(FILE);
+    }
+    if (-d "$imageroot/boot/loader/entries") {
+	my @entries = `grep -l '^options ' $imageroot/boot/loader/entries/*`;
+	chomp(@entries);
+	foreach my $efile (@entries) {
+	    if (open(FILE, "+<$efile")) {
+		@buffer = ();
+		while (<FILE>) {
+		    if (/^options /) {
+			chomp;
+			# XXX need to get rid of any old console settings
+			if ($consolestr) {
+			    s/console=\S+//g;
+			}
+			$_ .= " $cmdline\n";
+		    }
+		    push @buffer, $_;
+		}
+		seek(FILE, 0, 0);
+		truncate(FILE, 0);
+		print FILE @buffer;
+		close(FILE);
+	    }
+	}
+    }
 }
 
 sub fix_grub_console
@@ -1374,11 +1563,19 @@ sub get_cnet_mac_addr
 
 sub fix_grub_cnet_hint
 {
-	my ($imageroot, $bootloader, $file, $cnetmacaddr) = @_;
+	my ($imageroot, $bootloader, $file, $cnetmacaddr, $cloudinitcfg) = @_;
 
 	if (!defined($cnetmacaddr) || $cnetmacaddr eq "") {
 		print STDERR "Cannot replace emulabcnet hint; no control interface mac address!\n";
 		return;
+	}
+
+	#
+	# For cloud-init images, make sure SELinux is disabled.
+	# XXX our messing with /etc/ssh files upsets SELinux.
+	# 
+	if ($cloudinitcfg) {
+	    $cloudinitcfg = " selinux=0 $cloudinitcfg";
 	}
 
 	open FILE, "+<$imageroot/$file" ||
@@ -1387,17 +1584,22 @@ sub fix_grub_cnet_hint
 	my @buffer = ();
 	while (<FILE>) {
 		if (/emulabcnet=[\w:]+/) {
-			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr#g;
+			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr$cloudinitcfg#g;
 			push @buffer, $_;
-			print "Replaced emulabcnet=$cnetmacaddr in cmdline in $file\n";
+			print "Replaced emulabcnet=$cnetmacaddr$cloudinitcfg in cmdline in $file\n";
 			next;
 		}
 		# Most likely we need to add it; guess.
 		elsif (/root=/ && /console=/) {
 			chomp;
-			$_ .= " emulabcnet=$cnetmacaddr\n";
+			# XXX beware, the whole thing might be in quotes
+			if (/^(.*)"$/) {
+				$_ = "$1 emulabcnet=$cnetmacaddr$cloudinitcfg\"\n";
+			} else {
+				$_ .= " emulabcnet=$cnetmacaddr$cloudinitcfg\n";
+			}
 			push @buffer, $_;
-			print "Added emulabcnet=$cnetmacaddr to cmdline in $file\n";
+			print "Added emulabcnet=$cnetmacaddr$cloudinitcfg to cmdline in $file\n";
 			next;
 		}
 		#
@@ -1456,38 +1658,40 @@ sub fix_sshd_config
 #
 sub localize
 {
-    my ($imageroot) = @_;
+    my ($imageroot, $iscloudimage) = @_;
 
     if (! -e "$LOCALIZED1" && ! -e "$LOCALIZED2") {
 	return;
     }
 
-    # Check the certs.
-    if (! -d "$imageroot/etc/emulab") {
-	if (!mkdir("$imageroot/etc/emulab", 0755)) {
-	    print STDERR "Failed to mkdir $imageroot/etc/emulab\n";
-	    return;
-	}
-    }
-    if (-e "$ETCDIR/emulab.pem") {
-	system("cmp -s $ETCDIR/emulab.pem $imageroot/etc/emulab/emulab.pem >/dev/null 2>&1");
-	if ($?) {
-	    print "Updating $imageroot/etc/emulab/emulab.pem\n";
-	    system("cp -pf $ETCDIR/emulab.pem $imageroot/etc/emulab/");
-	    if ($?) {
-		print STDERR "Failed to create $ETCDIR/emulab.pem\n";
+    # Check the certs. Don't need them for cloud-init images
+    if (!$iscloudimage) {
+	if (! -d "$imageroot/etc/emulab") {
+	    if (!mkdir("$imageroot/etc/emulab", 0755)) {
+		print STDERR "Failed to mkdir $imageroot/etc/emulab\n";
 		return;
 	    }
 	}
-    }
-    if (-e "$ETCDIR/client.pem") {
-	system("cmp -s $ETCDIR/client.pem $imageroot/etc/emulab/client.pem >/dev/null 2>&1");
-	if ($?) {
-	    print "Updating $imageroot/etc/emulab/client.pem\n";
-	    system("cp -pf $ETCDIR/client.pem $imageroot/etc/emulab/");
+	if (-e "$ETCDIR/emulab.pem") {
+	    system("cmp -s $ETCDIR/emulab.pem $imageroot/etc/emulab/emulab.pem >/dev/null 2>&1");
 	    if ($?) {
-		print STDERR "Failed to create $ETCDIR/client.pem\n";
-		return;
+		print "Updating $imageroot/etc/emulab/emulab.pem\n";
+		system("cp -pf $ETCDIR/emulab.pem $imageroot/etc/emulab/");
+		if ($?) {
+		    print STDERR "Failed to create $ETCDIR/emulab.pem\n";
+		    return;
+		}
+	    }
+	}
+	if (-e "$ETCDIR/client.pem") {
+	    system("cmp -s $ETCDIR/client.pem $imageroot/etc/emulab/client.pem >/dev/null 2>&1");
+	    if ($?) {
+		print "Updating $imageroot/etc/emulab/client.pem\n";
+		system("cp -pf $ETCDIR/client.pem $imageroot/etc/emulab/");
+		if ($?) {
+		    print STDERR "Failed to create $ETCDIR/client.pem\n";
+		    return;
+		}
 	    }
 	}
     }
@@ -1514,7 +1718,24 @@ sub localize
 
     # Check the host keys.
     my $changehostkeys = 0;
-    foreach my $kt ("", "dsa_", "ecdsa_", "ed25519_", "rsa_") {
+
+    #
+    # Install appropriate host keys.
+    #
+    # XXX Our RSA key is too short for modern ssh implementations.
+    # Unfortunately, it does not seem to be ignored like other unsupported
+    # key types, rather it causes sshd to fail to start. So for images that
+    # are out of our control (cloud images), we don't install the SSH key
+    # (or the obsolute key types).
+    #
+    my @addkeylist = ("", "dsa_", "rsa_", "ecdsa_", "ed25519_");
+    my @rmkeylist = ();
+    if ($iscloudimage) {
+	@addkeylist = ("ecdsa_", "ed25519_");
+	@rmkeylist = ("", "dsa_", "rsa_");
+    }
+
+    foreach my $kt (@addkeylist) {
 	if (-e "/etc/ssh/ssh_host_${kt}key") {
 	    system("cmp -s /etc/ssh/ssh_host_${kt}key $imageroot/etc/ssh/ssh_host_${kt}key >/dev/null 2>&1");
 	    if ($?) {
@@ -1522,6 +1743,12 @@ sub localize
 	    }
 	}
     }
+    foreach my $kt (@rmkeylist) {
+	if (-e "/etc/ssh/ssh_host_${kt}key") {
+	    $changehostkeys = 1;
+	}
+    }
+
     if ($changehostkeys) {
 	print "Updating /etc/ssh host keys\n";
 
@@ -1535,6 +1762,10 @@ sub localize
 	if ($?) {
 	    print STDERR "Failed to create /etc/ssh/hostkeys\n";
 	    return;
+	}
+	foreach my $kt (@rmkeylist) {
+	    print "Removing obsolete key ssh_host_${kt}key\n";
+	    system("rm -f $imageroot/etc/ssh/ssh_host_${kt}key*");
 	}
     }
 
@@ -1556,6 +1787,14 @@ sub localize
 	} else {
 	    print STDERR "Failed to parse $imageroot/etc/group ssh_keys entry, ignored\n";
 	}
+    }
+
+    #
+    # If this is a cloudimage, we don't mess with time and timezone-related
+    # setup.
+    #
+    if ($iscloudimage) {
+	return;
     }
 
     # Check the time zone.
@@ -1646,10 +1885,61 @@ sub main
 	my ($kernel, $cmdline, $initrd);
 	my $lilo_default;
 	my $lilo_commandline = 0;
+	my $cinetconfig = "";
 
-	my $old_uuid = get_uuid($root);
 	#
-	# Currently this break our UEFI images where the UUID is embedded
+	# For cloud images the main thing we need to do is locate grub.cfg so
+	# that we can fix up the kernel command line with network config info.
+	#
+	# But...there some other thing we do that cloud-init either cannot do
+	# or does not do for us yet:
+	#    - fix up the console for vga, sio1, sio2
+	#    - install Emulab fixed host keys
+	#    - install boss's root pubkey in local root's authorized_keys
+	#
+	my $iscloudimage = $ENV{"SLICEFIX_CLOUDINIT"};
+	if ($iscloudimage) {
+		my $ismounted;
+
+		my $fstype = mount_image($root, $imageroot);
+		($grub_config, $ismounted) =
+		    find_grub_configfile($root, $imageroot);
+		if (!$grub_config) {
+			print STDERR "found no grub config file, not a root FS?\n";
+			system("$UMOUNT $imageroot");
+			return 1;
+		}
+		
+		print "cloudimage: found $grub_config\n";
+		my $bootloader = 'grub2';
+		my $arch = `uname -m`;
+		chomp($arch);
+
+		my ($console, $sunit, $sspeed, $sport) =
+		    get_console_params($imageroot, $bootloader);
+		fix_grub_console($imageroot, $grub_config, $console, $sunit, $sspeed, $sport, $arch);
+
+		my ($cnetmacaddr) = get_cnet_mac_addr();
+		$cinetconfig = generate_cloudinit_network_config($cnetmacaddr);
+		fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr, $cinetconfig);
+		fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch, $cinetconfig);
+
+		# XXX
+		localize($imageroot, 1);
+		fix_sshd_config($imageroot);
+
+		# Unmount all mounted partitions
+		if ($ismounted) {
+			system("$UMOUNT $imageroot/boot");
+		}
+		system("$UMOUNT $imageroot");
+		return 0;
+	}
+	
+	my $old_uuid = get_uuid($root);
+
+	#
+	# Currently this breaks our UEFI images where the UUID is embedded
 	# in /EFI/boot/ubuntu/grub.cfg. Until we start fixing up there,
 	# don't change the UUID. Note that the FreeBSD slicefix doesn't
 	# generate a random UUID either.
@@ -1660,6 +1950,7 @@ sub main
 	# XXX there seems to be an issue if we run blkid (in get_uuid)
 	# too soon after the mount.
 	sleep(2);
+
 	my $uuid = get_uuid($root);
 	my $label = get_label($root);
 	my $bootloader = guess_bootloader($root);
@@ -1804,14 +2095,14 @@ sub main
 	my ($console, $sunit, $sspeed, $sport) = get_console_params($imageroot, $bootloader);
 	fix_console($imageroot, $bootloader, $grub_config, $console, $sunit, $sspeed, $sport, $arch);
 	my ($cnetmacaddr) = get_cnet_mac_addr();
-	fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr);
-	fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch);
+	fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr, $cinetconfig);
+	fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch, $cinetconfig);
 
 	fix_swap_partitions($imageroot, $root,
 		$kernel_has_ide ? $old_root : undef );
 
 	update_random_seed($imageroot);
-	localize($imageroot);
+	localize($imageroot, $iscloudimage);
 	fix_sshd_config($imageroot);
 	hardwire_boss_node($imageroot);
 
@@ -1828,6 +2119,7 @@ sub main
 		       "-D $root -s Linux postload");
 	}
 
+	# Unmount all mounted partitions
 	`umount $imageroot`;
 
 	if ($lilo_commandline) {
