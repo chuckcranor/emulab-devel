@@ -41,10 +41,10 @@ use POSIX qw(strftime ceil);
 #
 sub usage()
 {
-    print "Usage: wr-monitor [-d level] [-snVDPp] [-I IP]\n";
+    print "Usage: wr-monitor [-d level] [-snVDPp] [-i interval] [-I IP]\n";
     exit(1);
 }
-my $optlist   = "d:nsVI:DPp";
+my $optlist   = "d:nsVi:I:DPp";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
@@ -53,6 +53,7 @@ my $getvers   = 0;
 my $dumpmode  = 0;
 my $useparallel = 0;
 my $dopowercycle = 0;
+my $interval;
 
 #
 # Power cycle options.
@@ -304,6 +305,13 @@ if (defined($options{"P"})) {
 if (defined($options{"p"})) {
     $dopowercycle = 1;
 }
+if (defined($options{"i"})) {
+    $interval = int($options{"i"});
+    if ($interval < 60) {
+	print STDERR "Interval must be at least 60 seconds\n";
+	usage();
+    }
+}
 if (defined($options{"I"})) {
     my $ip = $options{"I"};
     if (exists($WRNODES{$ip}) && $WRNODES{$ip}{'type'} eq "len") {
@@ -314,6 +322,8 @@ if (defined($options{"I"})) {
 	usage();
     }
 }
+$interval = $SLEEP_INTERVAL
+    if (!$interval);
 
 my $TELEGRAF = `/bin/cat $PASSWORD`;
 if ($?) {
@@ -449,7 +459,7 @@ while (1) {
 	if ($oneshot);
 
     print "\n";
-    sleep($SLEEP_INTERVAL);
+    sleep($interval);
 }
 
 exit(0);
