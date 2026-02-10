@@ -29,8 +29,9 @@ RUN_DEPENDS+=	\
 	bareos-fd:${PORTSDIR}/sysutils/bareos-client
 
 # Powder things
+# XXX we require a specific version of UHD so don't include it here
+#	uhd_find_devices:${PORTSDIR}/comms/uhd
 RUN_DEPENDS+=	\
-	uhd_find_devices:${PORTSDIR}/comms/uhd \
 	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi
 
 # Things we like

@@ -145,7 +145,8 @@ RUN_DEPENDS+=	\
 	p5-XML-Parser>=2.41:${PORTSDIR}/textproc/p5-XML-Parser \
 	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple \
         p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO \
-	p5-DBD-MariaDB>0:${PORTSDIR}/databases/p5-DBD-MariaDB
+	p5-DBD-MariaDB>0:${PORTSDIR}/databases/p5-DBD-MariaDB \
+	p5-Crypt-JWT>0:${PORTSDIR}/security/p5-Crypt-JWT
 
 # python packages
 .if (${EMULAB_PORTVERSION} == "9.3")
