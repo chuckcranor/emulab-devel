@@ -7407,6 +7407,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
         apt/GNUmakefile apt/fabric/GNUmakefile apt/portal-rest/GNUmakefile \
         powder/GNUmakefile powder/sasproxy/GNUmakefile \
+        powder/syncthing/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
         scopus/GNUmakefile \
