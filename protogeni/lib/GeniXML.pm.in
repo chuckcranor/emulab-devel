@@ -2137,5 +2137,26 @@ sub IsPrivate($)
     return 0;
 }
 
+#
+# Get parameters from the manifest for an RU node.
+#
+sub GetCOTSRUParameters($)
+{
+    my ($ref) = @_;
+    my %result = ();
+
+    my @fields = ("center_frequency", "bandwidth", "mimo_mode");
+
+    my $params = FindNodesNS( "n:cotsru_params", $ref, $EMULAB_NS )->pop();
+    if (defined($params)) {
+	foreach my $field (@fields) {
+	    my $val = GetText($field, $params);
+	    $result{$field} = $val
+		if (defined($val));
+	}
+    }
+    return \%result;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

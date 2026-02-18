@@ -871,14 +871,20 @@ sub RebootNode {
 	info("$pc: rebooted");
 	my $state = TBDB_NODESTATE_SHUTDOWN;
 	TBSetNodeEventState($pc,$state);
+	# Fire off RU boot watch / event sending proxy, if needed.
+	if ($nodeobject->type() =~ /^bt-ru\d+$/) {
+	    require power_benetel;
+	    my $btdev = new power_benetel($nodeobject);
+	    $btdev->launchEventSender();
+	}
 	exit(0);
     }
 
     #
-    # Switches do not do ipod, so jump to powercycle.
+    # Switches and blackboxen do not do ipod, so jump to powercycle.
     #
-    if ($nodeobject->isswitch()) {
-	info("$pc: is a switch, skipping ipod, power cycling");
+    if ($nodeobject->isswitch() || $nodeobject->isblackbox()) {
+	info("$pc: is a switch or blackbox, skipping ipod, power cycling");
 	exit(2);
     }
 
