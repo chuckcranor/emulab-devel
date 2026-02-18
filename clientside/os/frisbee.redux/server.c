@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2025 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -541,10 +541,6 @@ ClientJoin(Packet_t *p, int version)
 		}
 		i = j;
 	}
-	DOSTAT(joinrep++);
-
-	EVENT(1, EV_JOINREP, ipaddr, CHUNKSIZE, BLOCKSIZE,
-	      (FileInfo.filesize >> 32), FileInfo.filesize);
 
 	/*
 	 * Log after we send reply so that we get the packet off as
@@ -926,7 +922,7 @@ PlayFrisbee(void)
 {
 	int		chunk = 0, block = 0;
 	int		blockcount, cc, j, idlelastloop = 1;
-	int		startblock, lastblock, throttle = 0, thisburst = 0;
+	int		startblock = 0, lastblock, throttle = 0, thisburst = 0;
 	Packet_t	packet, *p = &packet;
 	char		*databuf;
 	off_t		offset;
@@ -1060,10 +1056,22 @@ PlayFrisbee(void)
 			}
 			PacketSend(p, 0);
 
+			DOSTAT(joinrep++);
+			{
+				struct in_addr ipaddr = { p->hdr.srcip };
+				/* XXX fit in params available */
+				uint32_t sizes = (CHUNKSIZE << 16) | BLOCKSIZE;
+
+				EVENT(1, EV_JOINREP, ipaddr, clientid,
+				      sizes, (FileInfo.filesize >> 32),
+				      FileInfo.filesize);
+			}
+
 			/*
-			 * Arrange for clients to report at the indicated interval.
-			 * Note that this request is broadcast, but only the
-			 * indicated client should effect the changes indicated.
+			 * Arrange for clients to report at the indicated
+			 * interval. Note that this request is broadcast,
+			 * but only the indicated client should effect the
+			 * changes indicated.
 			 *
 			 * XXX for now we just hardwire the type.
 			 */
