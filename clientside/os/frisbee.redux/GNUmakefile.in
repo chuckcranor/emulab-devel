@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -213,7 +213,7 @@ CFLAGS		+= -DUSE_REUSEADDR
 # See the comment in network.c::ClinetNetInit() for details.
 # This only affects the client.
 #
-CFLAGS		+= -DUSE_REUSEADDR_COMPAT
+#CFLAGS		+= -DUSE_REUSEADDR_COMPAT
 
 #
 # Define this to use select to implement packet-receive-with-timeout
