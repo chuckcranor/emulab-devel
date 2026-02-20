@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -393,7 +393,7 @@ sub CreateNewCert() {
 	# (corresponding to UUID e61300a0-c4c5-11de-b14e-0002a5d5c51b)
 	# is used to indicate generic ProtoGENI XMLRPC servers.
 	print TEMP
-	    "authorityInfoAccess=2.25.305821105408246119474742976030998643995;URI:$url\n";
+	    "authorityInfoAccess=2.25.305821105.408246119.47474297.603099864.3995;URI:$url\n";
     }
 
     print TEMP "\n";

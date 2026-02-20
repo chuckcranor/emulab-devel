@@ -80,6 +80,18 @@ $(function ()
 	otaStuff.RequestOtaPermission(pid);
     }
 
+    // Special case for treating OTA lab as a single unit.
+    function isOTALabNode(cluster_urn, type)
+    {
+        if (window.ISPOWDER &&
+            _.has(radioinfo, cluster_urn) &&
+            _.has(radioinfo[cluster_urn], type) &&
+            radioinfo[cluster_urn][type].itype == "OTA") {
+            return true;
+        }
+        return false;
+    }
+
     var addClusterRowString = 
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
 	'    <tr>' +
@@ -193,16 +205,18 @@ $(function ()
 	'		 data-trigger="hover" ' +
 	'		 title="Add a new reservation row"></span>' +
 	'       </button>' +
-	'       <button type="button" ' +
-	'               class="btn btn-xs btn-default delete-reservation ' +
-	'                      hidden" ' +
-	'               style="color: red;">' +
- 	'          <span class="glyphicon glyphicon-remove" ' +
-	'		 data-toggle="tooltip" ' +
-	' 		 data-container="body" ' +
-	'		 data-trigger="hover" ' +
-	'		 title="Delete this cluster reservation"></span>' +
-	'       </button>' +
+	'	<% if (candelete) { %>' +
+	'         <button type="button" ' +
+	'                 class="btn btn-xs btn-default delete-reservation ' +
+	'                        hidden" ' +
+	'                 style="color: red;">' +
+ 	'            <span class="glyphicon glyphicon-remove" ' +
+	'		   data-toggle="tooltip" ' +
+	' 		   data-container="body" ' +
+	'		   data-trigger="hover" ' +
+	'		   title="Delete this cluster reservation"></span>' +
+	'         </button>' +
+	'	<% } %>' +
 	'     </td>' +
 	'     <% if (window.ISADMIN) { %> ' +
 	'       <td style="width: 16px; padding-right: 0px;">' +
@@ -475,7 +489,7 @@ $(function ()
      */
     function modified_callback()
     {
-	console.info("modified_callback");
+	//console.info("modified_callback");
 	ToggleSubmit(true, "check");
 	aptforms.MarkFormUnsaved();
 	if (editing) {
@@ -654,6 +668,7 @@ $(function ()
 	}
 	if (window.ISPOWDER) {
 	    $('#range-info-div').html(templates["range-tabs"]);
+            SetupOtaLab();
 	}
  	
 	// Add one unassigned row.
@@ -871,12 +886,15 @@ $(function ()
 		// Kill tooltips since they get left behind if visible.
 		row.find('[data-toggle="tooltip"]').tooltip('destroy');
 		row.remove();
-		if ($('#cluster-table tbody').length == 1) {
+		if ($('#cluster-table tbody').length == 0) {
+                    return AddClusterRow();
+                }
+		else if ($('#cluster-table tbody').length == 1) {
 		    $('#cluster-table .delete-cluster').hide();
 		    $('#cluster-table .add-cluster').show();
 		}
 		else {
-		    $('#cluster-table .delete-cluster').show();
+		    $('#cluster-table .delete-cluster:not([disabled])').show();
 		    $('#cluster-table .add-cluster').show();
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
@@ -894,7 +912,7 @@ $(function ()
 	    $('#cluster-table .delete-cluster').hide();
 	}
 	else {
-	    $('#cluster-table .delete-cluster').show();
+	    $('#cluster-table .delete-cluster:not([disabled])').show();
 	    $('#cluster-table .add-cluster').not(":last").hide();
 	}
 	return row;
@@ -1146,7 +1164,14 @@ $(function ()
                 modified_callback();
 	    }
 	    else {
-                Delete(undefined, true /* allroutes */);
+                if (window.UUID) {
+                    Delete(undefined, true /* allroutes */,
+                           // Cancel handler
+                           function () {
+                               // Reset this back to checked
+		               $('#allroutes-checkbox').prop("checked", true);
+                           });
+                }
 		// OTA perm warning.
 		$('#allroutes-ota-warning').addClass("hidden");
 	    }
@@ -1154,6 +1179,83 @@ $(function ()
 	});
 	// OTA permission request.
 	$('#allroutes-ota-warning .ota-request-permission')
+	    .click(requestOtaPermission);
+    }
+
+    /*
+     * OK< treat the OTA lab as a single resource. First cut is simple.
+     */
+    function SetupOtaLab()
+    {
+	console.info("SetupOtaLab");
+
+	$('#ota-alloc-div .otalab-help').popover({
+	    trigger: 'hover',
+	    container: 'body',
+	    delay: {"hide":1000},
+	    content: 'The OTA lab is allocated as a single unit. When you ' +
+                'click this button, all of the OTA lab resources will be ' +
+                'added to this reservation. Deselecting the button will '+
+                'remove all of the OTA lab reources.'
+
+	});
+	$("#ota-alloc-div").removeClass("hidden");
+
+	$('#otalab-checkbox').change(function () {
+	    var ischecked =  $('#otalab-checkbox').is(":checked");
+	    console.info("OTA lab: " + ischecked);
+
+	    if (ischecked) {
+                _.each(radioinfo, function(details, urn) {
+                    _.each(radioinfo[urn], function(radio, node_id) {
+                        if (radio.itype != "OTA") {
+                            return;
+                        }
+                        console.info(urn,node_id);
+		        var row = AddClusterRow();
+		        row.find(".cluster-select").val(urn).change();
+		        row.find(".hardware-select").val(node_id).change();
+                        row.find(".delete-cluster").attr("disabled", "disabled");
+                        row.find(".delete-cluster").hide();
+                    });
+                });
+		// OTA perm warning.
+		var pid = (editing ? current_pid : $('#pid').val());
+		if (!otaStuff.HasOtaPermission(pid)) {
+		    // OTA perm warning.
+		    $('#otalab-ota-warning').removeClass("hidden");
+		}
+                modified_callback();
+	    }
+	    else {
+                var rows = [];
+                _.each(GetClusterRows(true), function (row, uuid) {
+                    if (isOTALabNode(row.cluster, row.type)) {
+                        if (row.isnew) {
+                            $("#reserve-request-form tbody[data-uuid=" +
+                              row.uuid + "] .delete-cluster").click();
+                        }
+                        else {
+                            rows.push(row.row);
+                        }
+                    }
+                });
+                if (window.UUID && rows.length) {
+                    Delete(rows, false,
+                           // Cancel handler
+                           function () {
+                               // Reset this back to checked
+		               $('#otalab-checkbox').prop("checked", true);
+                           });
+                }
+                
+		// OTA perm warning.
+		$('#otalab-ota-warning').addClass("hidden");
+	    }
+	    RegenCombinedGraph();
+	});
+	// OTA permission request.
+	$('#otalab-ota-warning .ota-request-permission')
 	    .click(requestOtaPermission);
     }
 
@@ -1216,6 +1318,15 @@ $(function ()
 	    $(selecter + ' option[value=' + ideal_hour + ']')
 		.prop('selected', 'selected');
 	}
+
+        /*
+         * When changing the start date, change the end date if not already set.
+         */
+        if (which == "start" &&
+            !$("#reserve-request-form #end_day").datepicker("getDate")) {
+	    $("#reserve-request-form #end_day").datepicker("setDate", date);
+            DateChange("end");
+        }
 	UpdateFormTime(which);
     }
 
@@ -1459,6 +1570,16 @@ $(function ()
 			    "(" + reservation.conflict.needed + " more needed)";
 		    }
 		}
+		else if (_.has(reservation, "blocked")) {
+		    var zone = reservation.zone;
+
+                    // Add a popup with more info. 
+                    html = reservation.output +
+                        " <a href='#' class='btn btn-xs' " +
+                        "     data-bs-toggle=modal data-bs-target='#blocking-zone-modal'>" +
+                        "<span style='margin-bottom: 4px;' "+
+                        "      class='glyphicon glyphicon-question-sign'></span></a>";
+		}
 		else {
 		    html = reservation.output;
 		}
@@ -1559,7 +1680,7 @@ $(function ()
     /*
      * Generate list of cluster rows for passing to the server.
      */
-    function GetClusterRows()
+    function GetClusterRows(withRow)
     {
 	var clusters = {};
 
@@ -1589,7 +1710,11 @@ $(function ()
 	    clusters[uuid] = {"cluster" : cluster,
 			      "type"    : type,
 			      "count"   : count,
-			      "uuid"    : uuid};
+			      "uuid"    : uuid,
+                              "isnew"   : tbody.hasClass("new-cluster")};
+            if (withRow) {
+                clusters[uuid]["row"] = tbody;
+            }
 	});
 	return clusters;
     }
@@ -1802,7 +1927,7 @@ $(function ()
 			       "Validate", checkonly_callback, args);
 	};
 
-	// Deal with OTA permissions and agreement.
+	// Deal with OTA permissions and agreement and Zones
 	if (window.ISPOWDER) {
 	    var needcheck = _.size(ranges) + _.size(routes) +
 		$('tbody.isradio').length;
@@ -1811,16 +1936,34 @@ $(function ()
 		otaStuff.RequestOtaPermission(pid);
 		return;
 	    }
-	    // User cannot proceed without OTA agreement.
+
+            // If ranges and no clusters or routes, we need to force the
+            // user to select a zone so we can do proper zone checks.
+            var powderSubmit = function () {
+                if (_.size(ranges) &&
+                    !(_.size(routes) + $('tbody.isradio').length)) {
+                    ForceZoneSelection(function (zone) {
+                        $('#powder-zones').val(zone);
+                        console.info("Selected powder zone: " + zone);
+                        submit();
+                    });
+                }
+                else {
+                    submit();
+                }
+            }
+
+            // User cannot proceed without OTA agreement.
 	    if (!window.OTA_AGREED) {
 		otaStuff.RequestOtaAgreement(function (agreed) {
 		    if (agreed) {
 			window.OTA_AGREED = true;
-			submit();
+			powderSubmit();
 		    }
 		});
 		return;
 	    }
+            return powderSubmit();
 	}
 	submit();
     }
@@ -1988,7 +2131,8 @@ $(function ()
 						callback);
 	    deferred.push(xmlthing);
 	});
-	if (window.FROMRSPEC) {
+	if (window.FROMRSPEC ||
+            (resgroup && !resgroup.approved)) {
 	    $.when.apply($, deferred).then(function() {
 		RegenCombinedGraph();
 	    });
@@ -2143,6 +2287,15 @@ $(function ()
 	    }))
 	    .removeClass("hidden")
 	    .find(".panel").removeClass("hidden");
+	$('#powder-matrix .panel .panel-heading .right-side')
+	    .html("<span class=small> " +
+		  " <a href='#' " +
+		  "    data-target='#matrix-connections-modal' " +
+		  "    data-bs-target='#matrix-connections-modal' " +
+		  "    data-bs-toggle='modal' " +
+		  "    data-toggle='modal'>" +
+		  "  Matrix Connections</a></span>" +
+		  "");
 	ShowNewGraph(forecast, "matrix");
     }
 
@@ -2827,6 +2980,7 @@ $(function ()
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
 		_.each(details.clusters, function (res) {
+                    var isota = isOTALabNode(res.cluster_urn, res.type);
 		    var html = clusterRowTemplate({
 			"cluster"     : res.cluster_id,
 			"cluster_urn" : res.cluster_urn,
@@ -2836,6 +2990,7 @@ $(function ()
 			"remote_uuid" : res.remote_uuid,
 			"active"      : details.active,
 			"approved"    : res.approved,
+                        "candelete"   : !isota || isadmin,
 		    });
 		    var row = $(html);
 		    // Handler for changing node count.
@@ -2843,14 +2998,19 @@ $(function ()
 			HandleCountChange(row);
 		    });
 		    // Handler for delete row.
-		    row.find(".delete-reservation").click(function () {
-			Delete(row);
-		    });
+                    if (!isota || isadmin) {
+		        row.find(".delete-reservation").click(function () {
+			    Delete([row]);
+		        });
+                    }
 		    // This activates the tooltip subsystem.
 		    row.find('[data-toggle="tooltip"]').tooltip({
 			placement: 'auto'
 		    });
 		    $('#cluster-table').append(row);
+                    if (isota) {
+                        $('#otalab-checkbox').prop("checked", true);
+                    }
 		});
 		UpdateClustersTable(details);
 		if (canEnlarge()) {
@@ -2887,7 +3047,7 @@ $(function ()
 		    var row = $(html);
 		    // Handler for delete row.
 		    row.find(".delete-range").click(function () {
-			Delete(row);
+			Delete([row]);
 		    });
 		    // This activates the tooltip subsystem.
 		    row.find('[data-toggle="tooltip"]').tooltip({
@@ -2923,7 +3083,7 @@ $(function ()
 		    var row = $(html);
 		    // Handler for delete row.
 		    row.find(".delete-route").click(function () {
-			Delete(row);
+			Delete([row]);
 		    });
 		    // This activates the tooltip subsystem.
 		    row.find('[data-toggle="tooltip"]').tooltip({
@@ -3029,6 +3189,14 @@ $(function ()
 			    event.preventDefault();
 			    Approve();
 			});
+		    $('#reserve-recheck-button')
+			.removeClass("hidden")
+			.removeAttr("disabled")
+			.click(function(event) {
+			    event.preventDefault();
+			    ReCheck();
+			});
+                    LoadResGroups(details.uid);
 		}
 		var now   = new Date();
 		var start = new Date(details.start);
@@ -3469,9 +3637,9 @@ $(function ()
     /*
      * Delete a reservation. Might be a group, or a single row in a group
      */
-    function Delete(row, allroutes)
+    function Delete(rows, allroutes, cancel_callback)
     {
-	console.info("Delete", row, allroutes);
+	console.info("Delete", rows, allroutes);
 	
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -3489,8 +3657,12 @@ $(function ()
 	};
 
 	var args = {"uuid" : window.UUID};
-	if (row !== undefined) {
-	    args["reservation_uuid"] = $(row).attr('data-uuid');
+	if (rows !== undefined) {
+            var uuids = [];
+            _.each(rows, function (row) {
+                uuids.push($(row).attr('data-uuid'));
+            });
+	    args["reservation_uuids"] = uuids;
 	}
 	else if (allroutes !== undefined) {
 	    args["allroutes"] = 1;
@@ -3506,18 +3678,13 @@ $(function ()
 						      "Delete", args, callback);
                              },
                              // Cancel
-                             function () {
-                                 // Reset this back to checked
-                                 if (allroutes !== undefined) {
-		                     $('#allroutes-checkbox').prop("checked", true);
-                                 }
-                             });
+                             cancel_callback);
     }
 
     /*
      * Approve a reservation
      */
-    function Approve()
+    function Approve(checkonly)
     {
 	var callback = function (json) {
 	    console.info("Approve: ", json);
@@ -3541,6 +3708,12 @@ $(function ()
 	if ($('#admin-override').is(":checked")) {
 	    args["override"] = 1;
 	}
+        if (checkonly) {
+            args["checkonly"] = 1;
+	    sup.ShowModal('#waitwait-modal');
+	    sup.CallServerMethod(null, "resgroup", "Approve", args, callback);
+            return;
+        }
 	// Bind the confirm button in the modal. Do the approval.
 	$('#approve-modal #confirm-approve').click(function () {
 	    sup.HideModal('#approve-modal', function () {
@@ -3559,6 +3732,11 @@ $(function ()
 	    $('#approve-modal').off('hidden.bs.modal');
 	})
 	sup.ShowModal("#approve-modal");
+    }
+    // ReCheck uses the checkonly option of approve.
+    function ReCheck()
+    {
+        Approve(true);
     }
 
     /*
@@ -3718,12 +3896,16 @@ $(function ()
 	});
 	_.each(_.keys(nodelist).sort(), function(node_id) {
             var details = nodelist[node_id];
+            var hidden  = "";
 
 	    if (_.has(prunelist, node_id)) {
 		return;
 	    }
-	    options = options +
-		"<option value='" + node_id + "' >" + node_id + "</option>";
+            if (isOTALabNode(selected_cluster, node_id)) {
+                hidden = " style='display:none;' ";
+            }
+	    options = options +	"<option value='" + node_id + "' " +
+                hidden + ">" + node_id + "</option>";
 	});
 	
 	row.find(".hardware-select")	
@@ -3898,6 +4080,7 @@ $(function ()
 		if (fakeroutes) {
 		    $('#allroutes-ota-warning').addClass("hidden");
 		}
+		$('#otalab-ota-warning').addClass("hidden");
 	    }
 	    else {
 		// Only radios
@@ -4005,6 +4188,9 @@ $(function ()
 	    return;
 	}
 	_.each(details.clusters, function (res) {
+            if (!_.has(amlist, res.cluster_urn)) {
+                return;
+            }
 	    var type   = res.type;
 	    var name   = amlist[res.cluster_urn].name;
 	    var using  = res.using;
@@ -4024,8 +4210,10 @@ $(function ()
 		' <td>' + util + '%</td>' +
 		'</tr>';
 	});
-	$('#utilization-table tbody').html(html);
-	$('#utilization-div').removeClass("hidden");
+        if (html != "") {
+	    $('#utilization-table tbody').html(html);
+	    $('#utilization-div').removeClass("hidden");
+        }
     }
 
     // Draw the history bar graph.
@@ -4414,6 +4602,8 @@ $(function ()
 		}
 	    }
 	}
+        // OTA Lab nodes are a special case handled below
+        var needOTALab = false;
 
 	// Find all the nodes, gather up type info.
 	$(xmlDoc).find("node").each(function() {
@@ -4459,9 +4649,12 @@ $(function ()
 	    if (component_id && manager_id &&
 		_.has(amlist, manager_id) &&
 		_.has(amlist[manager_id].reservable_nodes, component_id)) {
-		var row = AddClusterRow();
 
-		console.info("row", row);
+                if (isOTALabNode(manager_id, component_id)) {
+                    needOTALab = true;
+                    return;
+                }
+		var row = AddClusterRow();
 
 		row.find(".cluster-select").val(manager_id).change();
 		row.find(".hardware-select").val(component_id).change();
@@ -4501,6 +4694,10 @@ $(function ()
 	    }
 	    tcounts[type]++;
 	});
+        if (needOTALab) {
+            $('#otalab-checkbox').prop("checked", true);
+            $('#otalab-checkbox').change();
+        }
 	_.each(tcounts, function (count, type) {
 	    // Find the cluster that has this type.
 	    _.each(amlist, function (details, urn) {
@@ -4708,6 +4905,64 @@ $(function ()
 	});
     }
 
+    /*
+     * Check for existing reservations and draw the list.
+     */
+    function LoadResGroups(uid)
+    {
+	sup.CallServerMethod(null, "resgroup", "ListReservationGroups",
+			     {"uid" : uid},
+			     function (json) {
+				 if (json.code) {
+				     console.info(json.value);
+				     return;
+				 }
+				 var groups = json.value;
+                                 // This list will always include the current reservation.
+                                 // We do not want to show that in the list.
+				 if (_.size(groups) > 1) {
+                                     var tmp = {};
+                                     _.each(groups, function(details, uuid) {
+                                         if (uuid != window.UUID) {
+                                             tmp[uuid] = details;
+                                         }
+                                     });
+                                     groups = tmp;
+                                     
+				     $('#current-reservations')
+					 .removeClass("hidden");
+				     window.DrawResGroupList(
+                                         "#current-reservations .card-body ", groups);
+                                     $("#current-reservations .expando")
+                                         .trigger("click");
+				 }
+			     });
+    }
+
+    /*
+     * Force a zone selection
+     */
+    function ForceZoneSelection(callback)
+    {
+        // Reset the modal
+        $('#zone-selection-modal select').val('');
+
+        sup.ShowConfirmModal('#zone-selection-modal',
+                             // Confirm
+                             function () {
+                                 callback($('#zone-selection-modal select').val())
+                             },
+                             // Cancel
+                             function () {
+                                 console.info("ForceZoneSelection Canceled");
+                             },
+                             // Check
+                             function () {
+                                 return $('#zone-selection-modal select').val() == "" ? 1 : 0;
+                             });
+
+    }
+    
     $(document).ready(initialize);
 });
 

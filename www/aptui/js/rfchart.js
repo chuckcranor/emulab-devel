@@ -259,8 +259,15 @@ window.CreateRangeCharts = (function ()
 	    .attr("rx", 2)
 	    .attr("ry", 2)
 	    .attr("class", function (d) {
-		return d.approved ? "range-bar" :
-		    d.isexp ? "range-bar" : "range-bar-unapproved";
+                console.info(d);
+                var classes = "range-bar ";
+                if (d.powder_zones == "Outdoor") {
+                    classes += "range-bar-outdoor ";
+                }
+                if (d.isexp == 0 && !d.approved) {
+                    classes += "range-bar-unapproved ";
+                }
+                return classes;
 	    })
 	    .attr("y", 0)
 	    .attr("transform", rectTransform)

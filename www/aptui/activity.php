@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,8 @@ $optargs = OptionalPageArguments("target_user",    PAGEARG_USER,
                                  "portalonly",     PAGEARG_BOOLEAN,
                                  "cluster",        PAGEARG_STRING,
                                  "min",            PAGEARG_INTEGER,
-                                 "max",            PAGEARG_INTEGER);
+                                 "max",            PAGEARG_INTEGER,
+                                 "ipsearch",       PAGEARG_STRING);
 #
 # Get current user.
 #
@@ -77,6 +78,15 @@ else {
 #
 # Allow for targeted searches
 #
+if (isset($ipsearch)) {
+    if (!$isadmin) {
+        SPITUSERERROR("Not enough permission to search for IP/NodeID!");
+    }
+    if (!(TBvalid_IP($ipsearch) || TBvalid_node_id($ipsearch))) {
+        SPITUSERERROR("Invalid IP/NodeID search token");
+    }
+}
+
 if (isset($target_user)) {
     $target_uid  = $target_user->uid();
 }
@@ -121,6 +131,9 @@ if (isset($aggregate)) {
 }
 if (isset($portalonly) && $portalonly) {
     echo "    window.PORTALONLY = true;\n";
+}
+if (isset($ipsearch)) {
+    echo "    window.IPSEARCH = '$ipsearch';\n";
 }
 echo "</script>\n";
 REQUIRE_UNDERSCORE();

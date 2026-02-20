@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,6 +60,7 @@ my $ELABINELAB  = "$TB/sbin/elabinelab";
 my $IMAGEINFO   = "$TB/sbin/imageinfo";
 my $TBADB       = "$TB/bin/tbadb";
 my $RFSWITCHER  = "$TB/sbin/powder-rfswitcher";
+my $BENESHELL   = "$TB/sbin/beneshell";
 
 # Setup Operation Flags
 $NOSTATE    = 0x00;
@@ -2515,9 +2516,9 @@ sub LightUpNodes($@) {
 
 #####################################################################
 #
-# sdr
+# Base SDR/radio class, similar to libossetup_virtnode
 #
-package libossetup_sdr;
+package libossetup_basesdr;
 use base qw(libossetup_handler);
 
 use libdb;
@@ -2531,10 +2532,10 @@ use Data::Dumper;
 #
 # A constructor for an object to handle all nodes of this type.
 #
-sub New($$) {
-    my ($class, $parent) = @_;
+sub New($$$) {
+    my ($class, $type, $parent) = @_;
 
-    my $self = $class->SUPER::New("sdr", $parent);
+    my $self = $class->SUPER::New($type, $parent);
     bless($self, $class);
     return $self;
 }
@@ -2548,6 +2549,10 @@ sub AddNode($$)
     # Need something, should be in ISUP by the time we get there
     # but stated might be delayed.
     $node->_maxwait(60);
+    # By default, send "ISUP" at the end of LightUpNodes()
+    $self->_doisup(1);
+    # By default, do not sent events from `power` when power cycling.
+    $self->_doevents(0);
     return 0;
 }
 
@@ -2592,10 +2597,16 @@ sub LightUpNodes($@)
     if ($count) {
 	sleep(1);
     }
-    
+
     foreach my $node (@nodelist) {
 	next
 	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
+
+	if (!$node->HasOutlet()) {
+	    my $node_id = $node->node_id();
+	    tbnotice("Radio $node_id does not have a power outlet, skipping\n");
+	    next;
+	}
 
 	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
 	    push(@ons, $node->node_id())
@@ -2605,7 +2616,7 @@ sub LightUpNodes($@)
 	}
     }
     if (@ons) {
-	tbnotice("Power on SDR nodes: @ons\n");
+	tbnotice("Power on radios: @ons\n");
 	# We need the event state change here.
 	system("$POWER on @ons");
 	my $exitval = $?;
@@ -2617,8 +2628,9 @@ sub LightUpNodes($@)
 	}
     }
     if (@cycles) {
-	tbnotice("Power cycling SDR nodes: @cycles\n");
-	system("$POWER -e cycle @cycles");
+	my $evt_flag = $self->_doevents() ? "" : "-e";
+	tbnotice("Power cycling radios: @cycles\n");
+	system("$POWER $evt_flag cycle @cycles");
 	my $exitval = $?;
 
 	if ($exitval) {
@@ -2630,21 +2642,53 @@ sub LightUpNodes($@)
     #
     # If the eventstate somewhow managed to get out of ISUP, send it.
     #
-    foreach my $node (@nodelist) {
-	next
-	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
+    if ($self->_doisup()) {
+	foreach my $node (@nodelist) {
+	    next
+		if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 	
-	if (!$node->IsUp()) {
-	    if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
-		$parent->noretry(1);
-		return -1;
+	    if (!$node->IsUp()) {
+		if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+		    $parent->noretry(1);
+		    return -1;
+		}
 	    }
 	}
     }
     return 0;
 }
 
+package libossetup_sdr;
+use base qw(libossetup_basesdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("sdr", $parent);
+    bless($self, $class);
+    return $self;
+}
+
 package libossetup_x310;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+package libossetup_x410;
 use base qw(libossetup_sdr);
 
 use libdb;
@@ -2688,7 +2732,268 @@ use Node;
 use English;
 use Data::Dumper;
 
+package libossetup_bt_ru550;
+use base qw(libossetup_basesdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use Lan;
+use StateWait;
+use English;
+use JSON;
+use Data::Dumper;
+
+#
+# A constructor for an object to handle all nodes of this type.
+#
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("bt_ru550", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+#
+# Need to adjust maxwait time for Benetel RUs (which is long...)
+#
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    # Do super class stuff first for adding the node.
+    $self->SUPER::AddNode($node);
+
+    # Set up our overrides.
+    $node->_maxwait(600);  # Benetel RUs take a loooong time...
+    $node->_retrycount(0); # no retries.
+    $node->_doisup(0);     # Don't send compulsory ISUP in base class.
+    $node->_doevents(1);   # DO have `power` send events in base class.
+    $node->_pingwait(60);  # Higher initial ping wait time (account for boot).
+
+    return 0;
+}
+
+#
+# Light up nodes as with SDRs, and then conjure and send the
+# configuration to the RU devices. Reboot them as well afterward.
+#
+sub LightUpNodes($@)
+{
+    my ($self, @nodelist)  = @_;
+    my $parent     = $self->parent();
+    my $experiment = $parent->experiment();
+    my @pfields = ('center_frequency', 'bandwidth', 'mimo_mode');
+
+    my @cycles     = ();
+    my @ons        = ();
+    my $count      = 0;
+
+    # Call LightUpNodes() in libossetup_basesdr class first to do common stuff.
+    $self->SUPER::LightUpNodes(@nodelist);
+
+    # Wait for the devices (event sender proxies) to report state ISUP.
+    my @nidlist = map { $_->node_id() } @nodelist;
+    my @finished = ();
+    my @failed = ();
+    tbnotice("Benetel ossetup: Waiting for radios to boot: @nidlist\n");
+    if (initStateWait([TBDB_NODESTATE_ISUP(),], @nidlist) != 0 ||
+	waitForState(\@finished, \@failed, 80) != 0 ||
+	endStateWait() != 0) {
+	print STDERR "Benetel ossetup: Failed during StateWait operations!";
+	goto bad;
+    }
+    if (@failed) {
+	print STDERR "RU devices '". join(", ", @failed) ."' failed to boot!";
+	goto bad;
+    }
+
+    # Get info about the companion DU nodes and the Vlans that connect them.
+    foreach my $node (@nodelist) {
+	my $node_id = $node->node_id();
+	my $vname   = $node->vname();
+	my %ru_params = ();
+
+	# Extract parameters set for node in profile script.
+	my $attr;
+	$experiment->GetVirtNodeAttribute($vname, 'center_frequency', \$attr);
+	$ru_params{'center_frequency'} = $attr + 0; # store as number for JSON
+	$experiment->GetVirtNodeAttribute($vname, 'bandwidth', \$attr);
+	$ru_params{'bandwidth'} = $attr + 0; # store as number for JSON
+	$experiment->GetVirtNodeAttribute($vname, 'mimo_mode', \$attr);
+	$ru_params{'mimo_mode'} = $attr
+	    if defined($attr);
+
+	# We assume that the RU connects to its DU via its 'eth0' interface.
+	my $iface;
+	if ($node->GetInterface("eth0", \$iface)) {
+	    print STDERR "Cannot look up 'eth0' interface on $node_id!\n";
+	    goto bad;
+	}
+
+	# Get the OFH Vlan attached to the RU.
+	my $vlan = VLan->FindVlanByInterface($experiment, $iface);
+	if (!$vlan) {
+	    print STDERR "No vlan exists for $node_id, 'eth0'!\n";
+	    goto bad;
+	}
+
+	# There should only be two members of the Vlan. This RU and its DU...
+	my @members;
+	if ($vlan->MemberList(\@members)) {
+	    print STDERR "Lan $vlan has no members?!\n";
+	    goto bad;
+	}
+
+	# Get handle on the adjacent DU node.
+	my ($du_member, $du_node_id);
+	foreach my $m (@members) {
+	    if ($m->GetAttribute("node_id", \$du_node_id) == 0 &&
+		$du_node_id ne $node_id) {
+		$du_member = $m;
+		last;
+	    }
+	}
+	if (!$du_member) {
+	    print STDERR "No suitable adjacent DU node?!\n";
+	    goto bad;
+	}
+
+	# Grab interface object for the DU node.
+	my $du_iface = $du_member->GetInterface();
+	if (!$du_iface) {
+	    print STDERR "Could not find adjacent interface of DU node!\n";
+	    goto bad;
+	}
+
+	# Add info about the vlan and DU interface to the RU parameters
+	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
+	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
+	$ru_params{'du_cplane_mac'} = $du_iface->mac();
+	$ru_params{'du_uplane_mac'} = $du_iface->mac();
+
+	# Apply the configuration for the RU and reboot it. Note that
+	# we are rebooting the RU "on the sly" here, so must handle
+	# state transitions ourselves. We do this because we want an
+	# alternate interpretation of "ISUP" when starting an
+	# experiment; we want the device to get all the way to "Radio
+	# bringup complete" vs. just responding to pings.
+	my $json_config = to_json(\%ru_params);
+	tbnotice("Configuring Benetel COTS RU $node_id\n");
+	system("echo '$json_config' | $BENESHELL $node_id -j - -r");
+	if ($?) {
+	    print STDERR "Failed to configure and reboot RU $node_id!\n";
+	    goto bad;
+	}
+
+	# Tell Stated that the RU is rebooting.
+	$node->SetEventState(TBDB_NODESTATE_SHUTDOWN(), 0) == 0
+	    or goto bad;
+	sleep(1);
+	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
+	    or goto bad;
+    }
+
+    return 0;
+
+  bad:
+    $parent->noretry(1);
+    return -1;	
+}
+
+#
+# Wait for Benetel RU to get to "radio bringup complete" state.
+#
+sub WaitForNode($$)
+{
+    my ($self, $node) = @_;
+    my $parent = $self->parent();
+    my $node_id = $node->node_id();
+
+    #
+    # No need to wait if cancelation has occured.
+    #
+    if ($parent->canceled()) {
+	$node->_maxwait(0);
+    }
+
+    # See if the radio has made it to the "Radio Bringup Complete" state.
+    my $pingwait = $node->_pingwait();
+    system("$BENESHELL $node_id -q -P $pingwait -w 0");
+    if (! $?) {
+	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+	    $parent->noretry(1);
+	    return -1;
+	}
+    }
+    $node->_pingwait(5); # Reset pingwait to default after first call.
+
+    return $self->SUPER::WaitForNode($node);
+}
+
+#
+# Pared down version of libossetup_pc WaitDone() function for Benetel RUs.
+#
+sub WaitDone($@)
+{
+    my ($self, @nodelist) = @_;
+    my $parent     = $self->parent();
+
+    #
+    # Must call the generic WaitDone handler too.
+    #
+    $self->SUPER::WaitDone(@nodelist);
+
+    #
+    # Then per node processing.
+    #
+    foreach my $node (@nodelist) {
+	my $node_id     = $node->node_id();
+	my $setupstatus = $node->_setupstatus();
+	my $eventstate  = $node->eventstate();
+
+	if ($eventstate eq TBDB_NODESTATE_ISUP()) {
+	    print "$node_id is alive and well\n";
+	    $node->SetBootStatus(NODEBOOTSTATUS_OKAY);
+	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_READY());
+
+	    # Set this so we know a successful reboot was done.
+	    $node->_rebooted(1)
+		if ($node->_setupoperation() != $libossetup::NOSTATE);
+
+	    next;
+	}
+	# Fall through on failure.
+	if ($eventstate eq TBDB_NODESTATE_TBFAILED()) {
+	    tbwarn("$node_id reported a TBFAILED event\n");
+	}
+	else {
+	    tbwarn("$node_id failed to boot\n");
+	}
+	$node->SetBootStatus(NODEBOOTSTATUS_FAILED);
+    }
+
+    return 0;
+}
+
 package libossetup_bt_ru650;
+use base qw(libossetup_bt_ru550);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use Lan;
+use StateWait;
+use English;
+use JSON;
+use Data::Dumper;
+
+package libossetup_rpi_ue;
 use base qw(libossetup_sdr);
 
 use libdb;

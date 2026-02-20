@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -668,7 +668,7 @@ TBDebugTimeStamp("Finished node stuff");
 
 # Read class/type maps
 $result =
-    MyQueryFatal("select distinct nt.class,nt.type,nt.isvirtnode,nt.architecture from node_types as nt join nodes as n on n.type=nt.type");
+    MyQueryFatal("select distinct nt.class,nt.type,nt.isvirtnode,nt.architecture from node_types as nt join nodes as n on n.type=nt.type union select nt.class,nt.type,nt.isvirtnode,nt.architecture from node_types as nt where nt.type='pcvm'");
 
 while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
     $map = {};
@@ -809,10 +809,25 @@ if( defined( $pid ) ) {
 		    # Node is currently reserved to another project. Mark it
 		    # to be pruned out below.
 		    #
+		    print STDERR "Pruning $node_id cause reserved to another project\n";
 		    $pruned_nodes{$node_id} = $node;
 		    last;
 		}
 	    }
+	}
+	#
+	# OK, if the node is reservable and not reserved and not yet pruned,
+	# look to see if it is marked as requiring a reservation to use.
+	# If it requires a reservation, prune it.
+	#
+	next
+	    if ($project->expert_mode());
+	
+	if (!exists($reserved_nodes{$node_id}) &&
+	    !exists($pruned_nodes{$node_id}) && $node->requires_reservation()) {
+	    print STDERR
+		"Pruning $node_id cause requires_reservation and not reserved\n";
+	    $pruned_nodes{$node_id} = $node;
 	}
     }
     TBDebugTimeStamp("Finished reservations 4");
@@ -1870,7 +1885,7 @@ foreach $node (@nodenames) {
     } else {
 	for my $feature (@{$typemap{$type}->{'FEATURES'}}) {
 	    # TODO: Un-hardcode this. Ugh.
-	    if ($feature =~ /highvlan/) {
+	    if ($feature =~ /highvlan/ || $feature =~ /fpga/i) {
 		push(@features, $feature);
 	    }
 	    elsif ($feature =~ /disk_any:([\d\.]+)$/) {
@@ -1878,6 +1893,12 @@ foreach $node (@nodenames) {
 		push(@features, "?+disk_any:$disk_any");
 	    }
 	}
+	# Odd that we have not been putting node_features into the
+	# ptop for a very long time. So now I am hesitant to do it
+	# for normal nodes, it will probably break experiments. :-(
+        for my $feature (@{$features{$node}}) {
+            push(@features, $feature);
+        }
     }
 
     #

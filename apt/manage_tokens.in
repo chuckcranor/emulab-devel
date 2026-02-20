@@ -1,0 +1,453 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use File::Temp qw(tempfile tempdir);
+use Date::Parse;
+
+#
+# Manage JWT tokens for users.
+#
+sub usage()
+{
+    print STDERR "Usage: manage_tokens create [-dn] -h\n";
+    print STDERR "Usage: manage_tokens decode [-dn] -h\n";
+    print STDERR "Usage: manage_tokens delete [-dn] -h\n";
+    print STDERR "Usage: manage_tokens list [-d] -h\n";
+    print STDERR "Options:\n";
+    print STDERR " -d     - Turn on debugging\n";
+    print STDERR " -n     - Impotent mode, do not change the DB\n";
+    print STDERR " -h     - Get action specfic help message\n";
+    
+    exit(-1);
+}
+my $optlist     = "dt:n";
+my $debug       = 0;
+my $impotent    = 0;
+my $webtask_id;
+my $webtask;
+my $DEFAULTEXP  = 360; # days
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use User;
+use WebTask;
+use APT_Instance;
+use UserJWT;
+
+# Protos
+sub DoCreateToken();
+sub DoDecodeToken();
+sub DoDeleteToken();
+sub DoListTokens();
+sub CreateJWTPayload(%);
+sub fatal($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
+}
+if (@ARGV < 1) {
+    usage();
+}
+
+my $action = shift(@ARGV);
+
+if ($action eq "create") {
+    exit(DoCreateToken());
+}
+elsif ($action eq "decode") {
+    exit(DoDecodeToken());
+}
+elsif ($action eq "delete") {
+    exit(DoDeleteToken());
+}
+elsif ($action eq "list") {
+    exit(DoListTokens());
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Create a token for a user. 
+#
+sub DoCreateToken()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_tokens create [-a] [-s] [-r] [-E eid] <user>\n";
+	print STDERR "Options:\n";
+	print STDERR "  -r   - Refresh the current token\n";
+	print STDERR "  -a   - Generate an admin token; not currently used\n";
+	print STDERR "  -s   - Generate a shortlived token, for debugging\n";
+	print STDERR "  -E   - Generate a token scoped to the specified experiment\n";
+	print STDERR "  -Z   - Create an SSO auth token for Powder ZMS\n";
+	exit(-1);
+    };
+    my $role  = "user";
+    my $scope = "global";
+    my $scope_value;
+    my $shortlived = 0;
+    my $refresh = 0;
+    my $doauth = 0;
+    
+    my %options = ();
+    if (! getopts("hasE:rZ", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"h"})) {
+	&$usage();
+    }
+    if (defined($options{"E"})) {
+	my $instance = APT_Instance->Lookup($options{"E"});
+	if (!defined($instance)) {
+	    fatal("No such experiment");
+	}
+	$scope = "experiment";
+	$scope_value = $instance->uuid();
+    }
+    if (defined($options{"a"})) {
+	$role = "admin";
+    }
+    if (defined($options{"s"})) {
+	$shortlived = 1;
+    }
+    if (defined($options{"r"})) {
+	$refresh = 1;
+    }
+    if (defined($options{"Z"})) {
+	$doauth = 1;
+    }
+    &$usage()
+	if (!@ARGV);
+
+    my $target_uid  = shift(@ARGV);
+    my $target_user = User->Lookup($target_uid);
+    if (!defined($target_user)) {
+	fatal("No such user");
+    }
+    my $uid_uuid = $target_user->uuid();
+    my $uid_uid  = $target_user->uid();
+    my $uid_idx  = $target_user->uid_idx();
+    my $expires  = ($shortlived ?
+		    time() + (7 * 24 * 3600) :
+		    ($doauth ?
+		     time() + (5 * 60) :
+		     time() + ($DEFAULTEXP * 24 * 3600)));
+
+    #
+    # At the moment only one (unexpired) token per user (scope)
+    #
+    if (User::JWT->LockTables()) {
+	fatal("Could not lock tables");
+    }
+    if (!$doauth) {
+	my $token = User::JWT->LookupByScope($target_user, $scope, $scope_value);
+	if ($token) {
+	    if (!$refresh && $token->expires_timestamp() > time() + (60 * 24 * 3600)) {
+		if ($debug) {
+		    print "Using existing token: $token\n";
+		}
+		User::JWT->UnlockTables();
+		if (defined($webtask)) {
+		    $webtask->result($token->token());
+		    $webtask->Exited(0);
+		}
+		print $token->token() . "\n";
+		exit(0);
+	    }
+	    if (!$impotent) {
+		$token->Delete();
+	    }
+	    if ($debug) {
+		print "Deleted (soon to be) expired token: $token\n";
+	    }
+	}
+    }
+    # Tell Create we already have the lock.
+    my $token = User::JWT->Create($target_user, $role,
+			       $scope, $scope_value, $expires, 1, $doauth);
+    if (!$token) {
+	User::JWT->UnlockTables();
+	fatal("Could not create token");
+    }
+    User::JWT->UnlockTables();
+    if (defined($webtask)) {
+	$webtask->result($doauth ? $token : $token->token());
+	$webtask->Exited(0);
+    }
+    print $doauth ? $token : $token->token() . "\n";
+    return 0;
+}
+
+#
+# Decode a token. Signature is verified.
+#
+sub DoDecodeToken()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_tokens decode [-f filename]\n";
+	print STDERR "  Pipe token to stdin when not using the -f option\n";
+	exit(-1);
+    };
+    my $token   = "";
+    my %options = ();
+    if (! getopts("hf:", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"h"})) {
+	&$usage();
+    }
+    if (defined($options{"f"})) {
+	my $file = $options{"f"};
+	
+	fatal("No such file or file cannot be read")
+	    if (! -e $file);
+	$token = emutil::ReadFile($file);
+	fatal("Not a token")
+	    if (!$token || $token eq "");
+    }
+    else {
+	while (<STDIN>) {
+	    $token .= $_;
+	}
+    }
+    chomp($token);
+    fatal("Not a token")
+	if ($token eq "");
+
+    my ($head, $data) = User::JWT::DecodeToken($token);
+    if (!defined($head) || !defined($data)) {
+	fatal("Could not decode token");
+    }
+
+    if ($debug) {
+	print Dumper($head);
+	print Dumper($data);
+    }
+    if (defined($webtask)) {
+	$webtask->payload($data);
+	$webtask->Exited(0);
+    }
+    print "uuid:    " . $data->{'jti'} . "\n";
+    print "subject: " . $data->{'sub'} . "\n";
+    print "expires: " . $data->{'exp'} .
+	" (" . TBDateStringLocal($data->{'exp'}) . ")\n";
+    print "name:    " . $data->{'name'} . "\n";
+    print "role:    " . $data->{'role'} . "\n" if (exists($data->{'role'}));
+    return 0;
+}
+
+#
+# Delete token from the database.
+#
+sub DoDeleteToken()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_tokens delete -f <filename | ->\n";
+	print STDERR "       manage_tokens delete -t <token>\n";
+	print STDERR "       manage_tokens delete <user>\n";
+	print STDERR "       manage_tokens delete <user> <token uuid>\n";
+	print STDERR "       manage_tokens delete <user> <token scope> [scope_value]\n";
+	print STDERR "  Pipe token to stdin when using [-f -]\n";
+	print STDERR "  When deleting for a user, all tokens are deleted\n";
+	exit(-1);
+    };
+    my %options = ();
+    if (! getopts("hf:t:", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"h"})) {
+	&$usage();
+    }
+    if (defined($options{"f"}) || defined($options{"t"})) {
+	my $token;
+
+	if (defined($options{"f"})) {
+	    my $file = $options{"f"};
+
+	    if ($file eq "-") {
+		while (<STDIN>) {
+		    $token .= $_;
+		}
+	    }
+	    else {
+		fatal("No such file or file cannot be read")
+		    if (! -e $file);
+		$token = emutil::ReadFile($file);
+		fatal("Not a token")
+		    if (!$token || $token eq "");
+	    }
+	}
+	else {
+	    $token = $options{"t"};
+	}
+	chomp($token);
+
+	my ($head, $data) = User::JWT::DecodeToken($token);
+	if (!defined($head) || !defined($data)) {
+	    fatal("Could not decode token");
+	}
+	my $uuid = $data->{'jti'};
+	if (!$impotent) {
+	    DBQueryFatal("delete from user_jwt_tokens where uuid='$uuid'");
+	}
+	return 0;
+    }
+    usage()
+	if (@ARGV < 1 || @ARGV > 3);
+
+    my $user = User->Lookup($ARGV[0]);
+    fatal("No such user")
+	if (!defined($user));
+
+    if (@ARGV == 1) {
+	my $tokens;
+	if (User::JWT->LookupAll($user, \$tokens)) {
+	    fatal("Could not lookup tokens for user");
+	}
+	foreach my $token (@{$tokens}) {
+	    if ($impotent) {
+		print "Would delete $token\n";
+	    }
+	    elsif ($token->Delete()) {
+		fatal("Could not delete $token");
+	    }
+	}
+	return 0;
+    }
+    my $scope = $ARGV[1];
+    my $scope_value = $ARGV[2] if (@ARGV == 3);
+    my $token = User::JWT->Lookup($user, $scope, $scope_value);
+    if (!$token) {
+	print "Token already deleted\n";
+	return 0;
+    }
+    if ($impotent) {
+	print "Would delete $token\n";
+    }
+    elsif ($token->Delete()) {
+	fatal("Could not delete $token");
+    }
+    return 0;
+}
+
+#
+# Show tokens for a user.
+#
+sub DoListTokens()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_tokens list <user>\n";
+	exit(-1);
+    };
+    my %options = ();
+    if (! getopts("h", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"h"})) {
+	&$usage();
+    }
+    &$usage()
+	if (!@ARGV);
+    
+    my $user = User->Lookup($ARGV[0]);
+    if (!$user) {
+	fatal("No such user");
+    }
+    my $tokens;
+    if (User::JWT->LookupAll($user, \$tokens)) {
+	fatal("Could not lookup tokens for user");
+    }
+    if (!@{$tokens}) {
+	print "No tokens exist for user\n";
+	exit(0);
+    }
+    foreach my $token (@{$tokens}) {
+	$token->Dump();
+	print "\n";
+    }
+    return 0;
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}

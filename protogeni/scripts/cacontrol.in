@@ -139,6 +139,11 @@ if (defined($options{"n"})) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"w"})) {
+    $fromweb = 1;
+    # Force from web.
+    $approve = 0;
+}
 if (defined($options{"l"})) {
     $list = 1;
 }

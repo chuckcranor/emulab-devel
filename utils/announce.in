@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2019 University of Utah and the Flux Group.
+# Copyright (c) 2016-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,7 @@ use Date::Parse;
 sub usage()
 {
     print STDERR "Usage: announce -a <-p portal> [-c] [-s alert_style] [-b button_label] [-u action_url] [-m max_seen_count] <announcement_text>\n";
-    print STDERR "       announce -l [active|retired|all]\n";
+    print STDERR "       announce -l|-L [active|retired|all]\n";
     print STDERR "       announce -r idx|uuid [-c]\n";
     print STDERR "       announce -R idx|uuid\n";
     print STDERR "       announce -i idx\n";
@@ -46,6 +46,7 @@ sub usage()
     print STDERR "   -u   URL of action associated with this announcement. {uid_idx} and {uid} can be used as URL templates to generate a different URL on a per-user basis. If it is unset, there is no action button.\n";
     print STDERR "   -m   The maximum number of times that this announcement will appear to a user. Every page view (even those in a single session) counts. A value of '0' indicates that the announcement should keep appearing indefinitely until dismissed by the user or an action is taken. Defaults to 20.\n";
     print STDERR "   -l   List global announcements. Defaults to listing active announcements.\n";
+    print STDERR "   -L   List global announcements, showing full message. Defaults to listing active announcements.\n";
     print STDERR "   -r   Retire announcement with the given idx. A retired announcement will no longer be displayed to users.\n";
     print STDERR "   -R   Purge announcement from DB with the given idx or uuid.\n";
     print STDERR "   -i   Info about a particular announcement.\n";
@@ -55,11 +56,12 @@ sub usage()
 	"for user\n";
     exit(-1);
 }
-my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:w:P";
+my $optlist  = "haA:cp:s:b:u:m:lLr:R:i:U:t:I:S:E:w:P";
 my $add_mode = 0;
 my $update_mode = 0;
 my $update_target;
 my $list_mode = 0;
+my $llist_mode = 0;
 my $retire_mode = 0;
 my $purge_mode = 0;
 my $sees_mode = 0;
@@ -136,6 +138,11 @@ if (defined($options{"A"})) {
 }
 if (defined($options{"l"})) {
     $list_mode = 1;
+    $llist_mode = 0;
+}
+if (defined($options{"L"})) {
+    $llist_mode = 1;
+    $list_mode = 0;
 }
 if (defined($options{"r"})) {
     $retire_mode = 1;
@@ -227,7 +234,7 @@ if ($add_mode)
     }
 }
 
-if ($add_mode + $update_mode + $list_mode +
+if ($add_mode + $update_mode + $list_mode + $llist_mode +
     $retire_mode + $sees_mode + $purge_mode + $info_mode != 1) {
     print STDERR "No mode selected. Must use one of -a, -A, -r, -R, -l, or -i\n\n";
     usage();
@@ -245,12 +252,12 @@ if ($add_mode || $update_mode) {
     }
 }
 
-if (! $list_mode && ! $add_mode && ! $update_mode &&
+if (! $list_mode && ! $llist_mode && ! $add_mode && ! $update_mode &&
     ! $purge_mode && scalar(@ARGV) > 0) {
     usage();
 }
 
-if ($list_mode && scalar(@ARGV) > 0) {
+if (($list_mode || $llist_mode) && scalar(@ARGV) > 0) {
     $list_type = $ARGV[0];
 }
 
@@ -319,7 +326,7 @@ if ($add_mode) {
 	fatal("Invalid argument for -A mode, must be uuid or idx");
     }
     DBQueryFatal($query);
-} elsif ($list_mode) {
+} elsif ($list_mode || $llist_mode) {
     #
     # List announcements
     #
@@ -334,9 +341,14 @@ if ($add_mode) {
     print "idx\tPortal    Text\n";
     print "---\t-------    ----\n";
     while (my ($idx, $portal, $text) = $query_result->fetchrow_array()) {
-	my $textbit = substr($text, 0, 55);
-	if (length($text) > 55) {
-	    $textbit = $textbit . "...";
+	my $textbit;
+	if ($list_mode) {
+	    $textbit = substr($text, 0, 55);
+	    if (length($text) > 55) {
+		$textbit = $textbit . "...";
+	    }
+	} else {
+	    $textbit = $text;
 	}
 	my $portalpad = sprintf("%-10s", $portal);
 	print "$idx\t$portalpad $textbit\n"

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -456,6 +456,10 @@ sub EnterPaper($$$;$)
 	print STDERR " *** No title for abstract!\n";
 	return -1;
     }
+    # Skip if non ascii titles. Do not like this, but no time at the moment
+    return 0
+	if ($title !~ /^[\x20-\x7E]+$/);
+
     my $pubname = $coredata->{'prism:publicationName'};
     if (!defined($pubname)) {
 	print " *** No pubname for abstract\n";

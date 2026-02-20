@@ -222,6 +222,10 @@ $(function ()
 		}
 		$(row).toggle();
 	    });
+
+        if (window.EMBEDDED_RESGROUPS) {
+            $(selector + ' .tablesorter.resgroup-list').trigger('sorton', [ [[4,"a"]] ]);
+        }
 	
 	// This activates the tooltip subsystem.
 	$(selector + ' [data-toggle="tooltip"]').tooltip({

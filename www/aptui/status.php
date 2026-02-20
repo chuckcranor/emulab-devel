@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,13 +42,8 @@ $slowdown = 0;
 #
 # Get current user.
 #
-$this_user = CheckLogin($check_status);
-if (isset($this_user)) {
-    CheckLoginOrDie(CHECKLOGIN_NONLOCAL);
-}
-else {
-    RedirectLoginPage();
-}
+$this_user = CheckLoginOrRedirect();
+
 #
 # We do not set the isfadmin flag if the user has normal permission
 # to see this experiment, since that would change what the user sees.

@@ -1,0 +1,107 @@
+#
+# Various tip/capture logs
+#
+use strict;
+use libinstall;
+use installvars;
+
+my @deletes =
+    (
+     "archive_control.php",
+     "archive_list.php",
+     "archive_missing.php3",
+     "archive_tag.php3",
+     "archive_tags.php3",
+     "archive_view.php3",
+     "experimentrun_show.php",
+     "instance_show.php",
+     "linkgraph_image.php",
+     "record_revise.php",
+     "template_analyze.php",
+     "template_commit.php",
+     "template_create.php",
+     "template_defs.php",
+     "template_editevents.php",
+     "template_export.php",
+     "template_exprun.php",
+     "template_graph.php",
+     "template_history.php",
+     "template_metadata.php",
+     "template_modify.php",
+     "template_search.php",
+     "template_show.php",
+     "template_sup.js",
+     "template_swapin.php",
+     "tutorial/.htaccess",
+     "tutorial/3bots.jpg",
+     "tutorial/3bots_thumb.jpg",
+     "tutorial/5bots.jpg",
+     "tutorial/5bots_thumb.jpg",
+     "tutorial/GNUmakefile.in",
+     "tutorial/advanced.ns",
+     "tutorial/basic.ns",
+     "tutorial/batch.ns",
+     "tutorial/ceiling_mote.jpg",
+     "tutorial/ceiling_mote_thumb.jpg",
+     "tutorial/docwrapper.php3",
+     "tutorial/garcia-thumb.jpg",
+     "tutorial/interface1.jpg",
+     "tutorial/interface1_thumb.jpg",
+     "tutorial/loghole.html",
+     "tutorial/loghole.html.head",
+     "tutorial/loop.ns",
+     "tutorial/mica2-thumb.jpg",
+     "tutorial/mobilewireless.php3",
+     "tutorial/plab-announce.txt",
+     "tutorial/planetlab.ns",
+     "tutorial/robot_anim.gif",
+     "tutorial/robotmap-ss-thumb.gif",
+     "tutorial/robotmap-ss.gif",
+     "tutorial/simple.vsd",
+     "tutorial/tb_compat.tcl",
+     "tutorial/tutorial.php3",
+     "tutorial/vnode-example.ns",
+     "tutorial/wall_mote.jpg",
+     "tutorial/wall_mote_thumb.jpg",
+     "tutorial/webcam-ss-thumb.gif",
+     "tutorial/webcam-ss.gif",
+     "webdb/README",
+     "webdb/webdb.php3",
+     "webdb/webdb_backend.php3",
+     "widearea_info.php3",
+     "widearea_nodeinfo.php3",
+     "widearea_redirect.php",
+     "wideareakeys.php3",
+    );
+
+sub InstallUpdate($$)
+{
+    my ($version, $phase) = @_;
+
+    #
+    # If something should run in the pre-install phase.
+    #
+    if ($phase eq "pre") {
+	foreach my $file (@deletes) {
+	    my $path = "$TBROOT/www/$file";
+
+	    Phase $file, "Removing $path", sub {
+		DoneIfDoesntExist($path);
+		ExecQuietFatal("/bin/rm -f $path");
+	    };
+	}
+    }
+    
+    #
+    # If something should run in the post-install phase.
+    #
+    if ($phase eq "post") {
+    }
+    
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

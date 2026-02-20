@@ -1,0 +1,21 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("interfaces", "pvid")) {
+	DBQueryFatal("ALTER TABLE interfaces ADD ".
+		     "  `pvid` int(11) unsigned default NULL");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

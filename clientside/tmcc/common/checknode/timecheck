@@ -35,6 +35,8 @@ initialize $@
 x=$(caller)
 [[ "${x/NULL}" = "$x" ]] && declare -ri timecheck_standalone=0 || declare -ri timecheck_standalone=1
 
+declare failed=""
+
 # check that external need program are installed
 s=""
 case $os in

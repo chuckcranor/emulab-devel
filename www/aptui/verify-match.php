@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,11 +37,15 @@ $this_idx  = $this_user->uid_idx();
 $this_uid  = $this_user->uid();
 $isadmin   = (ISADMIN() ? 1 : 0);
 
+# Now a cookie.
+$referrer = null;
+GetReferrer($referrer);
+ClearReferrer();
+
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "referrer",    PAGEARG_URL);
+$optargs = OptionalPageArguments("target_user", PAGEARG_USER);
 
 if (! isset($target_user)) {
     $target_user = $this_user;

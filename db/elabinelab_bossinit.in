@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -378,13 +378,15 @@ if (1) {
     # We also have to set the default image/os for real types, since
     # the stuff in the table we imported from the outer Emulab refers
     # to image IDs that are not valid in this inner Emulab. So just
-    # pick whatever UBUNTU image we happen to have.
+    # pick the earliest UBUNTU image we happen to have based on our
+    # naming convention.
     #
-    # Ditto for delay_osid, find an available FBSD10 image.
+    # Ditto for delay_osid, find the easliest FBSD image.
     #
     $query_result =
 	DBQueryFatal("select imageid from images ".
-		     "where imagename like 'UBUNTU%' and pid='$TBOPSPID'");
+		     "where imagename like 'UBUNTU%' and pid='$TBOPSPID' ".
+		     "order by imagename");
     if (!$query_result->numrows) {
 	die("*** $0:\n".
 	    "    Could not find a suitable UBUNTU image");
@@ -398,10 +400,11 @@ if (1) {
 
     $query_result =
 	DBQueryFatal("select imageid from images ".
-		     "where imagename like 'FBSD10%' and pid='$TBOPSPID'");
+		     "where imagename like 'FBSD%' and pid='$TBOPSPID'".
+		     "order by imagename");
     if (!$query_result->numrows) {
 	die("*** $0:\n".
-	    "    Could not find a suitable FBSD10 image for delay nodes");
+	    "    Could not find a suitable FBSD image for delay nodes");
     }
     my ($dimageid) = $query_result->fetchrow_array();
     my $dimage = OSImage->Lookup($dimageid);

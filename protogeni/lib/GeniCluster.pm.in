@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -222,7 +222,7 @@ sub InUse()
 		    "     unix_timestamp(stats.swapin_last))/60)) as ttl, ".
 		    "  u.uid,stats.slice_uuid,cert.urn,e.swappable, ".
 		    "  s.lockdown,unix_timestamp(stats.swapin_last), ".
-		    "  n.eventstate ".
+		    "  n.eventstate,n.role ".
 		    "  from nodes as n ".
 		    "left join reserved as r on r.node_id=n.node_id ".
 		    "left join node_types as t on t.type=n.type ".
@@ -234,12 +234,13 @@ sub InUse()
 		    "left join `geni-cm`.geni_certificates as cert on ".
 		    "     cert.uuid=stats.slice_uuid ".
 		    "left join users as u on u.uid_idx=e.swapper_idx ".
-		    "where n.role='testnode' and ".
-		    "      (t.class='pc' or t.class='ue') ".
+		    "where (n.role='testnode' and ".
+		    "       (t.class='pc' or t.class='ue')) or ".
+		    "      n.role='virtnode' ".
 		    "order by n.node_id");
     while (my ($node_id,$type,$pid,$eid,$reserved_pid,$expires,
 	       $autoswap,$ttl,$uid,$slice_uuid,$slice_urn,
-	       $swappable,$slice_lockdown,$swapin_time,$eventstate) =
+	       $swappable,$slice_lockdown,$swapin_time,$eventstate,$role) =
 	   $query_result->fetchrow_array()) {
 	my $maxttl;
 
@@ -311,6 +312,7 @@ sub InUse()
 	}
 	push(@blob, {"node_id"      => $node_id,
 		     "type"         => $type,
+		     "role"         => $role,
 		     "available"    => $available,
 		     "pid"          => $pid || "",
 		     "eid"          => $eid || "",
@@ -2869,6 +2871,60 @@ sub PortalManifest($)
     if ($slice->SetPortalManifest($manifest)) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not update portal manifest");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
+}
+
+#
+# Update spectrum. This is a modify bypass.
+#
+sub UpdateSpectrum($)
+{
+    my ($argref)  = @_;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (!exists($argref->{'slice_urn'})) {
+	return GeniResponse->BadArgsResponse("Missing slice urn");
+    }
+    my $slice_urn = $argref->{'slice_urn'};
+    my $slice = GeniSlice->Lookup($slice_urn);    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($slice));
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	print STDERR "No experiment for slice\n";
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED);
+    }
+    my @nodes = $experiment->NodeList();
+    if (!@nodes) {
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
+    }
+
+    if (!exists($argref->{'spectrum'})) {
+	return GeniResponse->BadArgsResponse("Missing spectrum");
+    }
+    my $spectrum = $argref->{'spectrum'};
+    print STDERR Dumper($spectrum);
+
+    foreach my $ref (@{ $spectrum }) {
+	if (!(exists($ref->{"frequency_low"}) &&
+	      exists($ref->{"frequency_high"}) && exists($ref->{"power"}))) {
+	    return GeniResponse->BadArgsResponse("Invalid spectrum definition");
+	}
+    }
+    foreach my $node (@nodes) {
+	# Purge existing limits
+	if ($node->AddSpectrum($spectrum, undef, 1)) {
+	    print STDERR "Failed to update spectrum on $node\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+			"Could not update spectrun on $node");
+	}
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
 }

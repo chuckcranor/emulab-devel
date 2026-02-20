@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2024 University of Utah and the Flux Group.
+# Copyright (c) 2010-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -726,17 +726,23 @@ sub GetServices($)
 		$type = "execute";
 		my $cmd  = GetText("command", $current);
 		my $shell= GetText("shell", $current);
+		my $tag  = GetText("tag", $current);
 		$item = {"type"   => $type,
 			 "cmd"    => $cmd,
-			 "shell"  => $shell};
+			 "shell"  => $shell,
+			 "tag"    => $tag,
+			 "element"=> $current};
 	    }
 	    elsif ($type eq "install") {
 		$type = "install";
 		my $dir = GetText("install_path", $current);
 		my $url = GetText("url", $current);
+		my $tag = GetText("tag", $current);
 		$item = {"type"   => $type,
 			 "dir"    => $dir,
-			 "url"    => $url};
+			 "url"    => $url,
+			 "tag"    => $tag,
+			 "element"=> $current};
 	    }
 	    else {
 		next;
@@ -2060,6 +2066,7 @@ sub GetSpectrum($)
 	push(@result, {
 	    "frequency_low"  => GetText("frequency_low", $element),
 	    "frequency_high" => GetText("frequency_high", $element),
+	    "frequency_uuid" => GetText("frequency_uuid", $element),
 	    "power"          => GetText("power", $element),
 	    "bandwidth"      => GetText("bandwidth", $element),
 	    "element"        => $element});
@@ -2089,6 +2096,66 @@ sub GetBusRoutes($)
 	    "dom"   => $element});
     }
     return \@result;
+}
+
+#
+# Add a password or text string (to be encrypted) to an rspec
+#
+sub AddPassword($$$)
+{
+    my ($rspec, $name, $text) = @_;
+    
+    my $pswdref = AddElement("password", $rspec, $EMULAB_NS);
+    SetText("name", $pswdref, $name);
+    $pswdref->appendText($text);
+
+    my @list = FindNodesNS("n:password", $rspec,
+			   $EMULAB_NS)->get_nodelist();
+    #
+    # Fix a problem for David; prepend system added passwords.
+    #
+    if (@list > 1) {
+	# Reference to the last password.
+	my $ref = pop(@list);
+	my $first = $list[0];
+	$rspec->removeChild($ref);
+	$rspec->insertBefore($ref, $first);
+    }
+    return $pswdref;
+}
+
+sub IsPrivate($)
+{
+    my ($rspec) = @_;
+    my $private = FindNodesNS("n:private", $rspec, $EMULAB_NS)->pop();
+    
+    if ($private) {
+	my $enabled = GetText("enabled", $private);
+	return 1
+	    if (defined($enabled) && $enabled eq "true");
+    }
+    return 0;
+}
+
+#
+# Get parameters from the manifest for an RU node.
+#
+sub GetCOTSRUParameters($)
+{
+    my ($ref) = @_;
+    my %result = ();
+
+    my @fields = ("center_frequency", "bandwidth", "mimo_mode");
+
+    my $params = FindNodesNS( "n:cotsru_params", $ref, $EMULAB_NS )->pop();
+    if (defined($params)) {
+	foreach my $field (@fields) {
+	    my $val = GetText($field, $params);
+	    $result{$field} = $val
+		if (defined($val));
+	}
+    }
+    return \%result;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

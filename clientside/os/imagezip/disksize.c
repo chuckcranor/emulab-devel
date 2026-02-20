@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -45,18 +45,35 @@
 uint64_t
 getdisksize(int fd)
 {
-	unsigned long disksize = 0;
+	uint64_t disksize = 0;
 	unsigned int ssize = 512;
 	off_t whuzat;
 
 #ifdef linux
 	if (disksize == 0) {
 		int rv;
-		rv = ioctl(fd, BLKGETSIZE, &disksize);
+#ifdef BLKGETSIZE64
+		rv = ioctl(fd, BLKGETSIZE64, &disksize);
 		if (rv < 0)
 			disksize = 0;
 #ifdef TEST
-		fprintf(stderr, "Linux BLKGETSIZE returned %lu\n", disksize);
+		fprintf(stderr, "Linux BLKGETSIZE64 returned %lu\n",
+			disksize);
+#endif
+		/* size is in bytes */
+		disksize /= ssize;
+#else
+		unsigned long dsize;
+
+		rv = ioctl(fd, BLKGETSIZE, &dsize);
+		if (rv < 0)
+			dsize = 0;
+#ifdef TEST
+		fprintf(stderr, "Linux BLKGETSIZE returned %lu\n",
+			cmd, dsize);
+#endif
+		/* size is in sectors */
+		disksize = (uint64_t)dsize;
 #endif
 	}
 #else
@@ -69,7 +86,7 @@ getdisksize(int fd)
 			ssize = 512;
 		rv = ioctl(fd, DIOCGMEDIASIZE, &dsize);
 		if (rv >= 0)
-			disksize = (unsigned long)(dsize / ssize);
+			disksize = (uint64_t)(dsize / ssize);
 #ifdef TEST
 		fprintf(stderr, "BSD BIOCGMEDIASIZE returned %lu\n", disksize);
 #endif

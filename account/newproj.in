@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2021, 2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,6 +94,7 @@ sub UserError($);
 # Locals
 my $SAVEUID	= $UID;
 my $xmlfile;
+my $brand;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -236,7 +237,7 @@ fatal($@)
 if (exists($xmlparse->{'attribute'}->{"portal"})) {
     $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
     delete($xmlparse->{'attribute'}->{"portal"});
-    my $brand = Brand->Create($portal);
+    $brand = Brand->Create($portal);
     if (!defined($brand)) {
 	fatal("Bad portal: $portal");
     }
@@ -392,11 +393,14 @@ if (exists($newproj_args{'nsf_funded'})) {
     delete($newproj_args{'nsf_supplement'});
 }
 
-if (exists($newproj_args{'forClass'}) && $newproj_args{'forClass'} == 1) {
-    $newproj_args{'shared_reservations'} = 1;
+if (defined($brand) && $brand->isPowder()) {
+    $newproj_args{'shared_reservations'} = $Project::RESERVATIONS_PERPROJECT;
+}
+elsif (exists($newproj_args{'forClass'}) && $newproj_args{'forClass'} == 1) {
+    $newproj_args{'shared_reservations'} = $Project::RESERVATIONS_PERPROJECT;
 }
 else {
-    $newproj_args{'shared_reservations'} = 0;
+    $newproj_args{'shared_reservations'} = $Project::RESERVATIONS_PERUSER;
 }
 
 #

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2021 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -709,6 +709,7 @@ ClientRecvThread(void *arg)
 	STCounter = servertimo * TIMEOUT_HZ;
 
 	while (1) {
+		int rv;
 #ifdef TRACE_EVENTS
 		static int needstamp = 1;
 		struct timeval pstamp;
@@ -729,8 +730,20 @@ ClientRecvThread(void *arg)
 		 * see that block for longer than our timeout period,
 		 * leading us to issue another request, etc.
 		 */
-		if (PacketReceive(p) != 0) {
+		rv = PacketReceive(p);
+		if (rv != 0) {
 			pthread_testcancel();
+
+			/*
+			 * Bad packet, just continue.
+			 *
+			 * XXX if we keep getting bad packets as opposed to no
+			 * packets, the timeouts below won't trigger. The
+			 * callers of PacketReceive should not be counting on
+			 * it for ticking off their timers.
+			 */
+			if (rv > 0)
+				continue;
 
 			/*
 			 * First see if we should exit

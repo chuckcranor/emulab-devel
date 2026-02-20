@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,15 +35,18 @@ $page_allowframing = true;
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLogin($check_status);
-# Operate as a guest user if not logged in,
-if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
-    $this_user = null;
+if (!$embedded) {
+    $this_user = CheckLogin($check_status);
+    if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+        $this_user = null;
+    }
 }
 
 # Optional views
 $optargs = OptionalPageArguments("whichmap",  PAGEARG_STRING);
-if (isset($whichmap) && $whichmap != "states" && $whichmap != "countries") {
+if (isset($whichmap) &&
+    $whichmap != "states" && $whichmap != "countries" &&
+    $whichmap != "cities" && $whichmap != "industry") {
     SPITUSERERROR("Only one of states or countries please.");
     exit();
 }    
@@ -62,7 +65,13 @@ REQUIRE_UNDERSCORE();
 AddLibrary("js/quickvm_sup.js");
 REQUIRE_MOMENT();
 AddLibrary("js/lib/d3.v5.js");
-SPITREQUIRE("js/usage-map.js");
+if (isset($whichmap) &&
+    ($whichmap == "cities" || $whichmap == "industry")) {
+    SPITREQUIRE("js/usage-map-powder.js");
+}
+else {
+    SPITREQUIRE("js/usage-map.js");
+}
 AddTemplateList(array("usage-map"));
 SPITFOOTER();
 

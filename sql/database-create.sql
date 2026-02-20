@@ -172,6 +172,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `notes` text,
   `rdz_radio_id` varchar(40) DEFAULT NULL,
   `powder_zone` varchar(32) default NULL,
+  `hidden` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -460,6 +461,7 @@ CREATE TABLE `apt_deferred_instances` (
   `start_at` datetime default NULL,
   `last_retry` datetime default NULL,
   `retry_until` datetime default NULL,
+  `reason` text,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -695,6 +697,18 @@ CREATE TABLE `apt_instance_history` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_instance_logfile_history`
+--
+
+DROP TABLE IF EXISTS `apt_instance_logfile_history`;
+CREATE TABLE `apt_instance_logfile_history` (
+  `uuid` varchar(40) NOT NULL default '',
+  `logfileid` varchar(40) NOT NULL default '',
+  `created` datetime default NULL,
+  PRIMARY KEY (`uuid`,`logfileid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_instance_slice_status`
 --
 
@@ -810,6 +824,7 @@ CREATE TABLE `apt_instances` (
   `rdz_rdzinrdzinfo` mediumtext,
   `modify_count` int(11) unsigned NOT NULL default '0',
   `powder_zones` tinytext,
+  `private` tinyint(1) NOT NULL default '0',
   PRIMARY KEY (`uuid`),
   KEY `creator` (`creator`),
   KEY `creator_idx` (`creator_idx`),
@@ -1150,6 +1165,7 @@ DROP TABLE IF EXISTS `apt_instance_rfranges`;
 CREATE TABLE `apt_instance_rfranges` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) NOT NULL default '',
   `name` varchar(16) default NULL,
   `type` enum('global','node','iface','route') default NULL, 
   `target` tinytext,
@@ -1160,7 +1176,10 @@ CREATE TABLE `apt_instance_rfranges` (
   `rdz_grantid` varchar(40) DEFAULT NULL,
   `rdz_claimid` varchar(40) DEFAULT NULL,
   `rdz_status` varchar(40) DEFAULT NULL,
-  PRIMARY KEY (`uuid`,`idx`)
+  `rdz_freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `rdz_freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`uuid`,`idx`),
+  UNIQUE KEY `freq_uuid` (`freq_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1171,6 +1190,7 @@ DROP TABLE IF EXISTS `apt_instance_rfrange_history`;
 CREATE TABLE `apt_instance_rfrange_history` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) default NULL,
   `type` enum('global','node','iface','route') default NULL, 
   `target` tinytext,
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
@@ -2767,6 +2787,7 @@ CREATE TABLE `experiments` (
   `nonlocal_type` tinytext,
   `nonfsmounts` tinyint(1) NOT NULL default '0',
   `nfsmounts` enum('emulabdefault','genidefault','all','none') NOT NULL default 'emulabdefault',
+  `private` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `pideid` (`pid`,`eid`),
   UNIQUE KEY `pididxeid` (`pid_idx`,`eid`),
@@ -3561,6 +3582,7 @@ CREATE TABLE `interfaces` (
   `autocreated` tinyint(1) unsigned NOT NULL default '0',
   `ptp` tinyint(1) NOT NULL default '0',
   `synce` tinyint(1) NOT NULL default '0',
+  `pvid` int(11) unsigned default NULL,
   PRIMARY KEY  (`node_id`,`iface`),
   KEY `mac` (`mac`),
   KEY `IP` (`IP`),
@@ -3992,8 +4014,11 @@ CREATE TABLE `login_history` (
   `IP` varchar(16) default NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `location` varchar(64) default NULL,
+  `location_stamp` datetime default NULL,
   `country` tinytext,
   `region` tinytext,
+  `city` tinytext,
+  `domain` tinytext,
   PRIMARY KEY (`idx`),
   KEY `idxstamp` (`uid_idx`,`tstamp`),
   KEY `uidstamp` (`uid`,`tstamp`),
@@ -4867,7 +4892,7 @@ CREATE TABLE `os_info_versions` (
   `path` tinytext,
   `magic` tinytext,
   `machinetype` varchar(30) NOT NULL default '',
-  `osfeatures` set('ping','ssh','ipod','isup','veths','veth-ne','veth-en','mlinks','linktest','linkdelays','vlans','suboses','ontrustedboot','no-usb-boot','egre','loc-bstore','rem-bstore','openvz-host','xen-host','docker-host') default NULL,
+  `osfeatures` set('ping','ssh','ipod','isup','veths','veth-ne','veth-en','mlinks','linktest','linkdelays','vlans','suboses','ontrustedboot','no-usb-boot','egre','loc-bstore','rem-bstore','openvz-host','xen-host','docker-host','cloud-init') default NULL,
   `ezid` tinyint(4) NOT NULL default '0',
   `shared` tinyint(4) NOT NULL default '0',
   `mustclean` tinyint(4) NOT NULL default '1',
@@ -6343,6 +6368,40 @@ CREATE TABLE `user_token_passwords` (
   `system` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `user_token` (`subsystem`,`username`,`plaintext`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `user_jwt_tokens`
+--
+
+DROP TABLE IF EXISTS `user_jwt_tokens`;
+CREATE TABLE `user_jwt_tokens` (
+  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `issued` datetime NOT NULL,
+  `expires` datetime NOT NULL,
+  `role` enum('user','admin') default 'user',
+  `scope_type` enum('global','experiment','project') default 'global',
+  `scope_value` tinytext,
+  `token` text,
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `uuid` (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `user_sso_codes`
+--
+
+DROP TABLE IF EXISTS `user_sso_codes`;
+CREATE TABLE `user_sso_codes` (
+  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(40) NOT NULL default '',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `expires` datetime NOT NULL,
+  PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

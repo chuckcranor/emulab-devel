@@ -1,0 +1,13 @@
+Please tell us what you are doing, you are sending a very unusual
+amount of traffic over the shared control network instead of your own
+internal network(s). Your internal networks have IP addresses in the
+10.XXX.YYY.ZZZ range, see /etc/hosts on your nodes for the specific
+addresses to use in your software configuration.
+
+See https://docs.cloudlab.us/control-net.html#(part._cnet-avoiding)
+for more information on identifying and avoiding the control network.
+
+We need to know very soon so we do not have to terminate this
+experiment. You are not permitted to send high volume traffic on the
+public facing shared network!
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

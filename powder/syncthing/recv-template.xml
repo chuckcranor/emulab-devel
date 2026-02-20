@@ -1,4 +1,4 @@
-<configuration version="33">
+<configuration version="37">
     @FOLDERS@
     <device id="@MYDEVID@" name="@MYNAME@" compression="metadata" introducer="false" skipIntroductionRemovals="false" introducedBy="">
         <address>@MYADDR@</address>
@@ -12,7 +12,7 @@
         <remoteGUIPort>0</remoteGUIPort>
     </device>
     @DEVICES@
-    <gui enabled="true" tls="false" debugging="false">
+    <gui enabled="true" tls="false" debugging="false" sendBasicAuthPrompt="false">
         <address>@GUILISTEN@</address>
         <apikey>@APIKEY@</apikey>
         <theme>default</theme>
@@ -41,7 +41,6 @@
         <urURL>https://data.syncthing.net/newdata</urURL>
         <urPostInsecurely>false</urPostInsecurely>
         <urInitialDelayS>1800</urInitialDelayS>
-        <restartOnWakeup>true</restartOnWakeup>
         <autoUpgradeIntervalH>0</autoUpgradeIntervalH>
         <upgradeToPreReleases>false</upgradeToPreReleases>
         <keepTemporariesH>24</keepTemporariesH>
@@ -52,8 +51,8 @@
         <releasesURL>https://upgrades.syncthing.net/meta.json</releasesURL>
         <overwriteRemoteDeviceNamesOnConnect>false</overwriteRemoteDeviceNamesOnConnect>
         <tempIndexMinBlocks>10</tempIndexMinBlocks>
+        <unackedNotificationID>authenticationUserAndPassword</unackedNotificationID>
         <trafficClass>0</trafficClass>
-        <defaultFolderPath></defaultFolderPath>
         <setLowPriority>true</setLowPriority>
         <maxFolderConcurrency>0</maxFolderConcurrency>
         <crashReportingURL>https://crash.syncthing.net/newcrash</crashReportingURL>
@@ -67,5 +66,67 @@
         <sendFullIndexOnUpgrade>false</sendFullIndexOnUpgrade>
         <connectionLimitEnough>0</connectionLimitEnough>
         <connectionLimitMax>0</connectionLimitMax>
+        <insecureAllowOldTLSVersions>false</insecureAllowOldTLSVersions>
+        <connectionPriorityTcpLan>10</connectionPriorityTcpLan>
+        <connectionPriorityQuicLan>20</connectionPriorityQuicLan>
+        <connectionPriorityTcpWan>30</connectionPriorityTcpWan>
+        <connectionPriorityQuicWan>40</connectionPriorityQuicWan>
+        <connectionPriorityRelay>50</connectionPriorityRelay>
+        <connectionPriorityUpgradeThreshold>0</connectionPriorityUpgradeThreshold>
     </options>
+    <defaults>
+        <folder id="" label="" path="" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="10" fsWatcherTimeoutS="0" ignorePerms="false" autoNormalize="true">
+            <filesystemType>basic</filesystemType>
+            <device id="@MYDEVID@" introducedBy="">
+                <encryptionPassword></encryptionPassword>
+            </device>
+            <minDiskFree unit="%">1</minDiskFree>
+            <versioning>
+                <cleanupIntervalS>3600</cleanupIntervalS>
+                <fsPath></fsPath>
+                <fsType>basic</fsType>
+            </versioning>
+            <copiers>0</copiers>
+            <pullerMaxPendingKiB>0</pullerMaxPendingKiB>
+            <hashers>0</hashers>
+            <order>random</order>
+            <ignoreDelete>false</ignoreDelete>
+            <scanProgressIntervalS>0</scanProgressIntervalS>
+            <pullerPauseS>0</pullerPauseS>
+            <maxConflicts>10</maxConflicts>
+            <disableSparseFiles>false</disableSparseFiles>
+            <disableTempIndexes>false</disableTempIndexes>
+            <paused>false</paused>
+            <weakHashThresholdPct>25</weakHashThresholdPct>
+            <markerName>.stfolder</markerName>
+            <copyOwnershipFromParent>false</copyOwnershipFromParent>
+            <modTimeWindowS>0</modTimeWindowS>
+            <maxConcurrentWrites>2</maxConcurrentWrites>
+            <disableFsync>false</disableFsync>
+            <blockPullOrder>standard</blockPullOrder>
+            <copyRangeMethod>standard</copyRangeMethod>
+            <caseSensitiveFS>false</caseSensitiveFS>
+            <junctionsAsDirs>false</junctionsAsDirs>
+            <syncOwnership>false</syncOwnership>
+            <sendOwnership>false</sendOwnership>
+            <syncXattrs>false</syncXattrs>
+            <sendXattrs>false</sendXattrs>
+            <xattrFilter>
+                <maxSingleEntrySize>1024</maxSingleEntrySize>
+                <maxTotalSize>4096</maxTotalSize>
+            </xattrFilter>
+        </folder>
+        <device id="" compression="metadata" introducer="false" skipIntroductionRemovals="false" introducedBy="">
+            <address>dynamic</address>
+            <paused>false</paused>
+            <autoAcceptFolders>false</autoAcceptFolders>
+            <maxSendKbps>0</maxSendKbps>
+            <maxRecvKbps>0</maxRecvKbps>
+            <maxRequestKiB>0</maxRequestKiB>
+            <untrusted>false</untrusted>
+            <remoteGUIPort>0</remoteGUIPort>
+            <numConnections>0</numConnections>
+        </device>
+        <ignores></ignores>
+    </defaults>
 </configuration>

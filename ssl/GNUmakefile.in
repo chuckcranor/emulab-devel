@@ -187,6 +187,24 @@ emulab_pubkey.pem:	emulab_privkey.pem
 $(RANDFILE):
 	dd if=/dev/urandom of=$(RANDFILE) bs=256 count=4
 
+# Must update /usr/testbed/etc/extracerts.bundle, and then run gencabundle
+utah-apt.ca:
+	openssl req -new -x509 -days 2000 -config utah-apt.cnf \
+		    -text -key utah-apt.key -out utah-apt.ca
+	cat utah-apt.key >> utah-apt.ca
+
+utah-apt-sa.req:
+	openssl req -new -config utah-apt-sa.cnf \
+            -key utah-apt-sa.key -text -out utah-apt-sa.req
+
+# Need to remauthority/addauthority when this is rebuilt.
+utah-apt-sa.pem:
+	openssl ca -batch -policy policy_sslxmlrpc -config ca.cnf \
+	-out utah-apt-sa.pem \
+	-cert utah-apt.ca -keyfile utah-apt.key \
+	-infiles utah-apt-sa.req
+	cat utah-apt-sa.key >> utah-apt-sa.pem
+
 # The point of the this is to recover the keys from where they were
 # originally installed. We do this cause people often lose their
 # original build tree, but if want to rebuild the certs, we usually

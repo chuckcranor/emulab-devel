@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2025 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -670,6 +670,20 @@ PacketReceive(Packet_t *p)
 			from.sin_addr.s_addr = p->hdr.srcip;
 	}
 
+	/*
+	 * Got a copy of our own MC message. Probably using an SR-IOV interface.
+	 */
+	if (!isclient && mcastif.s_addr && p->hdr.srcip == myipaddr.s_addr) {
+		static int mcbouncewarned = 0;
+
+		if (!mcbouncewarned) {
+			FrisLog("Received our own message! "
+				"Bad MC implementation--"
+				"expect bad high bad message count!");
+			mcbouncewarned = 1;
+		}
+		return 1;
+	}
 	if (p->hdr.srcip != from.sin_addr.s_addr) {
 		FrisLog("Bad message source (%x != %x)",
 			ntohl(from.sin_addr.s_addr), ntohl(p->hdr.srcip));

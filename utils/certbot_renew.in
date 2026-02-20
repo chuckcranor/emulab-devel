@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2011-2021 University of Utah and the Flux Group.
+# Copyright (c) 2011-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -118,7 +118,6 @@ my $CERT    = "/usr/local/etc/letsencrypt/live/$OURDOMAIN/cert.pem";
 my $CERTBOT = "certbot certonly -n --agree-tos -m $TBOPS ".
     ($impotent ? "--dry-run " : "") .
     ($expand   ? "--expand " : "") .
-    "--manual-public-ip-logging-ok ".
     "--manual --preferred-challenges dns --reuse-key ".
     "--manual-auth-hook $CERTBOT_HOOK ".
     "--manual-cleanup-hook '$CERTBOT_HOOK -c' ".

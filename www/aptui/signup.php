@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -247,7 +247,7 @@ $licenses = array();
 #
 if (!isset($formfields["startorjoin"]) || $formfields["startorjoin"] == "") {
     $errors["error"] = "Neither start or join selected";
-    SPITFORM($defaults, 0, $errors);
+    SPITFORM($formfields, 0, $errors);
     return;
 }
 if ($formfields["startorjoin"] == "join") {
@@ -291,11 +291,13 @@ if (!$this_user || $promoting) {
     elseif (! TBvalid_usrname($formfields["fullname"])) {
 	$errors["fullname"] = TBFieldErrorString();
     }
-    # Make sure user name has at least two tokens!
-    $tokens = preg_split("/[\s]+/", $formfields["fullname"],
-			 -1, PREG_SPLIT_NO_EMPTY);
-    if (count($tokens) < 2) {
-	$errors["fullname"] = "Please provide a first and last name";
+    else {
+        # Make sure user name has at least two tokens!
+        $tokens = preg_split("/[\s]+/", $formfields["fullname"],
+                             -1, PREG_SPLIT_NO_EMPTY);
+        if (count($tokens) < 2) {
+            $errors["fullname"] = "Please provide a first and last name";
+        }
     }
     if (!isset($formfields["email"]) ||
 	strcmp($formfields["email"], "") == 0) {
@@ -478,7 +480,9 @@ if (!$joinproject) {
 if (!$this_user) {
     if (isset($_FILES['keyfile']) &&
 	$_FILES['keyfile']['name'] != "" &&
-	$_FILES['keyfile']['name'] != "none") {
+	$_FILES['keyfile']['name'] != "none" &&
+	$_FILES['keyfile']['tmp_name'] != "" &&
+	$_FILES['keyfile']['tmp_name'] != "none") {
 
 	$localfile = $_FILES['keyfile']['tmp_name'];
 	$formfields["pubkey"] = CleanString(file_get_contents($localfile));
@@ -689,8 +693,10 @@ if (isset($formfields["proj_nsf"])) {
     $args["nsf_funded"] = $formfields["proj_nsf"];
     if ($formfields["proj_nsf"] == 1) {
         $args["nsf_awards"] = trim($formfields["proj_nsf_awards"]);
-        $args["nsf_supplement"] =
-                    $formfields["proj_nsf_supplement"] == 1 ? 1 : 0;
+        if (isset($formfields["proj_nsf_supplement"])) {
+            $args["nsf_supplement"] =
+                        $formfields["proj_nsf_supplement"] == 1 ? 1 : 0;
+        }
     }
 }
 

@@ -259,6 +259,14 @@
 		<% } %>
 	      </td>
 	    </tr>
+	    <tr>
+	      <td>Last Power Cycle</td>
+	      <% if (_.has(fields.outlet, "last_power")) { %>
+		<td class="format-date"><%- fields.outlet.last_power %></td>
+	      <% } else { %>
+		<td></td>
+	      <% } %>
+	    </tr>
 	  <% } %>
 	  <% if (_.has(fields, "urn")) { %>
 	    <tr>
@@ -301,6 +309,10 @@
 	      <td>Experiment</td>
 	      <td><a href="<%= fields.expinfo.url %>">
 		<%- fields.expinfo.eid %></a></td>
+	    </tr>	
+	    <tr>
+	      <td>Node Vname</td>
+	      <td><%= fields.expinfo.vname %></td>
 	    </tr>	
 	    <% if (_.has(fields.expinfo, "startupcmd")) { %>
 	      <tr>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2022 University of Utah and the Flux Group.
+# Copyright (c) 2022-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -66,8 +66,8 @@ my $SERVER       = "@BOSSNODE@";
 my $EMULABNET	 = "155.98.32.0/20";
 
 # Version of syncthing running, set to "" if unknown.
-my $SERVERVERS	 = "33";
-my $CLIENTVERS	 = "30";
+my $SERVERVERS	 = "37";
+my $CLIENTVERS	 = "37";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -281,7 +281,10 @@ sub customizeconfig($)
 	    OTHERNAME => $SERVER,
 	    OTHERNET  => $EMULABNET,
 	);
-	my $template = "$TEMPLATEDIR/send-template.xml";
+	my $template = "$TEMPLATEDIR/send-template$CLIENTVERS.xml";
+	if (! -e "$template") {
+	    $template = "$TEMPLATEDIR/send-template.xml";
+	}
 
 	expandconfig($CLIENTVERS, $cfile, $template, \%vars, $fqdn, $SERVER);
     }
@@ -309,7 +312,7 @@ sub customizeconfig($)
 #
 sub expandconfig($$$$$@)
 {
-    my ($vers,$cfile, $template, $vars, $fqdn, @rhosts) = @_;
+    my ($vers, $cfile, $template, $vars, $fqdn, @rhosts) = @_;
     my $port = 22000;
 
     print "Vars:\n", Dumper($vars), "\n"

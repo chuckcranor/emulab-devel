@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,21 +49,22 @@ use JSON;
 #
 sub usage()
 {
-    print "Usage: getipinfo [-n]\n";
+    print "Usage: getipinfo [-n] [-k paid-token]\n";
     print "       getipinfo [-n] -p portal\n";
     exit(1);
 }
-my $optlist   = "ndp:";
+my $optlist   = "ndp:k:";
 my $impotent  = 0;
 my $debug     = 0;
 my $limit     = 200;
+my $paidtoken;
 
 #
 # Configure variables
 #
 my $TB		     = "@prefix@";
-my $token            = "850749cc3b77dc";
-my $URL              = "http://ipinfo.io/batch?token=${token}";
+my $DEFAULT_TOKEN    = "850749cc3b77dc";
+my $URL              = "http://ipinfo.io/batch";
 my $CURL	     = "/usr/local/bin/curl";
 
 # Load the Testbed support stuff.
@@ -98,6 +99,15 @@ if (defined($options{"p"})) {
     }
     exit(WriteResults($portal));
 }
+if (defined($options{"k"})) {
+    $paidtoken = $options{"k"};
+    $URL = $URL .= "?token=${paidtoken}";
+}
+else {
+    $URL = $URL .= "?token=${DEFAULT_TOKEN}";
+}
+usage()
+    if (@ARGV);
 
 #
 # Find unmatched IPs in the login_history table and batch them up
@@ -107,11 +117,19 @@ my $count = 0;
 
 while ($limit) {
     $limit--;
-    
+    my $query;
+
+    if (1) {
+	$query = "IP is not null and portal='powder' and ".
+	    "city is null";
+    }
+    else {
+	$query = "IP is not null and location_stamp is null";
+    }
     my $query_result =
 	DBQueryFatal("select distinct IP from login_history ".
-		     "where location is null and IP is not null ".
-		     "limit 100");
+		     "where $query ".
+		     "limit 500");
 
     last
 	if ($query_result->numrows == 0);
@@ -163,27 +181,40 @@ while ($limit) {
 	    my $loc     = $ref->{'loc'};
 	    my $country = $ref->{'country'};
 	    my $region  = $ref->{'region'};
-	    
-	    if (!defined($loc)) {
-		print STDERR "No data for $IP\n";
+	    my $city    = $ref->{'city'} if ($paidtoken);
+	    my $domain  = $ref->{'asn'}->{"domain"} if ($paidtoken);
 
-		DBQueryFatal("update login_history set ".
-			     " location='' ".
-			     "where IP='$IP'");
+	    if (defined($loc) &&
+		($loc =~ /[^\x00-\x7F]/ ||
+		 $country =~ /[^\x00-\x7F]/ ||
+		 $region =~ /[^\x00-\x7F]/ ||
+		 ($city && $city =~ /[^\x00-\x7F]/))) {
+		$loc = undef;
+	    }
+	    if (!defined($loc)) {
+		print STDERR "No data (or non ascii) for $IP\n";
+
+		if (!$impotent) {
+		    DBQueryFatal("update login_history set ".
+				 " location_stamp=now() ".
+				 "where IP='$IP'");
+		}
 		next;
 	    }
 	    $count++;
-	    if ($impotent) {
-		print "Would set $IP: $loc,$country,$region\n";
-		next;
-	    }
-	    else {
-		print "$IP: $loc,$country,$region\n";
-		
+	    print "$IP: $loc,$country,$region" .
+		($city ? ",$city,$domain" : "") . "\n";
+
+	    if (!$impotent) {
 		DBQueryFatal("update login_history set ".
+			     " location_stamp=now(), ".
 			     " location=" . DBQuoteSpecial($loc) . ", ".
 			     " country=" . DBQuoteSpecial($country) . ", ".
 			     " region=" . DBQuoteSpecial($region) . " ".
+			     (defined($city) ?
+			      " ,city=" . DBQuoteSpecial($city) . " " : "") .
+			     (defined($domain) ?
+			      " ,domain=" . DBQuoteSpecial($domain) . " " : "") .
 			     "where IP='$IP'");
 	    }
 	}
@@ -192,7 +223,7 @@ while ($limit) {
     }
     print "$count IPs completed\n";
     last
-	if (!$count);
+	if (!$count || !$limit);
     
     sleep(10);
 }

@@ -52,7 +52,7 @@ sub Create($$)
 
     # No brand means the classic interface.
     if (!defined($brand)) {
-	$brand = "classic";
+	$brand = "emulab";
     }
     elsif ($brand =~ /aptlab/) {
 	$brand = "aptlab";

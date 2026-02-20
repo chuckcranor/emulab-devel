@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -183,8 +183,8 @@ my $SLOT_MODIFIER 	= 0x10; # Allowed to update.
 #
 my %xmlfields =
     # XML Field Name        DB slot name         Flags             Default
-    ("profile_name"	   => ["name",		$SLOT_REQUIRED],
-     "profile_pid"	   => ["pid",		$SLOT_REQUIRED],
+    ("profile_name"	   => ["name",		$SLOT_OPTIONAL],
+     "profile_pid"	   => ["pid",		$SLOT_OPTIONAL],
      "profile_creator"	   => ["creator",	$SLOT_OPTIONAL],
      "profile_listed"      => ["listed",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_public"      => ["public",	$SLOT_OPTIONAL|$SLOT_UPDATE],
@@ -292,6 +292,13 @@ sub CreateProfile()
     # This will exit if there are any errors.
     VerifyXML($xmlfile, 0);
 
+    if (!exists($new_args{"pid"})) {
+	UserError({"profile_pid" => "Must provide project"})
+    }
+    if (!exists($new_args{"name"})) {
+	UserError({"profile_name" => "Must provide name"})
+    }
+
     #
     # We need to make sure the project exists and is a valid project for
     # the creator (current user). 
@@ -302,6 +309,10 @@ sub CreateProfile()
     }
     elsif (!$project->AccessCheck($this_user, TB_PROJECT_CREATEPROFILE())) {
 	UserError({"profile_pid" => "Not enough permission in this project"});
+    }
+    if (defined(APT_Profile->Lookup($new_args{"pid"}, $new_args{"name"}))) {
+	$errors{"profile_name"} = "Already in use";
+	UserError(\%errors);
     }
     $usenewgenilib = UseNewGenilib($project);
     
@@ -366,9 +377,45 @@ sub CreateProfile()
 	    fatal("Could not generate a repo access key");
 	}
 	$new_args{'repokey'} = $repokey;
+
+	#
+	# If there is no script, we came in through the REST interface.
+	# Typically we come in through the Web UI which already grabbed the
+	# script and passed it along.
+	#
+	if (!defined($script)) {
+	    $output = emutil::ExecQuiet("$MANAGEGITREPO getsource -n $reponame");
+	    if ($?) {
+		UserError($output);	
+	    }
+	    $script = $output;
+	    $new_args{'script'} = $script;
+	}
     }
     # Script parameters
     if (defined($script) && $script ne "" && $script =~ /^(import|from)/m) {
+	#
+	# If no rspec, generate one, as will happen when coming from
+	# the RPC interface.
+	#
+	if (!defined($rspec)) {
+	    my ($fh, $filename) = tempfile(UNLINK => 1);
+	    if (!defined($fh)) {
+		fatal("Could not open temporary file for script");
+	    }
+	    my $opts = ($usenewgenilib ? "-N" : "");
+	    # Import repo into jail.
+	    $opts .= " -r " . $reponame if (defined($reponame));
+	    print $fh $script;
+	    my $output = emutil::ExecQuiet("$RUNGENILIB $opts $filename");
+	    if ($?) {
+		my $exit_status = $? >> 8;
+		print STDERR $output;
+		# Pass along the exit value.
+		exit($exit_status);
+	    }
+	    $new_args{"rspec"} = $rspec = $output;
+	}
 	my $paramdefs;
 	my $retval = GetScriptParameters($script, $reponame, \$paramdefs);
 	if ($retval) {
@@ -439,6 +486,11 @@ sub CreateProfile()
 	}
 	fatal("Could not create new profile");
     }
+    if (defined($webtask)) {
+	$webtask->uuid($profile->uuid());
+	$webtask->profile_uuid($profile->profile_uuid());
+    }
+    
     # This is deprecated.
     $profile->Publish();
     
@@ -641,6 +693,9 @@ sub CreateProfile()
 			"UUID:     ". $profile->uuid() . "\n".
 			"URL:      ". $profile->AdminURL() . "\n");
 
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
 }
 
@@ -714,6 +769,7 @@ sub DuplicateProfile()
     
     if (defined($webtask)) {
 	$webtask->uuid($profile->uuid());
+	$webtask->Exited(0);
     }
     print "New profile created: " . $profile->uuid() . "\n";
     return 0;
@@ -787,6 +843,9 @@ sub ModifyProfile()
 	    UserError($errmsg);
 	}
     }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
 }
 
@@ -843,6 +902,29 @@ sub ModifyProfileInternal($$$)
     }
     # Script parameters
     if (defined($script) && $script ne "" && $script =~ /^(import|from)/m) {
+	#
+	# If no rspec, generate one, as will happen when coming from
+	# the RPC interface.
+	#
+	if (!defined($rspec)) {
+	    my ($fh, $filename) = tempfile(UNLINK => 1);
+	    if (!defined($fh)) {
+		fatal("Could not open temporary file for script");
+	    }
+	    my $opts = ($usenewgenilib ? "-N" : "");
+	    # Import repo into jail.
+	    $opts .= " -r " . $profile->reponame() if ($profile->IsRepoBased());
+	    print $fh $script;
+	    my $output = emutil::ExecQuiet("$RUNGENILIB $opts $filename");
+	    if ($?) {
+		my $exit_status = $? >> 8;
+		print STDERR $output;
+		# Pass along the exit value.
+		exit($exit_status);
+	    }
+	    $update_args{"rspec"} = $rspec = $output;
+	}
+	
 	#
 	# For a Parameterized Profile, need to generate and store the form
 	# data. Only python scripts of course.
@@ -1887,8 +1969,6 @@ sub CanDelete($$)
     my $project = Project->Lookup($profile->pid_idx());
     return 0
 	if (!defined($project));
-    return 0
-        if ($project->isAPT());
     return 1
 	if ($user->IsAdmin());
     return 1

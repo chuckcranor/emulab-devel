@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,7 +111,7 @@ tweakmbr() {
     # If the disk currently has GPT, we have to destroy it since we might
     # get fooled by the protective MBR.
     #
-    if gpart show $DISK 2>/dev/null | grep -q GPT; then
+    if gpart show $_DSK 2>/dev/null | grep -q GPT; then
 	_ALWAYS=1
     fi
     
@@ -580,6 +580,7 @@ fixone() {
     export SLICEFIX_BIOSDISK=`getvar BIOSDISK "$iline"`
     export SLICEFIX_DOM0MEM=`getvar DOM0MEM "$iline" unknown`
     export SLICEFIX_DISABLEIF=`getvar DISABLEIF "$iline"`
+    export SLICEFIX_CLOUDINIT=`getvar CLOUDINIT "$iline"`
 
     #
     # XXX stop complaining about potential UFS1 problems

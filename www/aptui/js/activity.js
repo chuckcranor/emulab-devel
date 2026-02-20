@@ -61,16 +61,24 @@ $(function () {
 		SearchAgain();		
 	    });
 	}
-	// Do the initial search
-	LoadData(function(json) {
-	    console.info(json);
-	    $('#waiting').addClass("hidden");
-	    if (json.code) {
-		alert(json.value);
-		return;
-	    }
-	    GenerateTable(json.value);
-	});
+        if (window.ISADMIN && window.IPSEARCH !== undefined) {
+            $('#search-ip input').val(window.IPSEARCH);
+            $('#waiting').addClass("hidden");
+            // Bootstrap 5 thing.
+            setTimeout(function f() { SearchAgain(); }, 100);
+        }
+        else {
+	    // Do the initial search
+	    LoadData(function(json) {
+	        console.info(json);
+	        $('#waiting').addClass("hidden");
+	        if (json.code) {
+		    alert(json.value);
+		    return;
+	        }
+	        GenerateTable(json.value);
+	    });
+        }
     }
 
     function LoadData(callback)
@@ -201,7 +209,7 @@ $(function () {
 		sup.HideWaitWait();
 	    });
 	};
-	sup.ShowWaitWait("Patience please, this will take a few moments",
+	sup.ShowWaitWait("Patience please, this will take a minute (or two)",
 			 undefined, doit);
     }
 

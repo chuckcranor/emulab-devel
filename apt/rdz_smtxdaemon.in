@@ -1,0 +1,185 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use File::Basename;
+use File::stat;
+use POSIX ":sys_wait_h";
+use POSIX qw(strftime);
+use IO::Socket::SSL;
+use JSON;
+
+#
+# RDZ experiment daemon; looks for experiments that need RDZ things.
+#
+sub usage()
+{
+    print "Usage: rdz_smtxdaemon [-d] [-s] [-F] [-n]\n";
+    exit(1);
+}
+my $optlist   = "dnsFNlL";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $TBLOGS           = "@TBLOGSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
+my $MANAGERDZ        = "$TB/bin/manage_rdz";
+my $LOGFILE          = "$TB/log/rdz_smtxdaemon.log";
+my $SUDO	     = "/usr/local/bin/sudo";
+my $PROTOUSER	     = "elabman";
+my $DORDZ            = $MAINSITE;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub logit($);
+sub Watcher($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+if (!$DORDZ) {
+    exit(0);
+}
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+
+#
+# Check args early so we get the right DB.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use Experiment;
+use Node;
+use libtestbed;
+use emutil;
+use libEmulab;
+use APT_Aggregate;
+use APT_Instance;
+use APT_Profile;
+# Only needed when we need to contact the RDZ.
+if ($DORDZ) {
+    require APT_RDZ;
+    require APT_RDZRest;
+}
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("rdz_smtxdaemon")) {
+	fatal("Not starting another rdz_smtxdaemon daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("rdz_smtxdaemon")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+my $PPID = $PID;
+
+#
+# Setup a signal handler for newsyslog.
+#
+sub LogHandler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&LogHandler
+    if (! ($debug || $oneshot));
+
+while (1) {
+    APT_RDZ::WatchSmartTransmitters($debug);
+    logit("Watcher died unexpectedly, restarting");
+    sleep(5);
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($oneshot)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "rdz_smtxdaemon died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("rdz_smtxdaemon")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $now = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print "$now: $msg\n";
+}

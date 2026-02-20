@@ -1,90 +1,324 @@
+When rebuilding an existing endpoint, I get a few things first:
+
+Note that if the boss VM is not running, start it.
+
+Log into the control node and copy the rfmonitor config
+to Mothership boss and put it in ~stoller/powder/systems/XXX
+
+	control> scp /etc/rfmonitor/device_config.json boss.emulab.net:
+
+On the boss, grab interfaces info and copy to Mothership boss and put
+it in ~stoller/powder/systems/XXX
+
+	boss> echo 'select node_id,iface,role,ip,mac from interfaces;' | mysql -t tbdb > /tmp/iface.txt
+	boss> scp /tmp/iface.txt boss.emulab.net: 
+
+Grab a copy of the DB and copy to Mothership boss and put it in
+~stoller/powder/systems/XXX
+
+	boss> mysqldump --skip-opt tbdb | gzip > /tmp/tbdb.sql.gz
+	boss> scp /tmp/tbdb.sql.gz boss.emulab.net:
+
+Now use the interfaces info to update the files in ~stoller/powder/systems/XXX
+If the node.txt is space delimited, needs to be fixed up. Look at one of the
+other buses.
+
+Before removing the old disk from the endpoint
+
+        msboss> manage_aggregate EBC chflag admin yes
+
+Before starting the elabinelab:
+
+	msboss> sudo /usr/testbed/sbin/protogeni/cacontrol -R -r boss.<aggregate>.powderwireless.net
+
+And update the ns file for experiment elab-febuild (or elab-mebuild2).
+You need to change:
+
+	CONFIG_NICKNAME (.defs files POWDER_NICKNAME value)
+	TARGETSYS_DOMAIN
+	TARGETSYS_NETWORK
+	TARGETSYS_ROUTER
+	TARGETSYS_BOSSIP
+	TARGETSYS_HOMEBASE (where does this come from?)
+	SSLCERT_ORGNAME
+	XEN_STARTUPSCRIPT (rc.powder argument first arg should be router IP)
+
+
+------
+
+Fire up the elabinelab.
+
 Once the VMs are ready, copy the directory mentioned above over to the
 inner boss as /usr/testbed/etc/targetsys. Do NOT put this stuff on the
 inner ops!
 
-	boss> sudo scp -rp ~stoller/powder/systems/XXX
+	msboss> sudo scp -rp ~stoller/powder/systems/XXX
 	         	pcvmXXX-1:/usr/testbed/etc/targetsys
+
+Sync the apt package mirror. You need the msboss elabman ssh key in your agent. 
+
+	msboss> ~/testbed/testbed/install/powder-fixed/syncmirror.sh pcvmXXX-1
 
 Now we convert the VMs for boot in the target environment:
 
 First ssh (as root) into inner ops:
 
 	ops> cd /usr/testbed/obj/testbed/install
-	ops> script
-	ops> sudo perl emulab-install -b -i ops/targetsys ops
-	ops> sudo perl emulab-install -b -i ops/powder-endpoint ops
-	ops> exit
+	ops> perl emulab-install -b -i ops/targetsys ops
+	ops> perl emulab-install -b -i ops/powder-endpoint ops
 
-Now ssh (as root) into the inner boss VM from outer boss: Oh, use the
-"script" command to save the errors.
+Now ssh (as root) into the inner boss VM from outer boss:
 
 	boss> cd /usr/testbed/obj/testbed/install
-	boss> script
-	boss> sudo perl emulab-install -b -i boss/targetsys boss
+	boss> perl emulab-install -b -i boss/targetsys boss
 	boss> cd /users/elabman/emulab-devel/obj/install
-	boss> sudo perl emulab-install -b -i boss/powder-endpoint boss
+	boss> perl emulab-install -b -i boss/powder-endpoint boss
 	boss> exit
 
-Grab (inner) boss:/usr/testbed/etc/elabman.pswd and save it.
+Add these to both inner boss/ops /etc/mail/aliases and run newaliases:
+	
+	# Send everything to the Mothership.
+	testbed-ops:            powder-aggregate-ops@emulab.net
+	testbed-logs:           powder-aggregate-logs@emulab.net
+	testbed-www:            powder-aggregate-www@emulab.net
+	testbed-approval:       powder-aggregate-approval@emulab.net
+	testbed-audit:          powder-aggregate-audit@emulab.net
+	testbed-stated:         powder-aggregate-stated@emulab.net
+	testbed-testsuite:      powder-aggregate-testsuite@emulab.net
+	testbed-errors:         powder-aggregate-errors@emulab.net
+	testbed-automail:       powder-aggregate-automail@emulab.net
 
-Need to remove a bunch of client files;
+Grab (inner) boss:/usr/testbed/etc/elabman.pswd and save it:
 
-	boss> rm -rf `cat rmfiles.txt`
+     	msboss:~stoller/powder/systems/xxx/elabman.pswd
+
+Fix for ntpdate:
+        boss> echo '155.98.33.74    ntp1.emulab.net ntp1' | sudo bash -c '/bin/cat >> /etc/hosts'
+
+Copy MFS tar ball to boss while the network is good:
+
+	msboss> sudo scp ~mike/FE.tar.gz XXX:/tftpboot
 
 Now we have to shutdown the VMs. Log out of the boss/ops vms, and log
 into the physical host and then:
 
 	vhost-0> sudo /usr/local/etc/emulab/vnodesetup -jh pcvmXXX-1
 
-Approve the certificate on the MotherShip.
+Make sure its really gone, then toss the token to David.
 
-	msboss> sudo cacontrol -c ...
+While waiting for the token, approve the certificate on the MotherShip.
+
+	msboss> sudo /usr/testbed/sbin/protogeni/cacontrol -c boss.<aggregate>.powderwireless.net
+	msboss> sudo /usr/local/etc/rc.d/2.portalpsd.sh stop
 	msboss> sudo /usr/local/etc/rc.d/2.portalpsd.sh start
 
-Add the named entries to bas and ddc named server.
-
-	bas> sudo /usr/local/etc/rc.d/named restart
+If a brand new install, add the named entries to bas and ddc named server.
 	
-After David does his magic and boss boots, need to do:
+	bas> sudo /usr/local/etc/rc.d/named restart
+	ns5> sudo /usr/local/etc/rc.d/named restart
+
+Wait wait wait, for the token from David.
+After David does his magic and boss boots then:
+
+Log into the new control node and remove the symlink in /etc/xen/auto,
+We wil put ths back once the enpoint is installed and things are working
+okay. Saves on filesystem corruptions.
+
+	control> sudo rm /etc/xen/auto/boss.conf
+
+But start the VM if it is not running. When building an ME, it will
+not be running:
+
+	control> sudo xl create /etc/xen/boss.conf
+
+Then login to boss.
+
+Add the special interface that allows monitoring to work:
+
+    	# ME
+	boss> wap addinterface -t P2PLTE -e expt ed1 rf0
+	OR
+	# FE
+	boss> wap addinterface -t P2PLTE -e expt nuc2 rf0
+
+And some other tidbits that should be automated:
 
 	boss> wap update_sitevars 
 	boss> wap addservers
         boss> sudo getcacerts -f
-	boss> sudo /bin/rm -rf `cat rmfiles.txt`
+	boss> sudo /bin/rm -rf `cat /users/elabman/emulab-devel/emulab-devel/install/powder-fixed/rmfiles.txt`
+	boss> sudo mv /etc/emulab /etc/emulab.old
+	boss> sudo mv /usr/local/etc/emulab /usr/local/etc/emulab.old
 	boss> sudo testbed-control boot
 
-And back on Mothership boss:
+Unpack the MFSs:
 
-Add the apt_aggregates entry to the DB, and then:
+	boss> cd /tftpboot
+	boss> sudo tar xzf FE.tar.gz
+	boss> cd NEW
+	boss> sudo sh install.sh
 
-        mysql> REPLACEINTO `apt_aggregates` VALUES
-	        ('urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
-		 'Bus 4964','Bus4964','Bus4964',1,0,0,1,0,1,1,1,1,1,0,
-		 'me-allowed',NULL,NULL,NULL,1,now(),
-		 'https://www.bus-4964.powderwireless.net',0,1,1,'powder',NULL);
-	mysql> REPLACE INTO `apt_aggregate_status` VALUES
-	         ('urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
-		  'up',now(),NULL,2,2,0,0,'');
+Apply the boss/ops SSL patch:
+        boss> scp boss.emulab.net:~mike/ssl-fix.tar.gz /tmp/
+	boss> tar -C /tmp -xzf /tmp/ssl-fix.tar.gz
+	boss> cd /tmp/ssl-fix; sudo sh fixssl.sh
+	boss> sudo rm -rf /tmp/ssl-fix*
 
-	musql> REPLACE into apt_mobile_aggregates set
-	       urn='urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
-	        type='bus';
+Re-install syncthing.
+        Follow the instructions in powder/syncthing/README in the source tree.
 
-	mysql> REPLACE into apt_mobile_buses set
-	       urn='urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
-	       busid='4964';
+Copy the defs file back to the MotherShip.
 
-	msboss> manage_aggregate ping -a XXX -s
-    	msboss> manage_aggregate chflag -a XXX disabled no
+	boss> cd ~elabman/emulab-devel
+	boss> cp defs-targetsys emulab-devel/powder-defs/XXX    (bus-5175)
+	boss> scp defs-targetsys stoller@boss.emulab.net:testbed-noelvin/testbed/powder-defs/XXX
+	boss> sudo rm defs-targetsys
+	boss> ln -s emulab-devel/powder-defs/XXX defs-targetsys
 
-Back on the node, lets to the letsencrypt thing.
+Be sure to commit the new defs file.
 
-	boss> cd ~/emulab-devel/obj/install
+Do the letsencrypt dance:
+
+	boss> cd ~elabman/emulab-devel/obj/install
 	boss> sudo perl emulab-install -b -i letsencrypt boss
 
-Copy the defs file to Mothership boss, powder-defs directory.
-Symlink emulab-devel/defs file to the powder-defs version.
+Shutdown the boss VM and wait until it is installed.
 
+-----
 
-sort -r -n -t, -k 4 /tmp/mon.out | head -30
- 
+After installation in the endpoint:
+
+Copy over Jie's monitor:
+
+	msboss> cd ~stoller/testbed-noelvin
+	msboss> rsync -av -C rfmonitor-jie elabman@control.<aggregate>.powderwireless.net:
+
+Install Jie's monitor:
+
+	control> cd ~elabman/rfmonitor-jie
+	control> sudo systemctl stop rfmonitor
+	control> sudo python3 setup.py install
+	control> (cd /usr/bin; sudo rm -f rfmonitor; sudo ln -s /usr/local/bin/rfmonitor .)
+
+Setup the rfmonitor config file. Either copy it from the old disk, or
+create a new one by creating /etc/rfmonitor/device_config.json:
+
+  Bus:
+	{
+	    "devices" : {
+	      "ed1:rf0"  : {
+	        "name" : "ed1:rf0",
+	        "channels" : {"0" : "TX/RX", "1" : "TX/RX"},
+	        "direction" : {"incident" : "0", "transmit" : "1"}
+	      }
+	    }
+	}
+
+   Endpoint:
+	{
+	    "devices" : {
+	      "nuc2:rf0"  : {
+	        "name" : "nuc2:rf0",
+	        "channels" : {"0" : "TX/RX", "1" : "TX/RX"},
+	        "direction" : {"incident" : "0", "transmit" : "1"}
+	      }
+	    }
+	}
+
+    About direction: Flip a coin. Heads, set incident to 0 and transmit to 1.
+    Tails, set incident to 1 and transmit to 0.
+
+Run the noise calibration. I have no idea what this does:
+
+	control> cd ~elabman/rfmonitor-jie
+	control> (cd scripts; sudo ./run_noisefloor_calibration.sh)
+
+Start the monitor. Hopefully you see it in ps and it is not in a death loop.
+
+	control> sudo systemctl start rfmonitor
+
+Start up the boss VM:
+
+	control> sudo xl create /etc/xen/boss.conf
+
+Make sure the monitor reports are coming in every couple of minutes:
+
+	boss> tail -f /usr/testbed/log/rfmonitor_daemon.log
+
+Enable the deadman radio watcher:
+
+       boss> wap setsitevar powder/deadman_enable 1
+
+Make sure the arduino is doing the right thing:
+
+	boss> tail -f /usr/testbed/log/endpoint-monitor.log
+
+    On an FE:
+	Oct 28 13:42:33 : keepalive: 1761680553
+	Oct 28 13:42:33 : New tempF: 66.650
+	Oct 28 13:42:33 : temp:66.5564
+	Oct 28 13:42:47 : keepalive: 1761680567
+	Oct 28 13:42:47 : New tempF: 66.650
+	Oct 28 13:42:47 : temp:66.5834
+
+    On an ME:
+	Oct 28 13:45:11 : New tempF: 89.492
+	Oct 28 13:45:11 : temp:89.4164, onbat:0, voltage:12.084, current:7.380, v':12.409
+	Oct 28 13:45:25 : keepalive: 1761680725
+	Oct 28 13:45:25 : New tempF: 89.492
+	Oct 28 13:45:25 : temp:89.429, onbat:0, voltage:12.182, current:5.327, v':12.416
+
+Free the nodes from hwdown:
+
+	boss> wap nfree emulab-ops hwdown ed1 (or nuc1 nuc2)
+
+Now for the fun part! Start this experiment in the emulab-ops project:
+Be sure to select correct radio or FE or ME. Delete the spectrum range!
+
+	https://www.powderwireless.net/show-profile.php?profile=6328aa9e-7c99-11e9-8a5c-e4434b2381fc
+
+On boss start this up:
+
+	tail -f /usr/testbed/log/rfmonitor_daemon.log
+
+And log into the experiment node and run:
+
+	node> /usr/libexec/uhd/examples/tx_waveforms --ant TX/RX --channel 0 --rate 1e6 --freq 3550e6 --gain 50
+
+    Let it run while watching the output from rfmonitor_daemon.log. It might take
+    till the second report to see anything. Ideally you want to see this:
+
+    	Above floor:-110.0 ed1:rf0: 3550,-104.455875279867,3556.0
+	No interface limit info for ed1
+	New previous data:
+	$VAR1 = {
+		  'ed1:rf0:3550' => {
+                              'node_id' => 'ed1',
+                              'frequency' => '3550.0',
+                              'instance' => undef,
+                              'incident' => undef,
+                              'power' => '-104.45587527986746',
+                              'center' => '3556.0',
+                              'violation' => 0,
+                              'iface' => 'rf0',
+                              'repeatcount' => 0,
+                              'abovefloor' => '5.54412472013254',
+                              'timestamp' => 1761689300
+                            }
+		};
+
+    If after another iteration or two there is nothing or if you see stuff on totally
+    other frequenceies, you can stop. You probably had a bad coin flip up above. Reverse
+    incident and transmit and rerun the noise calculation, restart the rfmonitor (all this
+    on the control node. Then rerun the transmit test. Hopefully you see something then
+
+Restore symlink in /etc/xen/auto
+
+	control> cd /etc/xen/auto
+	control> sudo ln -s ../boss.conf .
+
+Let the bus roam:
+
+	msboss> manage_aggregate Bus6365 chflag admin no
+
+QED

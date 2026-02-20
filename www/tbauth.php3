@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,7 @@ $CHECKLOGIN_WIKINAME            = "";
 $CHECKLOGIN_HASHKEY             = null;
 $CHECKLOGIN_HASHHASH            = null;
 $CHECKLOGIN_USER                = null;
+$CHECKLOGIN_AUTHUSER            = null;
 
 #
 # New Mapping. 
@@ -556,7 +557,7 @@ function LoginStatus() {
 # conditions. 
 #
 function LOGGEDINORDIE($uid, $modifier = 0) {
-    global $TBBASE, $APTBASE, $BASEPATH;
+    global $TBBASE, $APTBASE, $BASEPATH, $WWWHOST;
     global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY, $CHECKLOGIN_IDX;
     global $drewheader;
 
@@ -576,11 +577,12 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     }
 
     $redirect_url = null;
+    $referrer     = null;
     if ($uid || REMEMBERED_ID()) {
         # HTTP_REFERER will not work reliably when redirecting so
         # pass in the URI for this page as an argument
-        $redirect_url = "${login_url}?referrer=".
-            urlencode($_SERVER['REQUEST_URI']);
+        $redirect_url = $login_url;
+        $referrer     = $_SERVER['REQUEST_URI'];
     }
 
     $link = "\n<a href=\"$login_url\">Please ".
@@ -591,7 +593,8 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     switch ($status & CHECKLOGIN_STATUSMASK) {
     case CHECKLOGIN_NOTLOGGEDIN:
 	if ($redirect_url) {
-	    header("Location: $redirect_url&error=notloggedin");
+            SetReferrer($referrer);
+	    header("Location: $redirect_url?error=notloggedin");
 	    exit;
         } else {
             USERERROR("You do not appear to be logged in! $link",
@@ -600,7 +603,8 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
         break;
     case CHECKLOGIN_TIMEDOUT:
 	if ($redirect_url) {
-	    header("Location: $redirect_url&error=timedout");
+            SetReferrer($referrer);
+	    header("Location: $redirect_url?error=timedout");
 	    exit;
         } else {
             USERERROR("Your login has timed out! $link",
@@ -865,11 +869,11 @@ function ISPLABUSER() {
 #
 # Attempt a login.
 # 
-function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
+function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0, $nocookies = 0) {
     global $TBAUTHCOOKIE, $TBAUTHDOMAIN, $TBAUTHTIMEOUT;
     global $TBNAMECOOKIE, $TBLOGINCOOKIE, $TBSECURECOOKIES;
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
-    global $WIKISUPPORT, $WIKICOOKIENAME;
+    global $WIKISUPPORT, $WIKICOOKIENAME, $CHECKLOGIN_AUTHUSER;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $CHECKLOGIN_USER;
     global $TB_PROJECT_READINFO, $TUTORIALSTATS, $APTBASE, $TBBASE;
     
@@ -928,6 +932,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     do {
       if ($user) {
 	$uid         = $user->uid();
+        $url         = $user->AptURL();
         $db_encoding = $user->pswd();
 	$isadmin     = $user->admin();
 	$frozen      = $user->weblogin_frozen();
@@ -939,13 +944,6 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$usr_email   = $user->email();
         $ga_userid   = $user->ga_userid();
         $lastlogin   = $user->weblogin_last();
-
-        if ($APTBASE) {
-            $url = "$APTBASE/user-dashboard.php?user=$uid";
-        }
-        else {
-            $url = "$TBBASE/showuser.php3?user=$uid";
-        }
 
         #
         # Yuck.
@@ -1007,27 +1005,25 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
           return DOLOGIN_STATUS_FROZEN;
         }
 	elseif ($user->status() == TBDB_USERSTATUS_INACTIVE) {
-            if (1) {
-                TBMAIL($user->email(),
-                       "Web Login Inactivity Alert: '$uid'",
-                       "Login attempt by $uid ($uid_idx) after extended ".
-                       "period of inactivity!\n".
-                       "Login was denied, last activity was $lastlogin\n\n".
-                       "$url\n",
-                       "From: $TBMAIL_OPS\n".
-                       "Bcc: $TBMAIL_AUDIT\n".
-                       "CC: $TBMAIL_OPS\n".
-                       "Errors-To: $TBMAIL_WWW");
+            TBMAIL($user->email(),
+                   "Web Login Inactivity Alert: '$uid'",
+                   "Login attempt by $uid ($uid_idx) after extended ".
+                   "period of inactivity!\n".
+                   "Login was denied, last activity was $lastlogin\n\n".
+                   "$url\n",
+                   "From: $TBMAIL_OPS\n".
+                   "Bcc: $TBMAIL_AUDIT\n".
+                   "CC: $TBMAIL_OPS\n".
+                   "Errors-To: $TBMAIL_WWW");
                 
-                return DOLOGIN_STATUS_INACTIVE;
-            }
-            # Try to reactivate the user. If we fail for some reason, fall
-            # back to just telling them they are inactive. Otherwise we can
-            # proceed with login.
-            if (ReactivateUser($user)) {
-                return DOLOGIN_STATUS_INACTIVE;
-            }
-	}
+            return DOLOGIN_STATUS_INACTIVE;
+        }
+
+        # For SSO
+        if ($nocookies) {
+            $CHECKLOGIN_AUTHUSER = $user;
+            return DOLOGIN_STATUS_OKAY;
+        }
 
 	#
 	# Set adminmode off on new logins, unless user requested to be
@@ -1211,11 +1207,14 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     }
     if ($lastlogin && 
         time() - $lastlogin > (3600 * 24 * 365)) {
+        $user = User::Lookup($uid_idx);
+        $url  = $user->AptURL();
         TBMAIL($usr_email,
                "Web Login Inactivity Alert: '$uid'",
                "Login by $uid ($uid_idx) after extended period ".
                "of inactivity!\n".
-               "Last activity was $lastloginstr\n",
+               "Last activity was $lastloginstr\n\n".
+               "$url\n",
                "From: $TBMAIL_OPS\n".
                "Bcc: $TBMAIL_AUDIT\n".
                "CC: $TBMAIL_OPS\n".
@@ -1543,6 +1542,48 @@ function ReactivateUser($user)
         $user->SetStatus(TBDB_USERSTATUS_INACTIVE);
         return -1;
     }
+    return 0;
+}
+
+#
+# Referrer is now handled with a cookie.
+#
+function SetReferrer($referrer)
+{
+    global $WWWHOST;
+    setcookie("referrer", $referrer, time() + 300, "/", $WWWHOST, 0);
+}
+function ClearReferrer()
+{
+    global $WWWHOST;
+    setcookie("referrer", '', 1, "/", $WWWHOST, 0);
+}
+function GetReferrer(&$referrer)
+{
+    if (isset($_COOKIE['referrer']) && $_COOKIE['referrer'] != "") {
+        if (CheckReferrer($_COOKIE['referrer']) != 0) {
+            ClearReferrer();
+            return -1;
+        }
+        $referrer = $_COOKIE['referrer'];
+    }
+    return 0;
+}
+function CheckReferrer($referrer)
+{
+    $IP = "?";
+    if (isset($_SERVER['REMOTE_ADDR'])) {
+        $IP = $_SERVER['REMOTE_ADDR'];
+    }
+    $UID = "?";
+    if (REMEMBERED_ID()) {
+        $UID = REMEMBERED_ID();
+    }
+    if (!preg_match("/^\/[-\w\?\/\&\.=\+\:\*]+$/", $referrer)) {
+        error_log("Invalid LOGIN REFERRER (IP:$IP, UID:$UID): '$referrer'");
+        return -1;
+    }
+    #error_log("LOGIN REFERRER COOKIE (IP:$IP, UID:$UID): " . $referrer);
     return 0;
 }
 

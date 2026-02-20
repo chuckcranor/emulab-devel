@@ -1,0 +1,24 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    my $svar = 'cnetwatch/use_node_metrics';
+    
+    DBQueryFatal("INSERT INTO `sitevariables` VALUES ".
+		 "('$svar','0','0',".
+		 "'Use node-based metrics rather than switch-based ".
+		 "(0 == never use, 1 == use if switch-based not available, ".
+		 "2 == always use',0)")
+	if (!TBSiteVarExists($svar));
+
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:

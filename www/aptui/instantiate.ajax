@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -557,6 +557,10 @@ function Do_GetImageInfo()
             list ($auth,$type,$id) = Instance::ParseURN($urn);
 
             $parsed_id = preg_split('/:/', $id);
+            if (count($parsed_id) < 2) {
+                error_log("Bad image URN id: $urn");
+                continue;
+            }
             $proj = $parsed_id[0];
             $name = $parsed_id[1];
             $version = (count($parsed_id) == 3 ? $parsed_id[2] : null);
@@ -947,10 +951,10 @@ function CheckStep3()
         elseif ($end < time()) {
             $errors["end_day"] = "End is in the past";
         }
-        elseif ($start && $end <= $start) {
+        elseif (isset($start) && $end <= $start) {
             $errors["end_day"] = "End is before the start";
         }
-        elseif (($start && $end < $start + 3600) ||
+        elseif ((isset($start) && $end < $start + 3600) ||
                 $end < time() + 3600) {
             $errors["end_day"] = "Too short, must be > 1 hour";
         }
@@ -1268,6 +1272,10 @@ function Do_Submit()
         $formfields["failure_okay"] == "checked") {
         $options .= " -i ";
     }
+    if (isset($formfields["private_experiment"]) &&
+        $formfields["private_experiment"] == "checked") {
+        $options .= " -I ";
+    }
 
     # So we can look up the slice after the backend creates it.
     $uuid = NewUUID();
@@ -1428,7 +1436,7 @@ function Do_MaxDuration()
                      " $options",
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
         if (!$webtask->exited() || $retval < 0) {
@@ -1438,14 +1446,14 @@ function Do_MaxDuration()
         else {
             SPITAJAX_ERROR(1, $webtask->output());
         }
-        #unlink($filename);
-        #if (isset($filename2)) {
-        #    unlink($filename2);
-        #}
+        unlink($filename);
+        if (isset($filename2)) {
+            unlink($filename2);
+        }
         $webtask->Delete();
         return;
     }
-    elseif ($ISPOWDER) {
+    elseif (0 && $ISPOWDER) {
         SUEXECERROR(SUEXEC_ACTION_DEBUG);
     }
     unlink($filename);

@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_deferred_instances", "reason")) {
+	DBQueryFatal("ALTER TABLE apt_deferred_instances ADD ".
+		     " `reason` tinytext");
+    }
+
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

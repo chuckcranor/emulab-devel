@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2022 University of Utah and the Flux Group.
+# Copyright (c) 2013-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1425,7 +1425,18 @@ sub freenasFSCreate($$$;$) {
     my $cmd;
 
     if ($fstype =~ /^ext[234]$/) {
-	$cmd = "$LINUX_MKFS -t $fstype -o Linux";
+	my $opts = "";
+
+	#
+	# XXX options to avoid on newer (1.47 or beyond) extfs tools
+	# (makes filesystem unusable by older Linux):
+	# -O ^orphan_file,^metadata_csum
+	#
+	my $str = `$LINUX_MKFS -V 2>&1 | grep '^mke2fs'`;
+	if ($str =~ /^mke2fs\s(\d+)\.(\d+)/ && $1 >= 1 && $2 >= 47) {
+	    $opts = "-O ^orphan_file,^metadata_csum";
+	}
+	$cmd = "$LINUX_MKFS -t $fstype -o Linux $opts";
     } elsif ($fstype eq "ufs") {
 	$cmd = "$FBSD_MKFS";
     } else {

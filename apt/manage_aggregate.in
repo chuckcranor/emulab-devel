@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use English;
 use strict;
 use Getopt::Std;
+use Getopt::Long;
 use XML::Simple;
 use Data::Dumper;
 use CGI;
@@ -37,6 +38,8 @@ use Date::Parse;
 sub usage()
 {
     print STDERR "Usage: manage_aggregate list\n";
+    print STDERR "       manage_aggregate add [options ...] \n";
+    print STDERR "       manage_aggregate delete <urn>\n";
     print STDERR "       manage_aggregate [agg] show \n";
     print STDERR "       manage_aggregate [agg] chflag <flag> yes|no\n";
     print STDERR "       manage_aggregate [agg] ping [-s]\n";
@@ -83,6 +86,7 @@ use libtestbed;
 use APT_Geni;
 use APT_Aggregate;
 use APT_Utility;
+use GeniHRN;
 
 # Locals
 my $aggregate;
@@ -97,6 +101,8 @@ sub DoPing();
 sub DoPortals();
 sub DoFeature();
 sub DoStatus();
+sub DoCreate();
+sub DoDelete();
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -113,7 +119,7 @@ if (!@ARGV) {
     usage();
 }
 $action = shift(@ARGV);
-if ($action ne "list") {
+if ($action ne "list" && $action ne "add" && $action ne "delete") {
     if ($action =~ /^(show|chflag|ping|portals|feature)$/) {
 	# Default to local cluster
 	$aggregate = APT_Utility::LookupAggregate($MYURN);
@@ -139,6 +145,12 @@ if ($action eq "show") {
 }
 elsif ($action eq "list") {
     DoList();
+}
+elsif ($action eq "add") {
+    DoCreate();
+}
+elsif ($action eq "delete") {
+    DoDelete();
 }
 elsif ($action eq "chflag") {
     DoFlags();
@@ -454,6 +466,206 @@ sub DoStatus()
     
     $aggregate->status($which);
     $aggregate->StatusEvent($which);
+}
+
+#
+# Create a new aggregate in the DB.
+#
+sub DoCreate()
+{
+    my $impotent = 0;
+    my ($urn,$weburl,$name,$nickname,$abbrev,$busid,
+	$portals,$latitude,$longitude,$canuseFeature);
+
+    my $isfederate   = 0;
+    my $isFE         = 0;
+    my $ismobile     = 0;
+    my $syncthing    = 0;
+    my $datasets     = 0;
+    my $reservations = 0;
+    my $adminonly    = 0;
+    my $disabled     = 0;
+    
+    my @strings = (
+	"Options:",
+	" -n                - Dry run mode",
+	" -h                - Complete usage information",
+	" --urn=            - URN of the new aggregate",
+	" --weburl=         - URL of the new aggregate's web interface",
+	" --name=           - Name (for example, 'Guest House' or 'Bus 6365')",
+	" --nickname=       - Short name (for example, 'Guesthouse' or 'Bus6365'",
+	" --abbrev=         - Even shorter name",
+	" --isfederate      - Flag that aggregate is a Cloudlab federate",
+	" --isFE            - Flag that aggregate is a Powder Fixed Endpoint",
+	" --ismobile        - Flag that aggregate is a Powder Bus",
+	" --busid           - With --ismoble, internal ID (for example, 6365)",
+	" --syncthing       - Flag that aggregate runs syncthing",
+	" --datasets        - Flag that aggregate hosts datasets",
+	" --reservations    - Flag that aggregate allows resource reservations",
+	" --portals         - Comma separated list of Portals allowed to use it",
+	" --latitude        - Latitude of the aggregate",
+	" --longitude       - Longitude of the aggregate",
+	" --canuseFeature   - Radio zone: 'Indoor OTA Lab'",
+	" --adminonly       - Radio zone: 'Indoor OTA Lab'",
+	" --disabled        - Radio zone: 'Indoor OTA Lab'",
+	);
+    my $usage = sub {
+	my ($message) = @_;
+
+	if ($message) {
+	    print STDERR "$message\n\n";
+	}
+	print STDERR "Usage: manage_aggregate add [-dn] [options] \n";
+	foreach my $str (@strings) {
+	    print STDERR $str . "\n";
+	}
+	exit(-1);
+    };
+    if (! GetOptions(
+	      'n'		=> \$impotent,
+	      "urn=s"		=> \$urn,
+	      "name=s"		=> \$name,
+	      "nickname=s"	=> \$nickname,
+	      "abbrev=s"	=> \$abbrev,
+	      "isfederate"	=> \$isfederate,
+	      "isFE"		=> \$isFE,
+	      "ismobile"	=> \$ismobile,
+	      "weburl=s"	=> \$weburl,
+	      "syncthing"	=> \$syncthing,
+	      "datasets"	=> \$datasets,
+	      "reservations"	=> \$reservations,
+	      "portals=s"	=> \$portals,
+	      "latitude=s"	=> \$latitude,
+	      "longitude=s"	=> \$longitude,
+	      "busid=s"		=> \$busid,
+	      "disabled"	=> \$disabled,
+	      "adminonly"	=> \$adminonly)) {
+	&$usage();
+    }
+    &$usage("Missing required arguments ('=')")
+	if (!($urn && $weburl && $name && $nickname && $abbrev));
+    &$usage("Only one of isfederate, ismobile, isFE")
+	if ($isfederate + $ismobile + $isFE > 1);
+    &$usage("Most provide --busid with --ismobile")
+	if ($ismobile && !$busid);
+    &$usage("Not a valid URN")
+	if (!GeniHRN::IsValid($urn));
+    &$usage("Must provide both latitude and longitude")
+	if (($latitude || $longitude) && !($latitude && $longitude));
+
+    my %sets = (
+	"urn"	   => $urn,
+	"name"     => $name,
+	"nickname" => $nickname,
+	"weburl"   => $weburl,
+	"abbreviation" => $abbrev,
+    );
+    $sets{"isfederate"} = 1
+	if ($isfederate);
+    $sets{"isFE"} = 1
+	if ($isFE);
+    $sets{"ismobile"} = 1
+	if ($ismobile);
+    $sets{"disabled"} = 1
+	if ($disabled);
+    $sets{"adminonly"} = 1
+	if ($adminonly);
+    $sets{"noupdate"} = 1
+	if (!$isfederate);
+    $sets{"nomonitor"} = 1
+	if ($ismobile || !$isfederate);
+    $sets{"nolocalimages"} = 1
+	if ($ismobile || $isFE);
+    $sets{"deferrable"} = 1
+	if ($ismobile || $isFE);
+    $sets{"has_datasets"} = 1
+	if ($datasets);
+    $sets{"does_syncthing"} = 1
+	if ($syncthing);
+    $sets{"panicpoweroff"} = 1
+	if ($ismobile || $isFE);
+    $sets{"reservations"} = 1
+	if ($reservations);
+    $sets{"latitude"} = 1
+	if ($latitude);
+    $sets{"longitude"} = 1
+	if ($longitude);
+    $sets{"canuse_feature"} = $canuseFeature
+	if ($canuseFeature);
+
+    my $sets = join(",", map("$_='$sets{$_}'", keys(%sets)));
+    my $query = "insert into apt_aggregates set $sets";
+    if ($impotent) {
+	print "$query\n";
+    }
+    else {
+	DBQueryFatal($query);
+    }
+    $query = "insert into apt_aggregate_status set ".
+	"urn='$urn', 'up', now()";
+    if ($impotent) {
+	print "$query\n";
+    }
+    else {
+	DBQueryWarn($query) or
+	    (DeleteAggregate($urn) or exit(-1))
+    }
+
+    if ($ismobile) {
+	$query = "insert into apt_mobile_aggregates set ".
+	    "urn='$urn', type='bus'";
+	if ($impotent) {
+	    print "$query\n";
+	}
+	else {
+	    DBQueryWarn($query) or
+		(DeleteAggregate($urn) or exit(-1))
+	}
+	$query = "insert into apt_mobile_buses set ".
+	    "urn='$urn', busid='$busid'";
+	if ($impotent) {
+	    print "$query\n";
+	}
+	else {
+	    DBQueryWarn($query) or
+		(DeleteAggregate($urn) or exit(-1))
+	}
+    }
+    exit(0);
+}
+
+sub DeleteAggregate($)
+{
+    my ($urn) = @_;
+
+    DBQueryFatal("delete from apt_mobile_buses where urn='$urn'");
+    DBQueryFatal("delete from apt_mobile_aggregates where urn='$urn'");
+    DBQueryFatal("delete from apt_aggregate_status where urn='$urn'");
+    DBQueryFatal("delete from apt_aggregates where urn='$urn'");
+
+    return 0;
+}
+
+#
+# Create a new aggregate in the DB.
+#
+sub DoDelete()
+{
+    my $impotent = 0;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$impotent = 0;
+    }
+    usage()
+	if (@ARGV != 1);
+    
+    my $urn = shift(@ARGV);
+    DeleteAggregate($urn);
+    exit(0);
 }
 
 exit(0);

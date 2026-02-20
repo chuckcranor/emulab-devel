@@ -70,10 +70,10 @@ pre {
 </style>
 <div id="main-template">
 <div class='row'>
-  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
-       col-md-8  col-md-offset-2 offset-md-2
-       col-sm-10 col-sm-offset-1 offset-sm-1
-       col-xs-12 col-xs-offset-0'>
+  <div class='col-lg-10 col-lg-offset-1 offset-lg-1
+	      col-md-12 col-xs-offset-0
+	      col-sm-12 col-xs-offset-0
+	      col-xs-12 col-xs-offset-0'>
     <div class='panel  card panel-default' id='status_panel'>
       <div class="panel-heading card-header">
 	<h5>
@@ -262,6 +262,24 @@ pre {
 			data-content='Release experiment from quarantine.'>
  		  Release</button>
 	      <% } %>
+	      <% if (isadmin) { %>
+		<button class='btn btn-xs btn-info'
+		   style='margin-right: 10px;'
+		   id='request-info-button' type=button
+		   data-delay='{"show":300}' data-bs-delay='{"show":300}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-content='Send a message to the experiment creator.'>
+ 		  Request Info</button>
+	      <% } else { %>
+		<a class='btn btn-xs btn-info'
+		   href=""
+		   style='margin-right: 10px;'
+		   id='request-help-button' type=button
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-content='Send a message to the operations staff about
+				 this experiment.'>
+ 		  Request Help</a>
+	      <% } %>
 	    </div>
 	    <div class='col-auto'>
 	      <a href="#" target="_blank"
@@ -415,9 +433,9 @@ pre {
 </div>
 <!-- Add a hidden div for errors returned by the instantiation. -->
 <div class='row hidden' id='error_panel'>
-  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
-	      col-md-8  col-md-offset-2 offset-md-2
-	      col-sm-10 col-sm-offset-1 offset-sm-1
+  <div class='col-lg-10 col-lg-offset-1 offset-lg-1
+	      col-md-12 col-xs-offset-0
+	      col-sm-12 col-xs-offset-0
 	      col-xs-12 col-xs-offset-0'>
     <div class="panel  card panel-danger">
       <div class="panel-heading card-header">
@@ -474,9 +492,9 @@ pre {
 </div>
 <!-- Add a hidden div for errors returned by the instantiation. -->
 <div class='row hidden' id='general-error'>
-  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
-	      col-md-8  col-md-offset-2 offset-md-2
-	      col-sm-10 col-sm-offset-1 offset-sm-1
+  <div class='col-lg-10 col-lg-offset-1 offset-lg-1
+	      col-md-12 col-xs-offset-0
+	      col-sm-12 col-xs-offset-0
 	      col-xs-12 col-xs-offset-0
 	      alert alert-danger'>
     <code class="error-cause"
@@ -484,9 +502,9 @@ pre {
   </div>
 </div>
 <div class='row hidden' id='error-panel-new'>
-  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
-	      col-md-8  col-md-offset-2 offset-md-2
-	      col-sm-10 col-sm-offset-1 offset-sm-1
+  <div class='col-lg-10 col-lg-offset-1 offset-lg-1
+	      col-md-12 col-xs-offset-0
+	      col-sm-12 col-xs-offset-0
 	      col-xs-12 col-xs-offset-0'>
     <div class="panel  card panel-danger">
       <div class="panel-heading card-header">
@@ -615,9 +633,9 @@ pre {
      will actually fill in the div though, since it is markdown and that
      is more easily done on the client side for now. -->
 <div class='row hidden' id='instructions_panel'>
-  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
-	      col-md-8  col-md-offset-2 offset-md-2
-	      col-sm-10 col-sm-offset-1 offset-sm-1
+  <div class='col-lg-10 col-lg-offset-1 offset-lg-1
+	      col-md-12 col-xs-offset-0
+	      col-sm-12 col-xs-offset-0
 	      col-xs-12 col-xs-offset-0'>
     <!-- Collapsable panel  card -->
     <div class="panel  card panel-info card-info">
@@ -777,6 +795,9 @@ pre {
 				     text-left' role='menu'>
 			    <li><a href='#' name='reboot' class='dropdown-item'>
 			      Reboot Selected</a>
+			    </li>
+			    <li><a href='#' name='powercycle' class='dropdown-item'>
+			      Power Cycle Selected</a>
 			    </li>
 			    <li><a href='#' name='reload' class='dropdown-item'>
 			      Reload Selected</a>
@@ -1347,7 +1368,7 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <center><h3>Confirm to Delete Nodes</h3>
+          <center><h3>Confirm to Delete Nodes</h3></center>
 	</div>
 	<div class='modal-body'>
           <p>
@@ -1373,7 +1394,7 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <center><h3>Confirm to Delete Site</h3>
+          <center><h3>Confirm to Delete Site</h3></center>
 	</div>
 	<div class='modal-body'>
           <p>
@@ -1645,7 +1666,7 @@ pre {
 	    load onto it, and then a power cycle.</em> To load a new image,
 	  use uhd_image_loader. For example, an <tt>x310</tt> is loaded with:
 	  <center>
-	    <pre style="width: 80%; margin-top: 10px;">uhd_image_loader --args "type=x300,addr=192.168.40.2,fpga=XG</pre>
+	    <pre style="width: 80%; margin-top: 10px;">uhd_image_loader --args "type=x300,addr=192.168.40.2,fpga=XG"</pre>
 	  </center>
 	  When <tt>uhd_image_loader</tt> finishes, power cycle the radio
 	  using the context menu option.
@@ -2254,7 +2275,7 @@ pre {
 		    padding-top: 0px;padding-bottom: 0px;'>
 	    <span style="font-size: 16px;"
 		  class="glyphicon glyphicon-copy"></span></a></span></td>
-      <td align=left><input name='select' type=checkbox></td>
+      <td align=left name="action-checkbox"><input name='select' type=checkbox></td>
       <td name='menu' align=center> 
 	<div name='action-menu' class='dropdown'>
 	  <button id='action-menu-button' type='button' 
@@ -2269,6 +2290,8 @@ pre {
 	      Console</a></li> 
             <li><a href='#' name='consolelog' class='dropdown-item'>
 	      Console Log</a></li> 
+            <li><a href='#' name='reboot' class='dropdown-item'>
+	      Reboot</a></li> 
             <li><a href='#' name='recovery' class='dropdown-item'>
 	      Recovery</a></li> 
             <li class='hidden'> 
@@ -2456,6 +2479,54 @@ pre {
       </div>
     </div>
   </div>
+  <div id='request-info-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class="modal-header">
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
+	  <span class="text-center">
+	    <h4>Request info from the user about this experiment</h4></span>
+	</div>
+	<div class='modal-body'>
+	  <center>
+            <p>
+	      Please provide a message:
+	    </p>
+	    <div>
+	      <textarea id='request-info-message'
+			class='form-control' rows=15></textarea>
+	      <div class="error-message text-danger mt-1 hidden">Feed me Seymour</div>
+	    </div>
+	    <div class="mt-3">
+              <button class='btn btn-danger confirm-button'
+		      id='request-info-confirm'
+                      type='submit' name='destroy'>
+		Send</button>
+              <button class='btn btn-default cancel-button'
+		      data-dismiss="modal" data-bs-dismiss="modal">
+		Cancel</button>
+	    </div>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='quarantine-inprogress-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class="modal-body">
+          <button type='button' class='close btn-close'
+data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
+	  Changing quarantine mode takes a few minutes, the experiment state
+	  will be updated when complete.
+	</div>
+      </div>
+    </div>
+  </div>
+  
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>
@@ -2466,4 +2537,10 @@ pre {
   <div id='destroy_div'></div>
   <div id='save_paramset_div'></div>
   <div id='txgraph_div'></div>
+  <textarea id='script_textarea'
+	    class='hidden'
+	    type='textarea'></textarea>
+  <textarea id='paramdefs'
+	    class='hidden'
+	    type='textarea'></textarea>
 </div>

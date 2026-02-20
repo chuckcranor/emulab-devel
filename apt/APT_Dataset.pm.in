@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -152,6 +152,28 @@ sub LookupByRemoteUUID($$)
 
     ($uuid) = $query_result->fetchrow_array();
     return Lookup($class, $uuid);
+}
+
+#
+# List of datasets for a project.
+#
+sub LookupForProject($$$)
+{
+    my ($class, $project, $pref) = @_;
+    my $pid_idx = $project->pid_idx();
+    my @result  = ();
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_datasets where pid_idx='$pid_idx'");
+    return -1
+	if (!$query_result);
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $dataset = APT_Dataset->Lookup($uuid);
+	push(@result, $dataset)
+	    if ($dataset);
+    }
+    $$pref = \@result;
+    return 0;
 }
 
 AUTOLOAD {

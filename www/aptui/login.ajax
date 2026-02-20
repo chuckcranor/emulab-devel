@@ -1,0 +1,218 @@
+<?php
+#
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+function Do_Login()
+{
+    global $this_user, $ajax_args;
+    global $SSO_CLIENT_ID, $SSO_REDIRECT_URI, $SUPPORT, $CHECKLOGIN_USER;
+    global $APTBASE, $TBAUTHDOMAIN, $CHECKLOGIN_AUTHUSER;
+    $cleanmode = 0;
+    $adminmode = 0;
+    $nocookies = 0;
+    $referrer  = null;
+    $client_id = null;
+    $redirect_uri = null;
+    $errors = array();
+    # These are duplicated in js/login.js
+    $STATUS_LOGGEDIN   = 0;
+    $STATUS_FORMERRORS = 2;
+    $STATUS_LOGINFAIL  = 3;      
+    $STATUS_INVALID    = 4;
+    $STATUS_ERROR      = -1;
+
+    # For devel tree debugging.
+    $debug = 0;
+    
+    if (isset($ajax_args["client_id"]) && isset($ajax_args["redirect_uri"])) {
+        $client_id = $ajax_args["client_id"];
+        $redirect_uri = $ajax_args["redirect_uri"];
+        if (!$debug) {
+            if ($client_id != $SSO_CLIENT_ID ||
+                $redirect_uri != $SSO_REDIRECT_URI) {
+                SPITAJAX_ERROR(-1, "Invalid SSO values");
+                return;
+            }
+        }
+        
+        #
+        # User already logged in and has indicated they want to continue
+        # SSO with this login ID.
+        #
+        if ($this_user) {
+            if (isset($ajax_args["sso-continue"])) {
+                $code = $this_user->GetSSOCode();
+                ClearReferrer();
+                SPITAJAX_RESPONSE("$redirect_uri?code=$code&client_id=$client_id");
+                return;
+            }
+            if (isset($ajax_args["sso-switchuser"])) {
+                # Do not log the user into Powder after authentication.
+                $nocookies = 1;
+            }
+        }
+        # Fall through to normal login and redirect, 
+    }
+    
+    if (!isset($ajax_args["uid"]) || $ajax_args["uid"] == "") {
+        $errors["uid"] = "Please supply a username";
+    }
+    elseif (!(TBvalid_uid($ajax_args["uid"]) ||
+              TBvalid_email($ajax_args["uid"]))) {
+        $errors["uid"] = "Illegal characters";
+    }
+    $uid = $ajax_args["uid"];
+
+    if (!isset($ajax_args["password"]) || $ajax_args["password"] == "") {
+        $errors["password"] = "Please supply a password";
+    }
+    $password = $ajax_args["password"];
+
+    if (count($errors)) {
+	SPITAJAX_ERROR($STATUS_FORMERRORS, $errors);
+	return;
+    }
+
+    if (GetReferrer($referrer) != 0) {
+        SPITAJAX_ERROR(-1, "Invalid REFERRER");
+        return;
+    }
+    if (isset($cleanmode) && $cleanmode) {
+        $cleanmode = 1;
+    }
+    if (isset($adminmode) && $adminmode) {
+        $adminmode = 1;
+    }
+    $login_status = 0;
+
+    $dologin_status = DOLOGIN($uid, $password, $adminmode, 0, $nocookies);
+    if ($dologin_status == DOLOGIN_STATUS_WEBFREEZE) {
+        $error =
+               "Your account has been frozen due to earlier login attempt ".
+               "failures. You must contact $SUPPORT to have your account ".
+               "restored. <br> <br>".
+               "Please do not attempt to login again; IT WILL NOT WORK!";
+        $login_status = $STATUS_LOGINFAIL;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_FROZEN) {
+        $error =
+               "Your account has been frozen! ".
+               "You must contact $SUPPORT to have your account ".
+               "restored. <br> <br>".
+               "Please do not attempt to login again; IT WILL NOT WORK!";
+        $login_status = $STATUS_LOGINFAIL;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_IPFREEZE) {
+	$IP = $_SERVER['REMOTE_ADDR'];
+        $error =
+               "Your IP address ($IP) has been frozen because of too many ".
+               "failures. You must contact $SUPPORT to address this problem. ".
+               "<br> <br>".
+               "Please do not attempt to login again; IT WILL NOT WORK!";
+        $login_status = $STATUS_LOGINFAIL;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_PROJDISABLED) {
+        $error =
+               "One of the projects in which you are a member has been ".
+               "disabled. You are not allowed to log in until this has ".
+               "been resolved. Please contact $SUPPORT if you have any ".
+               "further questions. <br> <br> ".
+               "Please do not attempt to login again; IT WILL NOT WORK!";
+        $login_status = $STATUS_LOGINFAIL;
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_INACTIVE) {
+        $error =
+               "Your account has gone <b>inactive</b> since it has been so ".
+               "long since your last login. Please contact $SUPPORT ".
+               "to have your account restored. <br> <br> ".
+               "Please do not attempt to login again; IT WILL NOT WORK!";
+        $login_status = $STATUS_LOGINFAIL;
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_ERROR) {
+        $error = "Invalid login ID or password";
+        $login_status = $STATUS_INVALID;
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_OKAY) {
+	$login_status = $STATUS_LOGGEDIN;
+    }
+    else {
+        $error = "Internal error logging you in. Please contact $SUPPORT";
+	$login_status = $STATUS_ERROR;
+    }
+
+    if ($login_status != $STATUS_LOGGEDIN) {
+        # Slow down repeated failures
+        sleep(1);
+	SPITAJAX_ERROR($login_status, $error);
+        return;
+    }
+
+    # ZMS SSO
+    if ($client_id && $redirect_uri) {
+        #
+        # Generate a shortlived code that allows the endpoint to redeem a
+        # descoped token for this user.
+        #
+        if ($nocookies) {
+            $code = $CHECKLOGIN_AUTHUSER->GetSSOCode();
+        }
+        else {
+            $code = $CHECKLOGIN_USER->GetSSOCode();
+        }
+        ClearReferrer();
+        SPITAJAX_RESPONSE("$redirect_uri?code=$code&client_id=$client_id");
+        return;
+    }
+
+    $this_user = $CHECKLOGIN_USER;
+    #
+    # Watch for a classic user logging in but without an encrypted certificate.
+    # We really want to generate one so stuff does not break.
+    #
+    if ($this_user->IsActive() && $this_user->isClassic() &&
+        !$this_user->HasEncryptedCert(1)) {
+        $this_user->GenEncryptedCert();
+    }
+    #
+    # We want to clear this in case the previous login was using it, but lets
+    # not create a cookie for all users.
+    #
+    if ($cleanmode || isset($_COOKIE['cleanmode'])) {
+        setcookie("cleanmode", ($cleanmode ? 1 : 0), 0, "/", $TBAUTHDOMAIN, 0);
+    }
+
+    if ($referrer) {
+        ClearReferrer();
+        SPITAJAX_RESPONSE($referrer);
+        return;
+    }
+    #
+    # Return the redirect page.
+    #
+    SPITAJAX_RESPONSE("$APTBASE/landing.php?redirect=yes");
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>

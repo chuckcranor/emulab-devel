@@ -1,0 +1,21 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("apt_deferred_instances", "reason") =~ /tiny/) {
+	DBQueryFatal("alter table apt_deferred_instances change `reason` ".
+		     " `reason` text");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

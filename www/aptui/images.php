@@ -35,8 +35,10 @@ $page_title = "Image List";
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "all",         PAGEARG_BOOLEAN);
+$optargs = OptionalPageArguments("target_user",  PAGEARG_USER,
+                                 "project_only", PAGEARG_BOOLEAN,
+                                 "system_only",  PAGEARG_BOOLEAN,
+                                 "all",          PAGEARG_BOOLEAN);
 $all = ($all ? 1 : 0);
 
 #
@@ -173,10 +175,16 @@ if ($ISCLOUD) {
         $blob["pid"]         = $pid;
         $blob["pid_idx"]     = $pid_idx;
         $blob["global"]      = $row["visibility"] == "public" ? 1 : 0;
+        $blob["listed"]      = $row["listed"] ? 1 : 0;
         $blob["creator"]     = $creator;
         $blob["creator_idx"] = $creator_idx;
         $blob["project_urn"] = $row["project_urn"];
         $blob["urn"]         = $row["urn"];
+        $blob["deprecated"]  = DateStringGMT($row["deprecated"]);
+        if ($row["deprecated"]) {
+            $blob["deprecation"] = ($row["deprecated_iserror"] ?
+                                    "error" : "warning");
+        }
         #
         # Virtualization implies the format.
         #
@@ -221,7 +229,7 @@ else {
                 "      g.gid_idx=p1.permission_idx) ";
     
         $whereclause = "and (iv.global or p2.imageid is not null or ".
-                     "g.uid_idx is not null) and i.listed!=0 ";
+                     "g.uid_idx is not null) ";
     }
     $query =
            "select distinct i.imagename,i.listed,iv.* from images as i ".
@@ -232,7 +240,7 @@ else {
            "left join osidtoimageid as map on map.osid=i.imageid ".
            $joinclause .
            "where (iv.ezid = 1 or iv.isdataset = 1) $whereclause ".
-           (ISADMIN() ? "" : "and deprecated is null ") .
+           (ISADMIN() ? "" : "and deprecated is null and listed!=0 ") .
            "order by i.imagename";
 
     $query_result = DBQueryFatal($query);
@@ -257,6 +265,12 @@ else {
         $blob["format"]      = $row["format"];
         $blob["urn"]         = $urn;
 	$blob["url"]         = "show-image.php?imageid=$imageid";
+	$blob["deprecated"]  = DateStringGMT($row["deprecated"]);
+        if ($row["deprecated"]) {
+            $blob["deprecation"] = ($row["deprecated_iserror"] ?
+                                    "error" : "warning");
+        }
+        
         $tmp[] = $blob;
     }
 }
@@ -303,13 +317,28 @@ foreach ($tmp as $blob) {
             continue;
         }
     }
+    $flags = array();
+    if ($blob["deprecated"]) {
+        $flags[] = "deprecated";
+    }
+    if ($blob["listed"] == 0) {
+        $flags[] = "notlisted";
+    }
+    
     $blob["filter"] = implode(",", $filters);
+    $blob["flags"] =  implode(",", $flags);
     $images[] = $blob;
 }
 echo "<script type='text/javascript'>\n";
 $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
 echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ALL        = $all;\n";
+if ($project_only) {
+    echo "    window.INITIAL_FILTER = 'project';\n";
+}
+elseif ($system_only) {
+    echo "    window.INITIAL_FILTER = 'system';\n";
+}
 echo "</script>\n";
 
 echo "<script type='text/plain' id='images-json'>\n";

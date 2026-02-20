@@ -111,7 +111,7 @@ sub logit($);
 # Process command-line arguments
 #
 my %opt = ();
-getopts("v:hea",\%opt);
+getopts("v:heaW",\%opt);
 
 if ($opt{h}) {
     exit usage();
@@ -696,7 +696,7 @@ foreach my $power_id (keys %outlets) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
 	    $errors++;
 	}
-	} elsif ($type eq "esi") {
+    } elsif ($type eq "esi") {
 
        my $device = new power_esi($type,@nodes,$verbose);
 
@@ -775,6 +775,16 @@ foreach my $power_id (keys %outlets) {
 	    }
 	    push(@wolnodes, $nodeid)
 		if ($postwol{$nodeid});
+
+	    #
+	    # Do any nodetype specific post-op actions
+	    #
+	    my $node_type = $node->type();
+	    if ($node_type =~ /^bt-ru\d+$/i) {
+		require power_benetel;
+		my $btdev = new power_benetel($node);
+		$btdev->DoPowerPostOp($op);
+	    } # elsif ($node_type =~ ...) { ...
 	}
 	if (@powergroup && $op =~ /^(on|off)$/) {
 	    my $power_ids = join(" ", @powergroup);

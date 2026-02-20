@@ -194,18 +194,23 @@ $(function ()
 	}
 
 	// Bind search for IP (or physical node name)
-	$('#experiment-search-ip button').click(function (event) {
-	    event.preventDefault();
-	    var token = $.trim($('#experiment-search-ip input').val());
-	    var ipx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-	    var pnx = /^\w[-\w]*$/;
-	    if (ipx.test(token) || pnx.test(token)) {
-		SearchForIP(token, table);
-	    }
-	    else {
-		alert("Invalid IP address or physical node ID");
-	    }
-	});
+	$('#experiment-search-ip .search-current,' +
+          '#experiment-search-ip .search-history').click(function (event) {
+	      event.preventDefault();
+	      var token = $.trim($('#experiment-search-ip input').val());
+	      var ipx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	      var pnx = /^\w[-\w]*$/;
+	      if (! (ipx.test(token) || pnx.test(token))) {
+		  alert("Invalid IP address or physical node ID");
+                  return;
+	      }
+              if ($(this).hasClass("search-current")) {
+		  SearchForIP(token, table);
+	      }
+	      else {
+                  window.location.replace("activity.php?ipsearch=" + token);
+              }
+	  });
     }
 
     function SetFilters(table)

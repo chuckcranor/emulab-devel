@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -96,9 +96,9 @@ function ValidateClusters(&$clusters)
                       "uuid"    => $cluster["uuid"]);
     }
     if ($cluster_errors) {
-        return [$cluster_errors];
+        return [$cluster_errors, null];
     }
-    return [0, $safe_clusters];
+    return [null, $safe_clusters];
 }
 
 function ValidateRanges(&$ranges)
@@ -169,9 +169,9 @@ function ValidateRanges(&$ranges)
                       "uuid"      => $range["uuid"]);
     }
     if ($range_errors) {
-        return [$range_errors];
+        return [$range_errors, null];
     }
-    return [0, $safe_ranges];
+    return [null, $safe_ranges];
 }
 
 function ValidateRoutes(&$routes)
@@ -227,9 +227,9 @@ function ValidateRoutes(&$routes)
                       "uuid"      => $route["uuid"]);
     }
     if ($route_errors) {
-        return [$route_errors];
+        return [$route_errors, null];
     }
-    return [0, $safe_routes];
+    return [null, $safe_routes];
 }
 
 #
@@ -489,6 +489,10 @@ function Do_Reserve()
     if (isset($ajax_args["validate"]) && $ajax_args["validate"]) {
         $validate = 1;
     }
+    # Zone, in case it is a range-only
+    if (isset($formfields["powder-zones"]) && $formfields["powder-zones"] != "") {
+        $zone = $formfields["powder-zones"];
+    }
     
     # Next we check the validity of the reservation.
     $this_uid = $this_user->uid();
@@ -503,6 +507,7 @@ function Do_Reserve()
     $args = "-p $PORTAL_GENESIS " .
         (isset($uuid) ? "-u $uuid " : "") .
         (isset($start) ? "-s $start " : "") .
+        (isset($zone) ? "-Z " . escapeshellarg($zone) . " " : "") .
         ($override ? "-O " : "") .
         ($forclass ? "-C " : "") .
         " -e $end $pid/$gid ";
@@ -598,7 +603,7 @@ function Do_Delete()
     global $TBDB_TRUST_GROUPROOT;
     $this_idx = $this_user->uid_idx();
     $opt = "";
-    $resuuid = "";
+    $resuuids = "";
 
     sleep(2);
 
@@ -628,21 +633,21 @@ function Do_Delete()
 	return;
     }
     
-    if (isset($ajax_args["reservation_uuid"]) &&
-        $ajax_args["reservation_uuid"] != "") {
-        $resuuid = $ajax_args["reservation_uuid"];
-        if (!IsValidUUID($resuuid)) {
-            SPITAJAX_ERROR(-1, "Invalid uuid");
-            return;
-        }
-        if (!$resgroup->Reservation($resuuid)) {
-            SPITAJAX_ERROR(-1, "No such reservation in group");
-            return;
+    if (isset($ajax_args["reservation_uuids"])) {
+        foreach ($ajax_args["reservation_uuids"] as $resuuid) {
+            if (!IsValidUUID($resuuid)) {
+                SPITAJAX_ERROR(-1, "Invalid uuid");
+                return;
+            }
+            if (!$resgroup->Reservation($resuuid)) {
+                continue;
+            }
+            $resuuids .= $resuuid . " ";
         }
     }
     elseif (isset($ajax_args["allroutes"])) {
         foreach ($resgroup->routereservations() as $res) {
-            $resuuid .= $res->route_uuid() . " ";
+            $resuuids .= $res->route_uuid() . " ";
         }
     }
     
@@ -673,7 +678,7 @@ function Do_Delete()
     $retval = SUEXEC($this_uid, $pid,
                      "webmanage_resgroup ".
                      "-t " . $webtask->task_id() .
-                     " delete $opt $uuid $resuuid",
+                     " delete $opt $uuid $resuuids",
                      SUEXEC_ACTION_IGNORE);
     
     #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
@@ -945,6 +950,10 @@ function Do_Approve()
     }
     if (isset($ajax_args["override"]) && $ajax_args["override"] != 0) {
         $opt .= " -O ";
+    }
+    # Allow for form precheck only. So JS code knows it will be fast.
+    if (isset($ajax_args["checkonly"]) && $ajax_args["checkonly"]) {
+        $opt .= " -n ";
     }
     
     $webtask  = WebTask::CreateAnonymous();
@@ -1454,7 +1463,7 @@ function Do_FindFirstFit()
         $webtask->Delete();
 	return;
     }
-    else {
+    elseif (0) {
         # Debug for now.
         SUEXECERROR(SUEXEC_ACTION_DEBUG);
     }        

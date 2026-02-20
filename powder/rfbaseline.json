@@ -1,8 +1,8 @@
 {
     "web" : {
 	"nodes" : {
-            "nuc1" : "B210",
-            "nuc2" : "B210"
+            "nuc1" : "WEB Nuc1",
+            "nuc2" : "WEB Nuc2"
 	},
 	"nickname" : "WEB",
 	"urn" : "urn:publicid:IDN+web.powderwireless.net+authority+cm",
@@ -10,22 +10,22 @@
     },
     "emulab" : {
 	"nodes" : {
-#            "cellsdr1-browning" : "X310",
-#            "cellsdr1-fm" : "X310",
-#            "cellsdr1-dentistry" : "X310",
-            "cellsdr1-hospital" : "X310",
-#            "cellsdr1-honors" : "X310",
-            "cellsdr1-bes" : "X310",
-#            "cellsdr1-ustar" : "X310",
-#            "cellsdr1-meb" : "X310",
-            "cbrssdr1-hospital" : "X310",
-	    "cbrssdr1-bes"       : "X310",
-	     "cbrssdr1-browning"  : "X310",
-#	     "cbrssdr1-dentistry" : "X310",
-	    "cbrssdr1-fm"        : "X310",
-	    "cbrssdr1-honors"    : "X310",
-	    "cbrssdr1-meb"       : "X310",
-	    "cbrssdr1-ustar"     : "X310",
+#            "cellsdr1-browning" : "cellsdr1-browning",
+#            "cellsdr1-fm" : "cellsdr1-fm",
+#            "cellsdr1-dentistry" : "cellsdr1-dentistry",
+            "cellsdr1-hospital" : "cellsdr1-hospital",
+#            "cellsdr1-honors" : "cellsdr1-honors",
+            "cellsdr1-bes" : "cellsdr1-bes",
+#            "cellsdr1-ustar" : "cellsdr1-ustar",
+#            "cellsdr1-meb" : "cellsdr1-meb",
+            "cbrssdr1-hospital" : "cbrssdr1-hospital",
+	    "cbrssdr1-bes"       : "cbrssdr1-bes",
+	     "cbrssdr1-browning"  : "cbrssdr1-browning",
+#	     "cbrssdr1-dentistry" : "cbrssdr1-dentistry",
+	    "cbrssdr1-fm"        : "cbrssdr1-fm",
+	    "cbrssdr1-honors"    : "cbrssdr1-honors",
+	    "cbrssdr1-meb"       : "cbrssdr1-meb",
+	    "cbrssdr1-ustar"     : "cbrssdr1-ustar",
 	},
 	"nickname" : "Emulab",
 	"urn" : "urn:publicid:IDN+emulab.net+authority+cm",
@@ -35,15 +35,15 @@
 	"urn" : "urn:publicid:IDN+guesthouse.powderwireless.net+authority+cm",
 	"last" : {},
 	"nodes" : {
-            "nuc2" : "B210",
-            "nuc1" : "B210"
+            "nuc2" : "Guesthouse Nuc2",
+            "nuc1" : "Guesthouse Nuc1"
 	},
 	"nickname" : "Guesthouse"
     },
     "cpg" : {
 	"nodes" : {
-            "nuc1" : "B210",
-            "nuc2" : "B210"
+            "nuc1" : "CPG Nuc1",
+            "nuc2" : "CPG Nuc2"
 	},
 	"nickname" : "Garage",
 	"urn" : "urn:publicid:IDN+cpg.powderwireless.net+authority+cm",
@@ -54,15 +54,15 @@
 	"urn" : "urn:publicid:IDN+humanities.powderwireless.net+authority+cm",
 	"nickname" : "Humanities",
 	"nodes" : {
-            "nuc2" : "B210",
-            "nuc1" : "B210"
+            "nuc2" : "Humanities Nuc2",
+            "nuc1" : "Humanities Nuc1"
 	}
     },
     "law73" : {
 	"nickname" : "Law73",
 	"nodes" : {
-            "nuc1" : "B210",
-            "nuc2" : "B210"
+            "nuc1" : "Law Nuc1",
+            "nuc2" : "Law Nuc2"
 	},
 	"last" : {},
 	"urn" : "urn:publicid:IDN+law73.powderwireless.net+authority+cm"
@@ -72,23 +72,23 @@
 	"last" : {},
 	"nickname" : "Madsen",
 	"nodes" : {
-            "nuc1" : "B210",
-            "nuc2" : "B210"
+            "nuc1" : "Madsen Nuc1",
+            "nuc2" : "Madsen Nuc2"
 	}
     },
     "moran" : {
 	"nickname" : "Moran",
 	"nodes" : {
-            "nuc2" : "B210",
-            "nuc1" : "B210"
+            "nuc2" : "Moran Nuc2",
+            "nuc1" : "Moran Nuc1"
 	},
 	"last" : {},
 	"urn" : "urn:publicid:IDN+moran.powderwireless.net+authority+cm"
     },
     "sagepoint" : {
 	"nodes" : {
-            "nuc2" : "B210",
-            "nuc1" : "B210"
+            "nuc2" : "Sagepoint Nuc2",
+            "nuc1" : "Sagepoint Nuc1"
 	},
 	"nickname" : "Sagepoint",
 	"last" : {},
@@ -96,8 +96,8 @@
     },
     "bookstore" : {
 	"nodes" : {
-            "nuc1" : "B210",
-            "nuc2" : "B210"
+            "nuc1" : "Bookstore Nuc1",
+            "nuc2" : "Bookstore Nuc2"
 	},
 	"nickname" : "Bookstore",
 	"last" : {},
@@ -105,8 +105,8 @@
     },
     "ebc" : {
 	"nodes" : {
-            "nuc2" : "B210",
-            "nuc1" : "B210"
+            "nuc2" : "EBC Nuc2",
+            "nuc1" : "EBC Nuc1"
 	},
 	"nickname" : "EBC",
 	"urn" : "urn:publicid:IDN+ebc.powderwireless.net+authority+cm",

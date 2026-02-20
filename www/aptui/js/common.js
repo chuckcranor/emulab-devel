@@ -91,8 +91,28 @@ window.APT_OPTIONS.initialize = function (sup)
      * Setup a timer to ask for announcements.
      */
     if (window.LOGINUID && !window.NOANNOUNCEMENTS) {
-	// First check for announcements very quickly
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 5000);
+	// First check for announcements very quickly. Indicate first load
+	setTimeout(function f() { window.APT_OPTIONS.Announcements(true) }, 2000);
+    }
+
+    /*
+     * Set our referrer cookie if not logged in and user clicks login.
+     * So we go back to the page they were on.
+     */
+    if (!window.LOGINUID) {
+        $('#loginbutton').click(function (event) {
+            event.preventDefault();
+
+	    var date = new Date();
+	    date.setTime(date.getTime()+(300*1000));
+            var path = window.location.pathname + window.location.search;
+
+	    var cookie = 'referrer=' + path +
+		'; expires=' + date.toGMTString() + '; path=/';
+
+	    document.cookie = cookie;
+            window.location.href = "login.php";
+        });
     }
     
     window.APT_OPTIONS.startPage();
@@ -294,7 +314,7 @@ window.APT_OPTIONS.postTutorial = function (data) {
   catch (e) {}
 }
 
-window.APT_OPTIONS.Announcements = function () {
+window.APT_OPTIONS.Announcements = function (initial) {
     var callback = function(json) {
 	//console.info("announcements", json);
 	if (json.code) {
@@ -315,11 +335,12 @@ window.APT_OPTIONS.Announcements = function () {
 	    }
 	    $('#portal-announcement-div').html(newhtml);
 	}
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 300000);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements(false) }, 300000);
     }
+    var args = {"initial" : initial};
     var xmlthing =
 	APT_OPTIONS.CallServerMethod('', 'announcement',
-                                     'Announcements', null, callback);
+                                     'Announcements', args, callback);
 }
 
 window.APT_OPTIONS.SetupCopyToClipboard = function (id) {

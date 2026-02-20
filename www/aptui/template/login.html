@@ -1,0 +1,84 @@
+<div class='row'>
+  <div class='col-lg-6  col-lg-offset-3 offset-lg-3
+              col-md-6  col-md-offset-3 offset-md-3
+              col-sm-8  col-sm-offset-2 offset-sm-2
+              col-xs-12 col-xs-offset-0'>
+    <form id='quickvm_login_form' class="form-horizontal">
+      <div class='panel panel-default card'>
+	<div class='panel-heading card-header'>
+          <h3 class='panel-title card-title'>Login</h3>
+	</div>
+	<div class='panel-body card-body'>
+	  <div class="row">
+	    <div class='col-sm-offset-2 offset-sm-2 col-sm-7'>
+              <span id="general_error" class='help-block text-danger'></span>
+	    </div>
+	  </div>
+          <div class='form-group'>
+	    <input name="uid"
+		   class="form-control format-me"
+		   data-label="Username"
+		   data-key="uid"
+                   placeholder='<%- window.PORTAL_PASSWORD_HELP %>'
+                   autofocus type='text'>
+          </div>
+          <div class='form-group'>
+              <input name='password'
+		     class='form-control format-me'
+		     data-label="Password"
+		     data-key="password"
+                     type='password'>
+          </div>
+          <div class='form-group'>
+            <div class='col-sm-offset-2 col-sm-7'>
+	      <% if (window.PROTOGENI_GENIWEBLOGIN) { %>
+		<button class='btn btn-info btn-sm pull-left'
+			style='margin-right: 10px;'
+			type='button'
+			data-toggle="tooltip" data-placement="left"
+			title="You can use your geni credentials to login"
+			id='quickvm_geni_login_button'>Geni User?</button>
+	      <% } %>
+              <button class='btn btn-primary btn-sm pull-right'
+                      id='quickvm_login_modal_button'
+                      type='submit' name='login'>Login</button>
+            </div>
+          </div>
+	  <% if (!window.UI_EXTERNAL_ACCOUNTS) { %>
+	    <div class='form-group'>
+              <div class='col-sm-offset-2 col-sm-7'>
+		<a class='pull-right'
+		   type='button' href='forgotpswd.php'>
+                  Forgot Password?</a>
+	      </div>
+	    </div>
+	  <% } %>
+	</div>
+      </div>
+    </form>
+  </div>
+</div>
+<div id='sso-modal' class='modal fade'
+     data-keyboard='false' data-backdrop='static'>     
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	You are currently logged into Powder as
+	'<span id="sso-current-user"></span>'. Do you wish to continue
+	with this account, or use a different Powder account?
+	<center style="margin-top: 10px; margin-bottom: 10px;">
+          <button class='btn btn-primary btn-sm'
+                  id='sso-existing-account'
+                  type='submit'>Continue with current Powder account</button>
+	</center>
+	<center>
+          <button class='btn btn-sm'
+                  id='sso-different-account'
+                  type='submit'>Use a different Powder account</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='waitwait_div'></div>
+<div id='nomore_genilogin_div'></div>

@@ -75,6 +75,7 @@ my $LOGFILE          = "$TB/log/rdz_expdaemon.log";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $PROTOUSER	     = "elabman";
 my $ENDPOINTDIR	     = "/usr/testbed/www/rfmonitor-endpoint";
+my $DORDZ            = $MAINSITE;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -83,15 +84,18 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 # Protos
 sub fatal($);
 sub logit($);
-sub Watcher($);
+sub Watcher($$);
 sub WatchEndpoint($);
 sub ReportObservation($$$);
 
 #
 # Turn off line buffering on output
 #
-$| = 1; 
+$| = 1;
 
+if (!$DORDZ) {
+    exit(0);
+}
 if ($UID != 0) {
     fatal("Must be root to run this script\n");
 }
@@ -137,7 +141,10 @@ use libEmulab;
 use APT_Aggregate;
 use APT_Instance;
 use APT_Profile;
-use APT_RDZ;
+# Only needed when we need to contact the RDZ.
+if ($DORDZ) {
+    require APT_RDZ;
+}
 
 if (! ($oneshot || $impotent || $leebee)) {
     if (CheckDaemonRunning("rdz_expdaemon")) {
@@ -235,30 +242,43 @@ while (1) {
     # Look for experiments that are using RDZ spectrum.
     #
     my $query_result =
-	DBQueryWarn("select distinct i.uuid from apt_instances as i ".
-		    "join apt_instance_rfranges as rf on rf.uuid=i.uuid ".
-		    "where i.canceled=0 and ".
-		    "      i.status!='failed' and ".
-		    "      rf.rdz_grantid is not null".
-		    ($leebee ? " and i.creator='leebee' " :
-		     ($noleebee ? " and i.creator!='leebee' " : "")));
+	DBQueryWarn("(select distinct i.uuid,i.creator,'grant' ".
+		    "    from apt_instances as i ".
+		    " join apt_instance_rfranges as rf on rf.uuid=i.uuid ".
+		    " where i.canceled=0 and ".
+		    "       i.status!='failed' and ".
+		    "       rf.rdz_grantid is not null and ".
+		    "       rf.rdz_status!='new' and rf.rdz_status!='denied') ".
+		    "union ".
+		    "(select distinct i.uuid,i.creator,'smart' ".
+		    "    from apt_instances as i ".
+		    " left join apt_instance_rfranges as rf on rf.uuid=i.uuid ".
+		    " where i.canceled=0 and ".
+		    "       i.status!='failed' and ".
+		    "       rf.uuid is null and ".
+		    "       i.rdz_status is not null)");
 
-    
     if (!$query_result) {
 	sleep(10);
 	next;
     }
     
-    while (my ($uuid) = $query_result->fetchrow_array()) {
+    while (my ($uuid,$creator,$which) = $query_result->fetchrow_array()) {
 	# Already watching.
 	next
 	    if (exists($watched{$uuid}));
-	
+
+	# Debugging a test daemon
+	next
+	    if ($leebee && ($creator ne "leebee" && $creator ne "stoller"));
+	next
+	    if ($noleebee && ($creator eq "leebee" || $creator eq "stoller"));
+
 	my $instance = APT_Instance->Lookup($uuid);
 	next
 	    if (!defined($instance));
 
-	my $pid = Watcher($instance);
+	my $pid = Watcher($instance, $which);
 	$watchers{"$pid"} = $instance;
 	$watched{$instance->uuid()} = $pid;
     }
@@ -272,18 +292,26 @@ exit(0);
 #
 # Watch an experiment, checking for RDZ revocation
 #
-sub Watcher($)
+sub Watcher($$)
 {
-    my ($instance) = @_;
+    my ($instance, $which) = @_;
     my $uuid = $instance->uuid();
 
     my $mypid = fork();
     if ($mypid) {
 	return $mypid;
     }
+    $SIG{TERM} = 'DEFAULT';
+    $SIG{INT}  = 'IGNORE';
+    
     select(undef, undef, undef, 0.2);
-    logit("Starting Watcher($PID) for $instance");
-    APT_RDZ::WatchExperiment($instance, $debug, $impotent);
+    logit("Starting Watcher($PID) for $instance ($which)");
+    if ($which eq "smart") {
+	APT_RDZ::WatchSmartTransmitters($instance, $debug, $impotent);
+    }
+    else {
+	APT_RDZ::WatchExperiment($instance, $debug, $impotent);
+    }
     exit(0);
 }
 

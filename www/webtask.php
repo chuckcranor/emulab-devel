@@ -173,6 +173,9 @@ class WebTask {
     function exited()		{ return $this->field("exited"); }
     function task_data()	{ return $this->field("task_data"); }
 
+    #
+    # Return the task data as a real object intead of associative arrays
+    #
     function TaskDataObject() {
 	if ($this->task_data()) {
 	    return json_decode($this->task_data(), false);
@@ -182,9 +185,6 @@ class WebTask {
 	}
     }
 
-    #
-    # Return the task data as a real object intead of JSON
-    #
     function TaskData() {
 	if ($this->task_data()) {
 	    return json_decode($this->task_data(), true);

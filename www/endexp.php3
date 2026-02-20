@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2011, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,7 +22,6 @@
 # }}}
 #
 include("defs.php3");
-include_once("template_defs.php");
 
 #
 # Only known and logged in users can end experiments.
@@ -72,11 +71,7 @@ if (! $experiment->AccessCheck($this_user, $TB_EXPT_DESTROY)) {
     USERERROR("You do not have permission to end experiment $pid/$eid!", 1);
 }
 
-# Template Instance Experiments get special treatment in this page.
-$instance = TemplateInstance::LookupByExptidx($exptidx);
-if ($instance && ($experiment->state() != $TB_EXPTSTATE_SWAPPED)) {
-    PAGEARGERROR("Invalid action for template instance");
-}
+$instance = null;
 
 # Spit experiment pid/eid at top of page.
 echo $experiment->PageHeader();

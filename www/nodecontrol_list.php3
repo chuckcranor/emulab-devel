@@ -25,17 +25,28 @@ include("defs.php3");
 include_once("node_defs.php");
 
 #
-# This page is used for both admin node control, and for mere user
-# information purposes. Be careful about what you do outside of
-# $isadmin tests.
-# 
-
-#
 # Only known and logged in users can do this.
 #
 $this_user = CheckLoginOrDie();
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
+
+#
+# Do this check first for the redirect.
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN,
+                                     "showtype", PAGEARG_STRING);
+    if (!$isadmin || !$classic) {
+        if (isset($showtype) && $showtype != "") {
+            RedirectToPortal("show-nodetype.php", "type=$showtype");
+        }
+        else {
+            RedirectToPortal("cluster-status.php");
+        }
+        return;
+    }
+}
 
 #
 # Verify page arguments.

@@ -83,6 +83,7 @@ window.GetBindingsTable = (function ()
 	    return html;
 	};
 	return function(paramdefs, bindings) {
+            //console.info("GetBindingsTable", paramdefs, bindings);
 	    html = "";
 
 	    _.each(paramdefs, function (details, name) {
@@ -108,7 +109,7 @@ window.GetBindingsTable = (function ()
 			// If not a multivalue, then the bindings for the
 			// members are at top level and the default values
 			// is an array in the struct details.
-			html += doStruct(details, bindings, details.defaultValue);
+			html += doStruct(details, bindings[name], details.defaultValue);
 		    }
 		}
 		else if (_.has(details, "multiValue") && details.multiValue) {

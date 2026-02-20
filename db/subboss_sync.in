@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,10 +34,8 @@ my @excludes=qw#cisco-config/ cisco-config. dell/ hp-config/ OLD/ tmp/ proj/ swi
 my @includes=qw##;
 
 #
-# dhcpd_makeconf - helper script to create dhcpd.conf files from the database.
-# The template file should look like an ordinary dhcpd.conf file, but have
-# the string %%nodetype=<type> where you want entries for a set of nodes
-# filled out. See the template file in the dhcp directory for an example.
+# subboss_sync - helper script to synchronize /tftpboot on subboss nodes
+# that need it (those that are 'dhcp' or 'tftp' subbosses).
 #
 sub usage {
     print "Usage: $0 [-h]\n";
@@ -106,7 +104,7 @@ $cmdline .= " -e ssh /tftpboot/";
 # other than the IP for boss.
 $query_result =
     DBQueryWarn("select distinct subboss_id from subbosses ".
-		"where service='tftp' and disabled=0");
+		"where (service='tftp' or service='dhcp') and disabled=0");
 if (!$query_result) {
     fatal("Could not subboss data from DB!");
 }

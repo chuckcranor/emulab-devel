@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -565,6 +565,7 @@ sub NewImage($)
     my $version_uuid = $blob->{'version_uuid'};
     my $safe_urn     = DBQuoteSpecial($image_urn);
     my $safe_uuid    = DBQuoteSpecial($image_uuid);
+    my $deprecated_clause = "";
 
     #
     # Okay, we have to deal with a image that was deleted at the origin
@@ -679,6 +680,25 @@ sub NewImage($)
     my $created = timelocal(strptime($blob->{'created'}));
 
     #
+    # Watch for a deprecated image. This is not supposed to happen,
+    # a new image that is deprecated, but it can happen accidentally.
+    #
+    if (exists($blob->{'deprecated'})) {
+	my $deprecated = timelocal(strptime($blob->{'deprecated'}));
+	$deprecated_clause = ",deprecated=FROM_UNIXTIME($deprecated) ";
+	
+	if (exists($blob->{'deprecated_iserror'})) {
+	    my $iserror = ($blob->{'deprecated_iserror'} ? 1 : 0);
+	    $deprecated_clause .= ",deprecated_iserror='$iserror' ";
+	}
+	if (exists($blob->{'deprecated_message'}) &&
+	    $blob->{'deprecated_message'} ne "") {
+	    my $message = DBQuoteSpecial($blob->{'deprecated_message'});
+	    $deprecated_clause .= ",deprecated_message=${message} ";
+	}
+    }
+
+    #
     # Process the image permissions first.
     #
     if (exists($blob->{'image_permissions'})) {
@@ -703,7 +723,8 @@ sub NewImage($)
     if (! $DB->QueryWarn("insert into image_versions set ".
 			 "  created=FROM_UNIXTIME($created), ".
 			 join(",", map("$_=" . DBQuoteSpecial($sets{$_}),
-				       keys(%sets))))) {
+				       keys(%sets))) . " " .
+			 $deprecated_clause)) {
 	if ($needdelete) {
 	    $DB->QueryWarn("delete from images where image_uuid='$image_uuid'");
 	    $DB->QueryWarn("delete from image_permissions ".

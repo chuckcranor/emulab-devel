@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,6 +177,11 @@ function Do_GetInstanceStatus()
     if ($instance->logfileid()) {
         $blob["logfile_url"] =
             "$APTBASE/spewlogfile.php?logfile=" . $instance->logfileid();
+    }
+
+    if ($instance->status() == "pending") {
+        $blob["deferred_reason"] = $instance->deferred_reason();
+        $blob["last_retry"] = DateStringGMT($instance->last_retry());
     }
     
     # Openstack experiment?
@@ -593,11 +598,9 @@ function Do_RequestExtension()
         }
     }
     else {
-	if (!isset($ajax_args["reason"]) || $ajax_args["reason"] == "") {
-	    SPITAJAX_ERROR(1, "Missing reason");
-	    goto bad;
+	if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
+            $reason = $ajax_args["reason"];
 	}
-	$reason = $ajax_args["reason"];
     }
     if (isset($reason)) {
         if (!TBvalid_fulltext($reason)) {
@@ -754,7 +757,9 @@ function Do_DenyOrMoreinfo($action)
     SPITAJAX_RESPONSE("Success");
     return;
 bad:
-    $webtask->Delete();
+    if (isset($webtask)) {
+        $webtask->Delete();
+    }
     sleep(1);
 }
 
@@ -770,6 +775,51 @@ function Do_SchedTerminate()
 {
     Do_DenyOrMoreinfo("terminate");
 }
+
+#
+# General request for info about an experiment.
+#
+function Do_RequestInfo()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args, $APTMAIL;
+    $this_uid = $this_user->uid();
+
+    # Really, only admins can do this.
+    if (StatusSetupAjax(0)) {
+	goto bad;
+    }
+    $uuid = $instance->uuid();
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "You do not have permission to do this.");
+	goto bad;
+    }
+    if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
+        $message = $ajax_args["message"];
+    }
+    else {
+        SPITAJAX_ERROR(1, "Please provide a message!");
+        return;
+    }
+    $target_email   = $creator->email();
+    $target_name    = $creator->name();
+    $instance_name  = $instance->pid() . "/" . $instance->name();
+    $instance_url   = $instance->StatusURL();
+    
+    TBMAIL("$target_name <$target_email>",
+           "Request for information about experiment $instance_name",
+           "Hi, we need more information about your experiment.\n\n".
+           $message . "\n\n\n".
+           "Thank you\n".
+           $instance_url,
+           "From: $APTMAIL");
+
+    SPITAJAX_RESPONSE(0);
+bad:
+    sleep(1);
+    return;
+}
+
 
 #
 # Request a console URL and pass back to the status page.
@@ -1817,12 +1867,17 @@ function Do_ExpInfo()
     # If we have params (bindings), then we want to provide the paramdefs too.
     if ($instance->paramdefs()) {
         $blob["paramdefs"] = json_decode($instance->paramdefs());
+        $blob["script"] = $instance->script();
     }
     elseif (isset($profile) && $profile->paramdefs()) {
         $blob["paramdefs"] = json_decode($profile->paramdefs());
+        $blob["script"] = $instance->script();
     }
     else {
         $blob["paramdefs"] = null;
+    }
+    if ($instance->script()) {
+        $blob["script"] = $instance->script();
     }
     if (isset($profile)) {
         $blob["profile_name"] = $profile->name();

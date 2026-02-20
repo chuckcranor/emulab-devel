@@ -1,0 +1,47 @@
+[build-system]
+requires = [
+    "setuptools>=61",
+    "setuptools_scm>=7",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portal-rest"
+authors = [
+    { name = "Leigh Stoller", email = "stoller@flux.utah.edu" },
+]
+description = "Provides an Portal Python 3 API client library and CLI tool."
+keywords = [
+    "CloudLab",
+]
+requires-python = ">=3.9"
+dynamic = [
+    "version"
+]
+
+dependencies = [
+]
+
+[project.urls]
+Homepage = "https://cloudlab.us"
+Source = "https://gitlab.flux.utah.edu/emulab/portal-api.git"
+
+[tool.setuptools.dynamic]
+version = {attr = "routers.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "__init__.py",
+    "main.py",
+    "config.py",
+    "dependencies.py",
+    "api*",
+    "routers*",
+]
+exclude = [
+    "venv*",
+]
+namespaces = false
+
+[tool.setuptools_scm]

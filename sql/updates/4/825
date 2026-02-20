@@ -1,0 +1,29 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("login_history", "location_stamp")) {
+	DBQueryFatal("ALTER TABLE login_history ADD ".
+		     "  `location_stamp` datetime default NULL after location");
+    }
+    if (!DBSlotExists("login_history", "city")) {
+	DBQueryFatal("ALTER TABLE login_history ADD ".
+		     "  `city` tinytext");
+    }
+    if (!DBSlotExists("login_history", "domain")) {
+	DBQueryFatal("ALTER TABLE login_history ADD ".
+		     "  `domain` tinytext");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

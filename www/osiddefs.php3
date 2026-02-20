@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,7 @@ $osid_featurelist["suboses"]	= 1;
 $osid_featurelist["loc-bstore"] = 1;
 $osid_featurelist["rem-bstore"] = 1;
 $osid_featurelist["xen-host"]   = 1;
+$osid_featurelist["cloud-init"] = 1;
 
 # Default op modes. The value is a user-okay flag.
 $osid_opmodes			= array();

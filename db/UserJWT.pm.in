@@ -1,0 +1,466 @@
+#!/usr/bin/perl -wT
+#
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+##############################################################################
+#
+# User JWT tokens
+#
+package User::JWT;
+use Exporter;
+use vars qw(@ISA);
+@ISA    = "Exporter";
+
+use libdb;
+use libtestbed;
+use APT_Instance;
+use English;
+use Carp;
+use Data::Dumper;
+use JSON;
+use Crypt::JWT qw(decode_jwt encode_jwt);
+use Crypt::PK::RSA;
+use Crypt::OpenSSL::X509;
+
+use overload ('""' => 'Stringify');
+use vars qw($AUTOLOAD $JWT_ALG $DEFAULTEXP);
+
+$JWT_ALG	= "RS256";
+$DEFAULTEXP     = 180; # days
+
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $EMULAB_CERT = "$TB/etc/emulab.pem";
+my $EMULAB_KEY  = "$TB/etc/emulab.key";
+
+sub getCertKey()
+{
+    my $emulab_cert = Crypt::OpenSSL::X509->new_from_file($EMULAB_CERT);
+    if (!$emulab_cert) {
+	print STDERR "Could not load $EMULAB_CERT\n";
+	return ();
+    }
+    my $emulab_key  = Crypt::PK::RSA->new($EMULAB_KEY);
+    if (!$emulab_key) {
+	print "Could not load $EMULAB_KEY\n";
+	return ();
+    }
+    return ($emulab_cert, $emulab_key);
+}
+
+#
+# Actually, the uuid and idx are unique, so we do not really need
+# the user. 
+#
+sub Lookup($$$)
+{
+    my ($class, $user, $token) = @_;
+    my $uid_idx = $user->uid_idx();
+    my $query_result;
+
+    if ($token =~ /^(\d*)$/) {
+	$query_result =
+	    DBQueryWarn("select *,UNIX_TIMESTAMP(expires) as expires_timestamp ".
+			"   from user_jwt_tokens ".
+			"where uid_idx='$uid_idx' and idx='$token'");
+    }
+    elsif ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$query_result =
+	    DBQueryWarn("select *,UNIX_TIMESTAMP(expires) as expires_timestamp ".
+			"   from user_jwt_tokens ".
+			"where uid_idx='$uid_idx' and uuid='$token'");
+    }
+    return undef
+	if (! $query_result || !$query_result->numrows);
+    
+    my $self         = {};
+    $self->{'DBROW'}  = $query_result->fetchrow_hashref();
+    bless($self, $class);
+    return $self;
+}
+
+sub Create($$$$;$$$$)
+{
+    my ($class, $user, $role,
+	$scope, $scope_value, $expires, $nolock, $doauth) = @_;
+    $nolock = 0 if (!defined($nolock));
+    $doauth = 0 if (!defined($doauth));
+    $expires = time() + (180 * 24 * 3600) if (!defined($expires));
+    my $debug = 1;
+
+    my ($emulab_cert,$emulab_key) = getCertKey();
+    return undef
+	if (!defined($emulab_cert) || !defined($emulab_key));
+
+    my $uid_idx  = $user->uid_idx();
+    my $uid_uid  = $user->uid();
+    my $uid_uuid = $user->uuid();
+    
+    #
+    # The token has its own uuid, more random version.
+    #
+    my $jti = `uuidgen -r`;
+    if ($?) {
+	print STDERR "Could not generate a jti\n";
+	return undef
+    }
+    chomp($jti);
+
+    my $payload = {
+	"sub"    => $uid_uuid,
+	"name"   => $uid_uid,
+	"jti"    => $jti,
+	"role"   => $role,
+	"exp"    => $expires,
+	"scope"  => $scope,
+    };
+    if (defined($scope_value)) {
+	$payload->{"scope_value"} = $scope_value;
+    }
+    if ($doauth) {
+	my @projects;
+	if ($user->ProjectMembershipList(\@projects)) {
+	    print STDERR "Could not generate project membership list\n";
+	    return undef;
+	}
+	my $tmp = {};
+	foreach my $project (@projects) {
+	    my $group = $project->GetProjectGroup();
+	    my $memb  = $group->LookupUser($user);
+	    if (!defined($memb)) {
+		print STDERR "No membership for $user in $project!\n";
+		next;
+	    }
+	    $tmp->{$project->pid()} = $memb->trust();
+	}
+	my $str = eval { encode_json($tmp); };
+	if ($@) {
+	    print STDERR "Could not encode project list: $@\n";
+	    return undef;
+	}
+	$payload->{"projects"} = $str;
+	$payload->{"email"} = $user->email();
+	$payload->{"name"} = $user->name();
+    }
+    if ($debug) {
+	print Dumper($payload);
+    }
+    my $token = eval { encode_jwt('payload' => $payload,
+				  'alg'     => $JWT_ALG,
+				  'key'     => $emulab_key); };
+
+    if ($@) {
+	print STDERR "User::JWT::Create: $@\n";
+	return undef;
+    }
+    # Auth tokens do not go in the DB, thus cannot be used to invoke the API.
+    if ($doauth) {
+	return $token;
+    }
+	
+    if (!$nolock) {
+	DBQueryWarn("lock tables user_jwt_tokens write")
+	    or return undef;
+    }
+    my $safe_token = DBQuoteSpecial($token);
+    
+    # Check again now that we are locked.
+    my $existing = User::JWT->LookupByScope($user, $scope, $scope_value);
+    if ($existing) {
+	DBQueryWarn("unlock tables")
+	    if (!$nolock);
+	return $existing;
+    }
+    if (!DBQueryWarn(
+	     "insert into user_jwt_tokens set ".
+	     "  uuid='$jti', uid='$uid_uid', uid_idx='$uid_idx', ".
+	     "  issued=now(), expires=FROM_UNIXTIME($expires), ".
+	     "  role='$role', token=$safe_token, scope_type='$scope' ".
+	     (defined($scope_value) ?
+	      ",scope_value='$scope_value'" : ""))) {
+	DBQueryWarn("unlock tables")
+	    if (!$nolock);
+	return undef;
+    }
+    DBQueryWarn("unlock tables")
+	if (!$nolock);
+
+    return User::JWT->LookupByScope($user, $scope, $scope_value);
+}
+
+sub CreateExperimentToken($$$)
+{
+    my ($class, $user, $instance) = @_;
+
+    return User::JWT->Create($user, "user", "experiment", $instance->uuid());
+}
+
+sub GetExperimentToken($$$)
+{
+    my ($class, $user, $instance) = @_;
+
+    return User::JWT->LookupByScope($user, "experiment", $instance->uuid());
+}
+
+sub GetUserToken($$)
+{
+    my ($class, $user) = @_;
+
+    return User::JWT->LookupByScope($user, "global");
+}
+
+sub CreateUserToken($$)
+{
+    my ($class, $user) = @_;
+
+    return User::JWT->Create($user, "user", "global");
+}
+
+#
+# This is handy
+#
+sub LockTables($)
+{
+    my ($class) = @_;
+
+    return -1
+	if (!DBQueryWarn("lock tables user_jwt_tokens write, ".
+			 "projects read, groups read, group_membership read"));
+    return 0;
+}
+sub UnlockTables($)
+{
+    my ($class) = @_;
+
+    return -1
+	if (!DBQueryWarn("unlock tables"));
+    return 0;
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    return -1
+	if (!DBQueryWarn("delete from user_jwt_tokens where uuid='$uuid'"));
+    return 0;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    my $uid     = $self->uid();
+    my $idx     = $self->idx();
+    my $scope   = $self->scope_type();
+    my $value   = $self->scope_value();
+
+    return "[User::JWT $uid, $idx, $scope" .
+	(defined($value) ? ", $value" : "") . "]";
+}
+
+sub Dump($)
+{
+    my ($token) = @_;
+
+    print "uuid:        " . $token->uuid() . "\n";
+    print "expires:     " . $token->expires() . "\n";
+    print "role:        " . $token->role() . "\n" if ($token->role());
+    print "scope_type:  " . $token->scope_type() . "\n";
+    if ($token->scope_value()) {
+	print "scope_value: " . $token->scope_value() . " ";
+		
+	if ($token->scope_type() eq "experiment") {
+	    my $instance = APT_Instance->Lookup($token->scope_value());
+	    if (!defined($instance)) {
+		print "\n";
+		print("No such experiment: " . $token->scope_value());
+	    }
+	    else {
+		my $pid = $instance->pid();
+		my $eid = $instance->name();
+		print "($pid/$eid)\n";
+	    }
+	}
+    }
+    print $token->token() . "\n";
+}
+
+sub DecodeToken($)
+{
+    my ($string) = @_;
+
+    my ($emulab_cert,$emulab_key) = getCertKey();
+    return ()
+	if (!defined($emulab_cert) || !defined($emulab_key));
+
+    my ($head, $data) = eval {
+	decode_jwt("token"         => $string,
+		   'accepted_alg'  => $JWT_ALG,
+		   'decode_header' => 1,
+		   'verify_exp'    => 1,
+		   'key'           => $emulab_cert); };
+    if ($@) {
+	print STDERR "DecodeToken: $@\n";
+	return ();
+    }
+    return ($head, $data);
+}
+
+sub LookupAll($$$)
+{
+    my ($class, $user, $pref) = @_;
+    my $uid_idx = $user->uid_idx();
+
+    $$pref = [];
+    my $query_result =
+	DBQueryWarn("select idx from user_jwt_tokens where uid_idx='$uid_idx'");
+    
+    return -1
+	if (!$query_result);
+    return 0
+	if (!$query_result->numrows);
+
+    my @results = ();
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $token = User::JWT->Lookup($user, $idx);
+	push(@results, $token)
+	    if (defined($token));
+    }
+    $$pref = \@results;
+    return 0;
+}
+
+sub LookupByScope($$$;$)
+{
+    my ($class, $user, $scope, $scope_value) = @_;
+    my $uid_idx = $user->uid_idx();
+
+    my $query_result =
+	DBQueryWarn("select idx  from user_jwt_tokens ".
+		    "where uid_idx='$uid_idx' and ".
+		    "      scope_type='$scope' ".
+		    (defined($scope_value) ? 
+		     "and scope_value='$scope_value' " : ""));
+    
+    return undef
+	if (! $query_result || !$query_result->numrows);
+
+    my ($idx) = $query_result->fetchrow_array();
+    return User::JWT->Lookup($user, $idx);    
+}
+
+############################################################################
+#
+package User::JWT::SSOCode;
+use libdb;
+use libtestbed;
+use English;
+use overload ('""' => 'Stringify');
+
+sub Lookup($$$)
+{
+    my ($class, $user, $code) = @_;
+    my $uid_idx = $user->uid_idx();
+    my $safe_code = DBQuoteSpecial($code);
+    my $query_result;
+
+    if ($token =~ /^(\w*)$/) {
+	$query_result =
+	    DBQueryWarn("select *,UNIX_TIMESTAMP(expires) as expires_timestamp ".
+			"   from user_sso_codes ".
+			"where uid_idx='$uid_idx' and code='$safe_code'");
+    }
+    return undef
+	if (! $query_result || !$query_result->numrows);
+    
+    my $self          = {};
+    $self->{'DBROW'}  = $query_result->fetchrow_hashref();
+    bless($self, $class);
+    return $self;
+}
+# accessors
+sub field($$)	{ return $_[0]->{'DBROW'}->{$_[1]}; }
+sub idx($)	{ return field($_[0], "idx"); }
+sub uid($)	{ return field($_[0], "uid"); }
+sub uid_idx($)	{ return field($_[0], "uid_idx"); }
+sub code($)	{ return field($_[0], "code"); }
+sub expires($)	{ return field($_[0], "expires"); }
+
+sub Create($$)
+{
+    my ($class, $user) = @_;
+
+    my $uid_idx  = $user->uid_idx();
+    my $uid_uid  = $user->uid();
+    my $code     = TBGenSecretKey();
+    my $expires  = time() + 60;
+
+    if (!DBQueryWarn(
+	     "insert into user_sso_codes ".
+	     "  uid='$uid_uid', uid_idx='$uid_idx', code='$code', ".
+	     "  expires=FROM_UNIXTIME($expires)")) {
+	return undef;
+    }
+    return User::JWT::SSOCode->Lookup($user, $code);
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    my $uid     = $self->uid();
+    my $code    = $self->code();
+
+    return "[User::JWT::SSOCode $uid, $code]"
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

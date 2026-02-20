@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2020 University of Utah and the Flux Group.
+# Copyright (c) 2020-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -181,7 +181,14 @@ if ($debug) {
 	       " experiment with aggregates: " . join(' ', @fqdns));
 }
 
+#
+# XXX tmpdir must exist or TBBackGround will be fatally wounded.
+#
 my $tmpdir = "$CONFDIR/tarballs/$uuid";
+if (! -d "$tmpdir") {
+    print STDERR "$exptuuid (slice $uuid): tmpdir does not exist, already destroyed?\n";
+    exit(0);
+}
 
 #
 # Since we are shutting things down, kill off any lingering background

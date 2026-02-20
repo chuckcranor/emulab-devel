@@ -17,7 +17,12 @@ sub Install($$$)
 	DoneIfEdited($SUDOERS);
 	AppendToFileFatal($SUDOERS,
 			  "%wheel    ALL=(ALL) NOPASSWD: ALL",
-			  "Defaults  logfile=/var/log/sudo.log");
+			  "Defaults  env_keep += \"EDITOR VISUAL\"",
+			  "Defaults  env_keep += \"PKG_CACHEDIR PKG_DBDIR FTP_PASSIVE_MODE\"",
+			  "Defaults  env_keep += \"PORTSDIR PORTS_INDEX PORTS_DBDIR PACKAGES PKGTOOLS_CONF\"",
+			  "Defaults  logfile=/var/log/sudo.log",
+			  "Defaults  secure_path=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$TBROOT/bin:$TBROOT/sbin:$TBROOT/sbin/protogeni\""
+	    );
     };
     return 0;
 }

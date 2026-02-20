@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,6 +50,12 @@ $routing = array("geni-login" =>
 			      "methods" => array("NoMoreGeniLogin" =>
                                                      "Do_NoMoreGeniLogin"),
                         ),
+                 "login" =>
+			array("file"    => "login.ajax",
+			      "guest"   => true,
+			      "methods" => array("DoLogin" =>
+                                                     "Do_Login"),
+                        ),                 
 		 "dashboard" =>
 			array("file"    => "dashboard.ajax",
 			      "guest"   => false,
@@ -205,8 +211,12 @@ $routing = array("geni-login" =>
 						     "Do_RequestExtension",
 						 "DenyExtension" =>
 						     "Do_DenyExtension",
+                                                 # This is an info request for extensions
 						 "MoreInfo" =>
 						     "Do_MoreInfo",
+                                                 # General request info about experiment
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
 						 "SchedTerminate" =>
 						     "Do_SchedTerminate",
 						 "SnapShot" =>
@@ -561,7 +571,11 @@ $routing = array("geni-login" =>
                                                  "SnapshotStatus" =>
                                                      "Do_SnapshotStatus",
                                                  "Modify" =>
-                                                     "Do_Modify")),
+                                                     "Do_Modify",
+                                                 "ImportCLImage" =>
+                                                     "Do_ImportCLImage",
+                              )
+                        ),
 		 "node" =>
 			array("file"    => "node.ajax",
 			      "guest"   => true,

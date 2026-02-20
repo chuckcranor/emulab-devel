@@ -53,6 +53,7 @@ class Aggregate
 	    return;
 	}
 	$this->aggregate = mysql_fetch_array($query_result);
+        $this->aggregate["islocalcluster"] = $this->isLocalCluster();
         $this->typeinfo  = array();
 
         #
@@ -608,6 +609,10 @@ class Aggregate
             $node_id  = $row["node_id"];
             $itype    = $row["itype"];
             $alive    = true;
+
+            if ($row["hidden"] && !ISADMIN()) {
+                continue;
+            }
 
             # XXX Need to change the radio tables for this.
             if (preg_match("/^ota/", $node_id)) {

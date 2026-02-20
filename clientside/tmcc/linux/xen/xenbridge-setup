@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2018 University of Utah and the Flux Group.
+# Copyright (c) 2012-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -234,25 +234,67 @@ if ($iscontrol) {
 }
 
 #
-# If this node is running systemd-networkd, kill its configuration and
-# stop systemd-networkd if it's not managing any other interfaces.
-# Otherwise, systemd-networkd will keep trying to DHCP on the control
-# net interface.
+# If this node is running systemd-networkd, move its configuration to xenbr0.
 #
 if (-e "/var/run/systemd/network/${interface}.network") {
-    unlink("/var/run/systemd/network/${interface}.network");
-    my $network_file_count = 0;
+    open(NETF,"/var/run/systemd/network/${interface}.network");
+    open(XNETF,">/var/run/systemd/network/${XENBR}.network");
+    while (my $line = <NETF>) {
+	$line =~ "s/${interface}/${XENBR}/g";
+	print XNETF $line;
+    }
+    close(NETF);
+    close(XNETF);
 
-    foreach my $d ("/var/run/systemd/network","/etc/systemd/network") {
-	if (-d $d && opendir(my $dh,$d) == 0) {
-	    $network_file_count += grep { /\.network\$/ } readdir($dh);
-	    closedir($dh);
+    my @lines = (
+	"[NetDev]\n",
+	"Name=${XENBR}\n",
+	"Kind=bridge\n"
+    );
+    open(XNETDF,">/var/run/systemd/network/${XENBR}.netdev");
+    foreach my $line (@lines) {
+	print XNETDF $line;
+    }
+    close(XNETDF);
+
+    @lines = (
+	"[Match]\n",
+	"Name=${interface}\n",
+	"\n",
+	"[Network]\n",
+	"Bridge=$XENBR\n"
+    );
+    open(NETF,">/var/run/systemd/network/${interface}.network");
+    foreach my $line (@lines) {
+	print NETF $line;
+    }
+    close(NETF);
+
+    #
+    # If DNS is controlled by systemd-resolved, we have to migrate its
+    # configuration.
+    #
+    if (-l "/etc/resolv.conf") {
+	my $link = readlink("/etc/resolv.conf");
+	if ($link =~ /stub-resolv/) {
+	    my $dns = `resolvectl dns ${interface} | cut -d: -f2`;
+	    chomp $dns;
+	    my $domain = `resolvectl domain ${interface} | cut -d: -f2`;
+	    chomp $domain;
+	    if ($dns) {
+		print "xenbridge-setup: Updating systemd-resolved dns for $XENBR to '$dns'\n";
+		system("resolvectl dns ${XENBR} $dns");
+	    } else {
+		print STDERR "Failed to find DNS for ${interface} via resolvectl\n";
+	    }
+	    if ($domain) {
+		print "xenbridge-setup: Updating systemd-resolved domain for $XENBR to '$domain'\n";
+		system("resolvectl domain ${XENBR} $domain");
+	    } else {
+		print STDERR "Failed to find DNS domain for ${interface} via resolvectl\n";
+	    }
 	}
     }
-    if ($network_file_count > 0) {
-	system("systemctl restart systemd-networkd &");
-    }
-    else {
-	system("systemctl stop systemd-networkd");
-    }
+
+    #system("systemctl restart systemd-networkd &");
 }

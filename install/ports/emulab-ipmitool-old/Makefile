@@ -20,7 +20,8 @@ CPE_VENDOR=	sun
 GNU_CONFIGURE=	yes
 CONFIGURE_ARGS+=--enable-intf-lan --enable-intf-lanplus \
 		--disable-intf-imb --disable-intf-lipmi --disable-intf-bmc
-PLIST_FILES=	bin/ipmitool man/man1/ipmitool.1.gz man/man8/ipmievd.8.gz \
+PLIST_FILES=	bin/ipmitool \
+		share/man/man1/ipmitool.1.gz share/man/man8/ipmievd.8.gz \
 		sbin/ipmievd share/ipmitool/oem_ibm_sel_map \
 		${PERIODIC_DIR}/400.status-ipmi
 SUB_FILES=	status-ipmi.sh

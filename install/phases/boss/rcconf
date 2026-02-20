@@ -34,6 +34,7 @@ sub Install($$$)
 		       (("$APACHE_VERSION" eq "22" ||
 			 "$APACHE_VERSION" eq "24") ?
 			("${apache}_enable=\"YES\"",
+			 "${apache}_aslr_disable=\"YES\"",
 			 "${apache}_flags=\"-DSSL\"",
 			 "${apache}_profiles=\"www\"",
 			 "${apache}_www_configfile=\"${HTTPD_CONF}\"",

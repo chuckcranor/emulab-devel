@@ -1,0 +1,11 @@
+    <device id="@OTHERDEVID@" name="@OTHERNAME@" compression="metadata" introducer="false" skipIntroductionRemovals="false" introducedBy="">
+        <address>@OTHERADDR@</address>
+        <paused>false</paused>
+        <autoAcceptFolders>false</autoAcceptFolders>
+        <maxSendKbps>0</maxSendKbps>
+        <maxRecvKbps>0</maxRecvKbps>
+        <maxRequestKiB>0</maxRequestKiB>
+        <untrusted>false</untrusted>
+        <remoteGUIPort>0</remoteGUIPort>
+        <numConnections>0</numConnections>
+    </device>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -72,6 +72,12 @@ sub SendStatus($)
 {
     my ($status) = @_;
     
+    if ($status) {
+	print "Status: 400 Bad Request\n";
+    }
+    else {
+	print "Status: 202 Accepted\n";
+    }
     print "Content-Type: text/plain \n\n";
     print "We love all profiles equally.\n";
     print "Exited with $status\n";

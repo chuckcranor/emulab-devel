@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,11 @@
 # }}}
 #
 include_once("defs.php3");
+
+if (!$CLASSICWEB_OVERRIDE) {
+    RedirectToPortal("getcreds.php", "node=$node");
+    return;
+}
 
 #
 # Only known and logged in users can do this.

@@ -180,6 +180,19 @@ $(function ()
 	$('#linktest_div').html(linktestString);
 	$('#destroy_div').html(destroyString);
 	$('#txgraph_div').html(templates["txgraph"]);
+
+        if (! window.APT_OPTIONS.isadmin) {
+            var mailto = "mailto:" + window.SUPPORT +
+                "?subject=Request assistance with experiment " +
+                expinfo.project + "/" + expinfo.name +
+                "&body=%0A%0A##---- PLEASE TYPE YOUR QUESTION ABOVE THIS LINE ----##" +
+                "%0A%0A" + window.location.href;
+            mailto = mailto.replace(/\ /g, "%20");
+            $('#request-help-button').attr("href", mailto);
+        }
+        else {
+            $('#request-info-button').click(RequestInfo);
+        }
 	
 	// Not allowed to copy repobased profiles.
 	if (expinfo.repourl) {
@@ -444,17 +457,17 @@ $(function ()
 	}
      }
 
-  function addTutorialNotifyTab(id)
-  {
-    var allTabs = $('#quicktabs_ul li');
-    allTabs.each(function () {
-      if ($(this).find('a').attr('href') === ('#' + id)) {
-	$(this).on('show.bs.tab', function () {
-	  APT_OPTIONS.updatePage({ 'status_tab': id });
-	});
-      }
-    });
-  }
+    function addTutorialNotifyTab(id)
+    {
+        var allTabs = $('#quicktabs_ul li');
+        allTabs.each(function () {
+            if ($(this).find('a').attr('href') === ('#' + id)) {
+	        $(this).on('show.bs.tab', function () {
+	            APT_OPTIONS.updatePage({ 'status_tab': id });
+	        });
+            }
+        });
+    }
   
     //
     // The status watch is a periodic timer, but we sometimes want to
@@ -470,65 +483,70 @@ $(function ()
     {
 	GetStatus();
 	statusID = setInterval(GetStatus,
-                               (window.APT_OPTIONS.slowdown ? 30000 : 5000));
+                               (window.APT_OPTIONS.slowdown ? 15000 : 5000));
+
+        $(document).on("visibilitychange", function() {
+            if (document.visibilityState === "hidden") {
+                console.info("Page is hidden, stopping activity");
+            }
+            else {
+                console.info("Page is visible, resuming activity");
+                GetStatus();
+            }
+        });        
     }
-    
+
     function GetStatus()
     {
 	//console.info("GetStatus", statusBusy, statusHold);
-	
-	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
 	    return;
-	
-	var callback = function(json) {
-            lastStatusStamp = new Date();
-            
-	    // Watch for logged out, stop the loop. User will need to reload.
-	    if (json.code == 222) {
-		clearInterval(statusID);
-		alert("You are no longer logged in, please refresh to " +
-		      "continue getting page updates");
-	    }
-	    else {
-		StatusWatchCallBack(json, function () {
-		    if (instanceStatus == 'terminated') {
-			clearInterval(statusID);
-		    }
-		    else {
-			// Okay to do again next timeout.
-			statusBusy = 0;
-		    }
-		});
-	    }
-	}
+
         /*
          * Watch for a buried tab/window. Slow down polling since it is hard
          * on the server. But not completely, switch from every five seconds
          * to every few minutes.
          */
-        if (document.hidden !== undefined &&
-            document.hidden && lastStatusStamp) {
+       if (document.hidden && lastStatusStamp) {
             var diff = (new Date().getTime() - lastStatusStamp) / 1000;
             if (0) {
                 console.info("we are hidden and have not updated status for " +
                              diff + " seconds");
             }
             if (diff < 120) {
-                //console.info("Skipping this status call");
+                console.info("Skipping this status call");
                 return;
             }
         }
+        
+	var callback = function(json) {
+            lastStatusStamp = new Date();
+
+            if (json.code < 0) {
+                console.info("Network error");
+		// Okay to try again next timeout.
+		statusBusy = 0;
+                return;
+            }
+	    else if (json.code == 222) {
+		clearInterval(statusID);
+		alert("You are no longer logged in, please refresh to " +
+		      "continue getting page updates");
+                return;
+            }
+	    StatusWatchCallBack(json, function () {
+		if (instanceStatus == 'terminated') {
+		    clearInterval(statusID);
+		}
+		else {
+		    // Okay to do again next timeout.
+		    statusBusy = 0;
+		}
+	    });
+	};
 	statusBusy = 1;
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "status",
-					    "GetInstanceStatus",
-					     {"uuid" : uuid});
-	xmlthing.fail(function(jqXHR, textStatus) {
-	    console.info("GetStatus failed: " + textStatus);
-	    statusBusy = 0;
-	});
-	xmlthing.done(callback);
+	sup.CallServerMethod(ajaxurl, "status", "GetInstanceStatus",
+			     {"uuid" : uuid}, callback);
     }
 
     // Call back for above.
@@ -575,6 +593,11 @@ $(function ()
 	    expinfo.paniced = 1;
 	    instanceStatus = "quarantined";
 	}
+	// Ditto the logfile, which can change for many reason
+	if (_.has(json.value, "logfile_url")) {
+	    ShowLogfile(json.value.logfile_url);
+	}
+        
 	if (instanceStatus != lastStatus || instanceStatus == "created" ||
 	    json.value.canceled) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
@@ -585,10 +608,6 @@ $(function ()
 	    var bgtype = "panel-info card-info";
 	    status_message = "Please wait while we get your experiment ready";
 
-	    // Ditto the logfile, which can change.
-	    if (_.has(json.value, "logfile_url")) {
-		ShowLogfile(json.value.logfile_url);
-	    }
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
 	    }
@@ -611,6 +630,10 @@ $(function ()
 		ShowBindings();
 		status_message = "Your experiment cannot be instantiated " +
 		    "yet, trying again in a few minutes.";
+                
+                if (json.value["deferred_reason"]) {
+                    status_html += " (" + json.value["deferred_reason"] + ")";
+                }
 		ShowPendingInfo(json.value);
 	    }
 	    else if (instanceStatus == 'scheduled') {
@@ -627,6 +650,15 @@ $(function ()
 		status_message =
 		    "Your experiment is delayed while we request spectrum " +
 		    "from the RDZ";
+	    }
+	    else if (instanceStatus == 'rdznotready') {
+		status_html = "RDZ Wait (<span class='text-info'>" +
+		    "Waiting for the RDZ to answer the phone</span>" + ")";
+		ProgressBarUpdate();
+		ShowRspec();
+		ShowBindings();
+		status_message =
+		    "Your experiment is delayed until we can contact the RDZ";
 	    }
 	    else if (instanceStatus == 'prestaging') {
 		status_html = "prestaging";
@@ -936,7 +968,7 @@ $(function ()
 	    case 'scheduled':
 	    case 'pending':
 	    case 'rdzwait':
-	        refresh = reloadtopo = extend = snapshot = destroy = 0;
+	        refresh = reloadtopo = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
 	    
@@ -947,15 +979,16 @@ $(function ()
 
 	    case 'quarantined':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
-	        release = 1;
+	        release = 1
 	        // We let admins terminate/refresh a quarantined experiment.
 	        if (isadmin) {
-		    terminate = refresh = 1;
+		    terminate = refresh = extend = 1;
 		}
   	        break;
 
 	    case 'failed':
 	    case 'imaging-failed':
+	    case 'rdzerror':
 	        refresh = reloadtopo = terminate = destroy = 1;
 	        extend = snapshot = 0;
   	        break;
@@ -1202,7 +1235,7 @@ $(function ()
 	    // Trigger status update.
 	    GetStatus();
 	}
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "Refresh",
@@ -1231,7 +1264,7 @@ $(function ()
 	    sup.HideModal('#waitwait-modal');
 	}
 	statusHold = 1;
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "ReloadTopology",
@@ -1869,6 +1902,10 @@ $(function ()
 		      "while it is in recovery mode");
 		return;
 	    }
+            if (! _.has(imageablenodes, node)) {
+		alert(node + " is not a node that can be reloaded");
+		return;
+            }
 	}
 	DoRebootReload("reload", nodeList);
     }
@@ -1904,7 +1941,7 @@ $(function ()
 		// Trigger status update.
 		GetStatus();
 	    }
-	    sup.ShowModal('#waitwait-modal');
+	    sup.ShowWaitWait();
 	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", method,
 						{"uuid"     : uuid,
 						 "node_ids" : nodeList});
@@ -1999,7 +2036,7 @@ $(function ()
 		args["clear"] = true;
 	    }
 	    console.info(inrecovery, args);
-	    sup.ShowModal('#waitwait-modal');
+	    sup.ShowWaitWait();
 	    var xmlthing = sup.CallServerMethod(ajaxurl, "status",
 						"Recovery", args);
 						
@@ -2812,6 +2849,10 @@ $(function ()
 			if (available === "true") {
 			    imageablenodes[node] = node_id;
 			}
+                        else {
+			    // Context menu option
+			    CMclone.find("li[id=reload]").addClass("hidden");
+                        }
 		    }
 		    else {
 			// All other named nodes are imageable
@@ -2946,6 +2987,8 @@ $(function ()
 		else {
 		    clone.find(' [name=delete]')
 			.parent().addClass('disabled');		    
+		    clone.find(' [name=delete]')
+                        .attr("disabled", true);
 		}
 		if (canrecover) {
 		    // Recovery button handler
@@ -3049,6 +3092,8 @@ $(function ()
 		else {
 		    clone.find(' [name=vnc]')
 			.parent().addClass('disabled');
+		    clone.find(' [name=vnc]')
+                        .attr("disabled", true);
 		}
 
 		// Optional service execution logs.
@@ -3073,6 +3118,12 @@ $(function ()
 		    .parent().removeClass('hidden');
 		// Context menu option
 		CMclone.find("li[id=nodetop]").removeClass("hidden");
+
+		// Reboot
+		clone.find(' [name=reboot]')
+		    .click(function (e) {
+			ActionHandler("reboot", [node]);
+		    });
 
 		// Insert into the table, we will attach the handlers below.
 		$('#listview_table')
@@ -3515,9 +3566,9 @@ $(function ()
 	var passwords = xml[0].getElementsByTagNameNS(EMULAB_NS, 'password');
 
 	// Search the instructions for the pattern.
-	var regex   = /\{password-.*\}/gi;
+	var regex   = /\{password-[^\}]+\}/gmi;
 	var needed  = itext.match(regex);
-	//console.log(needed);
+	//console.log("FindEncryptionBlocks needed", needed);
 
 	// Look for all the encryption blocks in the manifest ...
 	_.each(passwords, function (password) {
@@ -4341,7 +4392,7 @@ $(function ()
 
     function NewConsoleTab(client_id)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 
 	var callback = function(json) {
 	    console.info("NewConsoleTab", json);
@@ -4554,7 +4605,7 @@ $(function ()
 			   "Please wait ... </span>" +
 			   "<img src='" + spinner + "'/></center>");
 	
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 
 	var callback = function(json) {
 	    sup.HideModal('#waitwait-modal');
@@ -4608,7 +4659,7 @@ $(function ()
     //
     function DoServiceLogs(client_id)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait();
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -4681,7 +4732,7 @@ $(function ()
     //
     function ShowPortstatsTab()
     {
-	if (isadmin) {
+	if (1) {
 	    $('#show_portstats_li').removeClass("hidden");
 	    $("#Portstats").removeClass("hidden");
 	    var phandler = function () {
@@ -4820,6 +4871,8 @@ $(function ()
 	
 	if (! jacksInstance)
 	{
+            var first = true;
+            
 	    var modified_callback = function (object) {
 		_.each(object.nodes, function (node) {
 		    jacksIDs[node.client_id] = node.id;
@@ -4830,6 +4883,11 @@ $(function ()
 			node.id;
 		});
 		console.log("jacksIDs", object, jacksIDs, jacksSites);
+                if (first) {
+                    first = false;
+                    if (_.size(jacksIDs) == 0)
+                        return;
+                }
 		ShowManifest(object.rspec);
 		window.jacksIDS = jacksIDs;
 		window.jacksSites = jacksSites;
@@ -5196,10 +5254,13 @@ $(function ()
 	var spinwidth = null;
 	
 	if (instanceStatus == "created") {
-	    spinwidth = "25";
+	    spinwidth = "10";
+	}
+	else if (instanceStatus == "rdznotready") {
+	    spinwidth = "15";
 	}
 	else if (instanceStatus == "rdzwait") {
-	    spinwidth = "15";
+	    spinwidth = "20";
 	}
 	else if (instanceStatus == "provisioning" ||
 		 instanceStatus == "stitching") {
@@ -5539,55 +5600,19 @@ $(function ()
 	});
 	$('#destroy-experiment-modal .traffic-violation').click(function (e) {
 	    e.preventDefault();
-	    var msg =
-		"Please tell us what you are doing, you are sending a very\n" +
-		"unusual amount of traffic over the shared control network\n " +
-		"instead of your own internal network(s). Your internal\n" +
-		"networks have IP addresses in the 10.XXX.YYY.ZZZ range, see\n"+
-		"/etc/hosts on your nodes for the specific addresses to use\n" +
-		"in your software configuration.\n\n" +
-		"We need to know very soon so we do not have to terminate\n" +
-		"this experiment. You are not permitted to send high volume\n" +
-		"traffic on the public facing shared network!\n" +
-		"-------------------------------------------------------\n" +
-		$('#destroy-experiment-reason').val();		
-	    
-	    $('#destroy-experiment-reason').val(msg);
+
+	    $.get("template/controlnet-violation.txt", function(data) {
+                var msg = data + "\n" + $('#destroy-experiment-reason').val();
+	        $('#destroy-experiment-reason').val(msg);
+	    });
 	});
 	$('#destroy-experiment-modal .compromised').click(function (e) {
 	    e.preventDefault();
-	    var msg =
-		"This experiment is being quarantined because we have determined\n"+
-		"that one or more nodes in the experiment has been compromised\n"+
-		"and is engaged in improper activity. Here are guidelines for\n"+
-		"properly securing your nodes:\n\n" +
-                "If you are using Apache/Spark/Hadoop, it has has known\n" +
-		"vulnerabilities as described here:\n\n" +
-		"https://groups.google.com/forum/#!msg/cloudlab-users/qvGyZo8SIoE/vyiSgzRUDAAJ\n\n" +
-	        "Using weak passwords (especially those like 'hadoop',\n" +
-		"'root', 'linux', or 'admin') is strictly forbidden, even if\n"+
-		"online instructions tell you to do so.\n\n" +
-		"Starting web services on the public facing IP address, that\n"+
-		"are weakly protected (see note above about passwords) is\n" +
-		"also prohibited. Again, it does not matter what online\n" +
-		"instructions tell you to do, you must not enable weakly\n" +
-		"protected web services.\n\n" +
-		"Please note that you are fully responsible for the security\n"+
-		"of your nodes and any software you install on it.\n\n" +
-		"As soon as we know what you were doing and how you are\n" +
-		"going to prevent this from happening again, we can unfreeze\n"+
-		"your account.\n\n" +
-		"Once a node is compromised, the experiment must be terminated.\n" +
-		"If you have any data on the node you need, we can boot it into\n"+
-		"a memory based 'Recovery' system [1] where you can ssh into the\n"+
-		"experiment nodes, mount the filesystem [2], and copy that data off."+
-		"\n\n"+
-		"[1] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS\n"+
-		"[2] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS#mounting-the-root-filesystem\n"+
-		"-------------------------------------------------------\n" +
-		$('#destroy-experiment-reason').val();		
-	    
-	    $('#destroy-experiment-reason').val(msg);
+
+	    $.get("template/compromised.txt", function(data) {
+                var msg = data + "\n" + $('#destroy-experiment-reason').val();
+	        $('#destroy-experiment-reason').val(msg);
+	    });
 	});
 	if (isadmin) {
 	    $('#destroy-experiment-modal .traffic-violation,' +
@@ -5684,6 +5709,33 @@ $(function ()
 		     });
 		 });
 	});
+    }
+
+    /*
+     * Ask user for info
+     */
+    function RequestInfo()
+    {
+        var check = function () {
+	    var message = $.trim($('#request-info-message').val());
+            if (message == "") {
+                // Only one error.
+                $('#request-info-modal .error-message').removeClass("hidden");
+                return 1
+            }
+            $('#request-info-modal .error-message').addClass("hidden");
+            return 0
+        };
+        var getinfo = function () {
+	    var message = $.trim($('#request-info-message').val());
+	    var args = {"uuid" : uuid, "message" : message};
+	    sup.CallServerMethod(null, "status", "RequestInfo", args,
+			         function(json) {
+                                     console.info("RequestInfo", json);
+                                 });
+        };
+        $('#request-info-modal .error-message').addClass("hidden");
+	sup.ShowConfirmModal("#request-info-modal", getinfo, undefined, check);
     }
 
     /*
@@ -5875,6 +5927,12 @@ $(function ()
     
     function Modify()
     {
+        if (!jacksManifest) {
+            sup.SpitOops("oops", "Uh oh, there is no manifest for this " +
+                         "experiment, so Modify could fail badly. Please " +
+                         "contact support so that we can help you fix this.")
+            return;
+        }
 	// Need to fix this global.
 	window.EXPMODIFY = true;
 	newrspec = null;
@@ -5889,6 +5947,9 @@ $(function ()
 	    });
 	    modifyready = true;
 	}
+        // For the PP wizard
+	$('#paramdefs').val(JSON.stringify(expinfo.paramdefs));
+        $('#script_textarea').val(expinfo.script);
 
 	$('.ppwizard-cancel').click(function (event) {
 	    event.preventDefault();
@@ -6002,8 +6063,6 @@ $(function ()
 	    fromrepo         : expinfo.repourl ? true : false,
 	    rerun_instance   : expinfo.uuid,
 	    rerun_paramset   : null,
-	    paramdefs        : (expinfo.paramdefs ?
-				JSON.stringify(expinfo.paramdefs) : null),
 	    bindings         : expinfo.params, 
 	    setStepsMotion   : function (which) {
 		console.info("setStepsMotion", which);

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -699,7 +699,12 @@ sub rootPreConfig($;$)
     }
 
     # For bandwidth contraints.
-    mysystem("$MODPROBE ifb numifbs=$MAXIFB");
+    # NB: if >= Xen 4.16, shift to dynamic IFB allocation.
+    if ($xeninfo{xen_major} >= 4 && $xeninfo{xen_minor} >= 16) {
+        mysystem("$MODPROBE ifb");
+    } else {
+	mysystem("$MODPROBE ifb numifbs=$MAXIFB");
+    }
 
     # Create a DB to manage them. 
     my %MDB;
@@ -1342,6 +1347,7 @@ sub vnodeCreate($$$$)
     my $vdiskprefix = "sd";	# yes, this is right for FBSD too
     my $ishvm = 0;
     my $ispvh = 0;
+    my $ispvdisk = 0;
     my $os;
     
     if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
@@ -1368,12 +1374,10 @@ sub vnodeCreate($$$$)
 	    if ($imagemetadata->{'OSVERSION'} >= 12 &&
 		($xeninfo{xen_major} > 4 ||
 		 $xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
-		$vdiskprefix = "xvd";
 		$ispvh = 1;
 	    }
 	    # ...otherwise we assume that all 10.0 and above are PVHVM
 	    elsif ($imagemetadata->{'OSVERSION'} >= 10) {
-		$vdiskprefix = "hd";
 		$ishvm = 1;
 	    }
 	    #
@@ -1385,17 +1389,34 @@ sub vnodeCreate($$$$)
 		$ispvh = 0;
 	    }
 	}
+
+	# Always use paravirtualized disks for FreeBSD 12+ and Xen 4.11+
+	if ($imagemetadata->{'OSVERSION'} >= 12 &&
+	    ($xeninfo{xen_major} > 4 ||
+	     $xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
+	    $vdiskprefix = "xvd";
+	    $ispvdisk = 1;
+	} elsif ($ispvh) {
+	    $vdiskprefix = "xvd";
+	    $ispvdisk = 1;
+	} elsif ($ishvm) {
+	    $vdiskprefix = "hd";
+	} else {
+	    $vdiskprefix = "sd";
+	}
     }
     else {
 	$os = "Linux";
 
 	if ($xeninfo{xen_major} >= 4) {
 	    $vdiskprefix = "xvd";
+	    $ispvdisk = 1;
 	}
     }
     $private->{'os'} = $os;
     $private->{'ishvm'} = $ishvm;
     $private->{'ispvh'} = $ispvh;
+    $private->{'ispvdisk'} = $ispvdisk;
 
     # All of the disk stanzas for the config file.
     my @alldisks = ();
@@ -1724,7 +1745,8 @@ okay:
 		    system("strings $kernel | grep -q -i ubuntu") == 0) {
 		    my $ramres = FixRamFs($vnode_id, $ramdisk,$kernelconfig);
 		    if ($ramres < 0) {
-			fatal("xen_vnodeCreate: Failed to fix ramdisk");
+			print STDERR "Warning: failed to fix ramdisk; cannot use pygrub\n";
+			$usebootloader = 0;
 		    }
 		    elsif ($ramres == 0) {
 			# Ramfs needed to be changed, so cannot use pygrub.
@@ -1933,10 +1955,13 @@ okay:
     if ($ispvh) {
 	addConfig($vninfo, "type='pvh'", 2);
 	if ($os eq "FreeBSD") {
-	    my $rfs = "xbd0s1a";
+	    my $rfs = (($ispvdisk || $ispvh) ? "xbd" :
+		       ($ishvm ? "da" : "ada"));
 	    # XXX GUFI image
 	    if ($loadslice == 0 && $bootslice == 3) {
-		$rfs = "xbd0p3";
+		$rfs .= "0p3";
+	    } else {
+		$rfs .= "0s1a";
 	    }
 	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:$rfs'", 2);
 	}
@@ -1997,8 +2022,16 @@ okay:
 	}
     } else {
 	if ($os eq "FreeBSD") {
+	    my $rfs = (($ispvdisk || $ispvh) ? "xbd" :
+		       ($ishvm ? "da" : "ada"));
+	    # XXX GUFI image
+	    if ($loadslice == 0 && $bootslice == 3) {
+		$rfs .= "0p3";
+	    } else {
+		$rfs .= "0s1a";
+	    }
 	    addConfig($vninfo, "extra = 'boot_verbose=1" .
-		      ",vfs.root.mountfrom=ufs:/dev/da0s1a".
+		      ",vfs.root.mountfrom=ufs:/dev/$rfs".
 		      ",kern.bootfile=/boot/kernel/kernel'", 2);
 	}
 	else {
@@ -2336,11 +2369,13 @@ sub vnodePreConfig($$$$$){
 	    goto bad
 		if ($?);
 	
-	my $ldisk = "da";
-	if ($vninfo->{'ispvh'}) {
+	my $ldisk = "ada";
+	if ($vninfo->{'ispvdisk'}) {
+	    $ldisk = "xbd";
+	} elsif ($vninfo->{'ispvh'}) {
 	    $ldisk = "xbd";
 	} elsif ($vninfo->{'ishvm'}) {
-	    $ldisk = "ada";
+	    $ldisk = "da";
 	}
 	if (-e "$vnoderoot/etc/dumpdates") {
 	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\);/dev/$ldisk;' ".
@@ -2374,6 +2409,15 @@ sub vnodePreConfig($$$$$){
 	#
 	if ($vninfo->{'ishvm'} || $vninfo->{'ispvh'}) {
 	    unlink("$vnoderoot/etc/wall_cmos_clock");
+	}
+
+	#
+	# HVM cannot handle loading of latest (as of early 2025) PERC
+	# RAID kernel module. Make sure we don't try to load it.
+	#
+	if ($vninfo->{'ishvm'}) {
+	    mysystem2("sed -i.bak -e 's;^mpi3mr_load;#mpi3mr_load;' ".
+		  "  $vnoderoot/boot/loader.conf");
 	}
     }
 
@@ -2679,7 +2723,11 @@ sub vnodePreConfigExpNetwork($$$$)
     # Grab all of the IFBs we need. 
     #
     if (@$ldconfigs) {
-	$ifbs = AllocateIFBs($vmid, $ldconfigs, $private);
+	if ($xeninfo{xen_major} >= 4 && $xeninfo{xen_minor} >= 16) {
+	    $ifbs = AllocateIFBsDynamic($vmid, $ldconfigs, $private);
+	} else {
+	    $ifbs = AllocateIFBs($vmid, $ldconfigs, $private);
+	}
 	if (! defined($ifbs)) {
 	    return -1;
 	}
@@ -2693,7 +2741,10 @@ sub vnodePreConfigExpNetwork($$$$)
 	my $physical_dev;
         my $tag = 0;
 	my $ifname = "veth.${vmid}." . $interface->{'ID'};
-	
+	if ($xeninfo{xen_major}	>= 4 && $xeninfo{xen_minor} >= 16) {
+            $ifname = "veth${vmid}." . $interface->{'ID'};
+	}
+
 	#
 	# In the era of shared nodes, we cannot name the bridges
 	# using experiment local names (e.g., the link name).
@@ -2756,10 +2807,10 @@ sub vnodePreConfigExpNetwork($$$$)
 		my $sh  = "${script}.sh";
 		my $log = "${script}.log";
 		my $tag = "$vnode_id:" . $ldinfo->{'LINKNAME'};
-		my $ifb = pop(@$ifbs);
+		my $ifbname = pop(@$ifbs);
 
 		createExpNetworkScript($vmid, $interface, $brname,
-				       $ldinfo, "ifb$ifb", $script, $sh, $log);
+				       $ldinfo, $ifbname, $script, $sh, $log);
 	    }
 	}
 	#
@@ -3331,8 +3382,13 @@ sub vnodeDestroy($$$$)
     # restart it cause there are no more resources available (as might
     # happen on a shared node).
     #
-    ReleaseIFBs($vmid, $private)
-	if (exists($private->{'ifbs'}));
+    if (exists($private->{'ifbs'})) {
+	if ($xeninfo{xen_major} >= 4 && $xeninfo{xen_minor} >= 16) {
+	    ReleaseIFBsDynamic($vmid, $private);
+	} else {
+	    ReleaseIFBs($vmid, $private);
+	}
+    }
 
     #
     # XXX before we destroy disks, we need to tear down any LVM VG/PVs
@@ -5094,6 +5150,27 @@ sub createExpBridges($$$)
 		print STDERR "createExpBridges: could not ifconfig $brname\n";
 		goto bad;
 	    }
+
+	    #
+	    # NB: something changed at Xen 4.16/Linux 5.15, where if the
+	    # net.bridge.bridge-nf-call-iptables sysctl is enabled (which we
+	    # do so that we can firewall/nat the control net bridge ifaces),
+	    # iptables rules apply to the expt net bridges as well.  This
+	    # seems to be new behavior, because although we set the default
+	    # global FORWARD chain policy to DROP, and do not create
+	    # iptables rules for expt net bridges, in Xen 4.11/Linux 5.4,
+	    # the bridge forwarded ip packets just fine.  In Xen 4.16/Linux
+	    # 5.15, this behavior has changed, and ip traffic is not
+	    # forwarded unless we add the basic allow-all forwarding rule
+	    # below.
+	    #
+	    my @rules = ("-I FORWARD -i $brname -o $brname -j ACCEPT");
+	    TBDebugTimeStamp("createExpBridges: installing iptables expt forward-all rule");
+	    if (DoIPtables(@rules)) {
+		TBDebugTimeStamp("  failed to install iptables rules");
+		goto bad;
+	    }
+	    TBDebugTimeStamp("  installed iptables expt forward-all rule");
 	}
 	# record bridge in use.
 	$private->{'physbridges'}->{$brname} = $brname;
@@ -5171,6 +5248,19 @@ sub destroyExpBridges($$)
 		delbr($brname);
 		delete($private->{'physbridges'}->{$brname})
 		    if (! $?);
+	    }
+	    
+
+	    #
+	    # NB: remove expt bridge forward-all rule; see createExpBridges
+	    # above.
+	    #
+	    my @rules = ("-D FORWARD -i $brname -o $brname -j ACCEPT");
+	    TBDebugTimeStamp("createExpBridges: removing iptables expt forward-all rule");
+	    if (DoIPtablesNoFail(@rules)) {
+		TBDebugTimeStamp("  failed to remove iptables expt forward-all rule");
+	    } else {
+		TBDebugTimeStamp("  removed iptables expt forward-all rule");
 	    }
 	}
     }
@@ -5496,7 +5586,7 @@ sub createThinPool($)
     my $smallest;
     my $num = 0;
     my $tsize = 0;
-    foreach my $dsize (`pvs --noheadings -o pv_free $devs`) {
+    foreach my $dsize (`pvs --noheadings -o pv_free --units g $devs`) {
 	if ($dsize =~ /(\d+\.\d+)([mgt])/i) {
 	    $dsize = $1;
 	    my $u = lc($2);
@@ -5533,7 +5623,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate --chunksize 128k -Zy -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate --chunksize 128k -Zy -y -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";
@@ -5600,6 +5690,17 @@ sub lvmCreateVolume($$$)
     my ($name,$size,$flag) = @_;
 
     #
+    # If there is no thinpool, do not even try
+    #
+    if (($flag == ALLOC_INPOOL() || $flag == ALLOC_PREFERINPOOL) &&
+	!doingThinLVM()) {
+	if ($flag == ALLOC_INPOOL()) {
+	    goto fail;
+	}
+	$flag = ALLOC_NOPOOL();
+    }
+    
+    #
     # XXX not everything benefits from being created in our thinpool.
     # In particular, volumes that won't be cloned will suffer a
     # first-access penalty as blocks are allocated on demand rather
@@ -5625,7 +5726,7 @@ again:
 	$flag = ALLOC_NOPOOL();
     }
     if ($flag == ALLOC_NOPOOL() || $flag == ALLOC_PREFERNOPOOL) {
-	if (!mysystem2("lvcreate -Zy -L $size -n $name -i${STRIPE_COUNT} ".
+	if (!mysystem2("lvcreate -Zy -y -L $size -n $name -i${STRIPE_COUNT} ".
 		       "$VGNAME")) {
 	    return 0;
 	}
@@ -5807,9 +5908,94 @@ sub lvmGC($$$)
 #
 # Deal with IFBs.
 #
-#
-# Deal with IFBs.
-#
+sub AllocateIFBsDynamic($$$)
+{
+    my ($vmid, $node_lds, $private) = @_;
+    my @ifbs = ();
+
+    #
+    # It is unclear if we need to grab the global lock to allocate IFBs, but
+    # let's be cautious.
+    #
+    TBDebugTimeStamp("AllocateIFBsDynamic: grabbing global lock $GLOBAL_CONF_LOCK")
+	if ($lockdebug);
+    if (TBScriptLock($GLOBAL_CONF_LOCK, TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     1800) != TBSCRIPTLOCK_OKAY()) {
+	print STDERR "Could not get the global lock after a long time!\n";
+	return undef;
+    }
+    TBDebugTimeStamp("  got global lock")
+	if ($lockdebug);
+
+    #
+    # We need an IFB for every ld.
+    #
+    my $needed = scalar(@$node_lds);
+    for (my $i = 0; $i < $needed; $i++) {
+	my $ifbname = "ifb${vmid}.${i}";
+	# Check if ifb device already exists; this happens on halt/boot
+	# where device is allowed to persist.
+	if (-e "/sys/class/net/$ifbname") {
+	    TBDebugTimeStamp("AllocateIFBsDynamic: $ifbname for $vmid exists, reusing");
+	} else {
+	    # Create ifb.
+	    mysystem2("ip link add $ifbname type ifb");
+	    if ($?) {
+		print STDERR "AllocateIFBsDynamic: failed to add $ifbname, aborting\n";
+		goto bad;
+	    }
+	}
+	# Record ifb in use
+	$private->{'ifbs'}->{$i} = $ifbname;
+	push(@ifbs, $ifbname);
+    }
+
+    TBDebugTimeStamp("  releasing global lock")
+	if ($lockdebug);
+    TBScriptUnlock();
+    return \@ifbs;
+
+  bad:
+    foreach my $ifbname (@ifbs) {
+	mysystem2("ip link del $ifbname");
+	if ($?) {
+	    print STDERR "AllocateIFBsDynamic: failed to remove $ifbname in post-failure cleanup pass!\n";
+	}
+    }
+    TBScriptUnlock();
+    return undef;
+}
+
+sub ReleaseIFBsDynamic($$)
+{
+    my ($vmid, $private) = @_;
+    
+    TBDebugTimeStamp("ReleaseIFBsDynamic: grabbing global lock $GLOBAL_CONF_LOCK")
+	if ($lockdebug);
+    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1800) != TBSCRIPTLOCK_OKAY()) {
+	print STDERR "Could not get the global lock after a long time!\n";
+	return undef;
+    }
+    TBDebugTimeStamp("  got global lock")
+	if ($lockdebug);
+
+    #
+    # For each ifbname we allocated to this vmid, delete.
+    #
+    foreach my $ifbidx (keys(%{$private->{'ifbs'}})) {
+	my $ifbname = $private->{'ifbs'}->{$ifbidx};
+	mysystem2("ip link del $ifbname");
+	if ($?) {
+	    print STDERR "ReleaseIFBsDynamic: failed to delete $ifbname for $vmid!\n";
+	}
+    }
+    TBDebugTimeStamp("  releasing global lock")
+	if ($lockdebug);
+    TBScriptUnlock();
+    delete($private->{'ifbs'});
+    return 0;
+}
+
 sub AllocateIFBs($$$)
 {
     my ($vmid, $node_lds, $private) = @_;
@@ -5820,7 +6006,7 @@ sub AllocateIFBs($$$)
     if (TBScriptLock($GLOBAL_CONF_LOCK, TBSCRIPTLOCK_INTERRUPTIBLE(),
 		     1800) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the global lock after a long time!\n";
-	return -1;
+	return undef;
     }
     TBDebugTimeStamp("  got global lock")
 	if ($lockdebug);
@@ -5863,10 +6049,11 @@ sub AllocateIFBs($$$)
     
     while ($n && $i < $MAXIFB) {
 	if (!defined($MDB{"$i"}) || $MDB{"$i"} eq "" || $MDB{"$i"} eq "$vmid") {
+	    my $ifbname = "ifb$i";
 	    $MDB{"$i"} = $vmid;
 	    # Record ifb in use
-	    $private->{'ifbs'}->{$i} = $i;
-	    push(@ifbs, $i);
+	    $private->{'ifbs'}->{$i} = $ifbname;
+	    push(@ifbs, $ifbname);
 	    $n--;
 	}
 	$i++;
@@ -5886,7 +6073,7 @@ sub ReleaseIFBs($$)
 	if ($lockdebug);
     if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1800) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the global lock after a long time!\n";
-	return -1;
+	return undef;
     }
     TBDebugTimeStamp("  got global lock")
 	if ($lockdebug);
@@ -6065,9 +6252,13 @@ sub ExtractKernelFromLinuxImage($$$)
     my $lvmpath = lvmVolumePath($lvname);
     my $configfile = "$outdir/kernel-config";
     my $PYGRUB;
+    my $OURPYGRUB = 0;
 
-    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub") {
+    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub", "/bin/pygrub") {
 	if (-e $pgc) {
+	    if ($pgc eq "$BINDIR/pygrub") {
+		$OURPYGRUB = 1;
+	    }
 	    $PYGRUB = $pgc;
 	    last;
 	}
@@ -6095,12 +6286,35 @@ sub ExtractKernelFromLinuxImage($$$)
 	    print STDERR "pygrub returned $stat ... \n";
 	    return ();
 	}
-	my @ret = ("$outdir/kernel", "$outdir/ramdisk");
+	my $kernel;
+	my $ramdisk;
+	if (!opendir(GTDIR, "$outdir")) {
+	    print STDERR "pygrub did not create $outdir ... \n";
+	    return ();
+	}
+	while (my $fname = readdir(GTDIR)) {
+	    if ($fname =~ /kernel/) {
+		$kernel = "$outdir/$fname";
+	    } elsif ($fname =~ /ramdisk/) {
+		$ramdisk = "$outdir/$fname";
+	    }
+	}
+	closedir(GTDIR);
+	if (!defined($kernel)) {
+	    print STDERR "pygrub did not create $outdir/kernel ... \n";
+	    return ();
+	}
+	if (!defined($ramdisk)) {
+	    print STDERR "pygrub did not create $outdir/ramdisk ... \n";
+	    return ();
+	}
+	my @ret = ($kernel, $ramdisk);
+	print STDERR "ExtractKernelFromLinuxImage: found kernel ($kernel) and ramdisk ($ramdisk)\n";
 
 	#
 	# Since that worked, also extract the config file for the kernel.
 	#
-	my $kstring = `file $outdir/kernel`;
+	my $kstring = `file $kernel`;
 	if (!$? && $kstring ne "") {
 	    if ($kstring =~ /version ([-\.\w]+) /i) {
 		my $fname = "config-" . $1;
@@ -6117,8 +6331,12 @@ sub ExtractKernelFromLinuxImage($$$)
 			}
 		    }
 		    mysystem2("umount $vnoderoot");
+		} else {
+		    print STDERR "ExtractKernelFromLinuxImage: failed to mount rootfs $rootpartition\n";
 		}
 	    }
+	} else {
+	    print STDERR "ExtractKernelFromLinuxImage: could not find config file ($kstring)\n";
 	}
 	return @ret;
     }
@@ -6128,8 +6346,13 @@ sub ExtractKernelFromLinuxImage($$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
-	      "--output-directory=$outdir $lvmpath");
+	if ($OURPYGRUB) {
+	    exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
+		 "--output-directory=$outdir $lvmpath");
+	} else {
+	    exec("$PYGRUB --quiet --output-format=simple ".
+		 "--output-directory=$outdir $lvmpath");
+	}
 	exit(1);
     }
 }

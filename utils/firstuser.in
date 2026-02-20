@@ -53,6 +53,7 @@ my $mkproj  = '@prefix@/sbin/mkproj';
 my $mkgroup = '@prefix@/sbin/mkgroup';
 my $mkacct  = '@prefix@/sbin/tbacct';
 my $modgrps = '@prefix@/sbin/modgroups';
+my $exsetup = '@prefix@/sbin/exports_setup';
 
 my $acctproxy = '@prefix@/sbin/accountsetup';
 
@@ -208,6 +209,8 @@ if ($CONTROL ne $BOSSNODE) {
 	       "'$acctproxy setgroups $protouser $agid $Ggid'")) {
 	die "Unable to add user to the ops password file!\n";
     }
+    # make sure we see the mount (for autofs)
+    system("$exsetup");
 }
 
 # These users do not really need a uuid, but give them one anyway.

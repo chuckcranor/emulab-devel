@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ AC_SUBST(PATH)
 CPPFLAGS="-I/usr/local/include"
 
 # BEGIN Python detection. For the event library.
-AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9)
+AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9 python3.11)
 
 if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
@@ -1509,6 +1509,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/panic tbsetup/tbrsync tbsetup/nfstrace \
 	tbsetup/checkup/GNUmakefile tbsetup/checkup/checkup_daemon \
 	tbsetup/libtblog.pm tbsetup/template_cvsroot/GNUmakefile \
+	tbsetup/mkatten \
 	tmcd/GNUmakefile tmcd/tmcd.restart \
 	utils/GNUmakefile utils/vlandiff utils/vlansync utils/delay_config \
 	utils/sshtb utils/create_image utils/node_admin \
@@ -1532,7 +1533,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
 	www/swish.conf www/websearch \
-	www/garcia-telemetry/GNUmakefile www/tutorial/GNUmakefile \
+	www/garcia-telemetry/GNUmakefile \
 	www/sec-check/GNUmakefile www/emusearch.xml \
 	vis/GNUmakefile vis/webvistopology vis/dbvistopology \
 	vis/prerender vis/prerender_all vis/render \
@@ -1576,8 +1577,9 @@ outfiles="$outfiles Makeconf GNUmakefile \
         protogeni/rspec-emulab/0.1/GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
-        apt/GNUmakefile apt/fabric/GNUmakefile \
+        apt/GNUmakefile apt/fabric/GNUmakefile apt/portal-rest/GNUmakefile \
         powder/GNUmakefile powder/sasproxy/GNUmakefile \
+        powder/syncthing/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
         scopus/GNUmakefile \
@@ -1672,6 +1674,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif_emulab \
  clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif_emulab \
  clientside/tmcc/freebsd14/GNUmakefile clientside/tmcc/freebsd14/netif_emulab \
+ clientside/tmcc/freebsd15/GNUmakefile clientside/tmcc/freebsd15/netif_emulab \
  clientside/tmcc/freenas11/GNUmakefile clientside/tmcc/truenas13/GNUmakefile \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \

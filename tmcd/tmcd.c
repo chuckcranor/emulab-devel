@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2024 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -266,6 +266,7 @@ typedef struct {
         int		genisliver_idx;
         int		geniflags;
 	int		isnonlocal_pid;
+	int		private;
 	unsigned short  taintstates;
 	unsigned short  experiment_keys;
 	char            nfsmounts[TBDB_FLEN_TINYTEXT];
@@ -2091,7 +2092,6 @@ COMMAND_PROTOTYPE(doifconfig)
 	char		clause[BUFSIZ];
 	char		buf[MYBUFSIZE], *ebufp = &buf[MYBUFSIZE];
 	int		nrows;
-	int		num_interfaces=0;
 	int		cookedgeninode = (reqp->geniflags & 0x2);
 	int		allowjumboframes = 0;
 
@@ -2321,7 +2321,6 @@ COMMAND_PROTOTYPE(doifconfig)
 
 			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
-			num_interfaces++;
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
 		}
@@ -3232,7 +3231,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "join `groups` as g on p.pid=g.pid "
 				 "where p.trust!='none' "
 				 "      and u.webonly=0 "
-                                 "      and g.unix_id is not NULL "
+                                 "      and g.unix_gid is not NULL "
 				 "      and u.status='active' order by u.uid",
 				 15, passwdfield);
 	}
@@ -3592,7 +3591,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		/*
 		 * Watch for a swapper only project flag.
 		 */
-		if (swapper_only && !isleader &&
+		if ((swapper_only || reqp->private) && !isleader &&
 		    strcmp(reqp->swapper, row[0])) {
 			goto skipkeys;
 		}
@@ -6078,12 +6077,13 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 		  int *disknump, int *biosdisknump, int *dotrimp,
 		  char **useacpip, char **useasfp, char **noclflushp,
 		  char **vgaonlyp, char **consoletypep, char **dom0memp,
-		  char **disableifp)
+		  char **disableifp, char **diskserialp)
 {
 	MYSQL_RES	*res2;
 	MYSQL_ROW	row2;
 	char		*disktype, *useacpi, *useasf, *noclflush, *dom0mem;
 	char		*vgaonly, *consoletype, *disableif, *attrclause;
+	char		*diskserial;
 	int		disknum, biosdisknum, dotrim;
 	unsigned int	trimiv, trimtime;
 
@@ -6113,6 +6113,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 	 */
 	disktype = NULL;
 	disknum = DISKNUM;
+	diskserial = NULL;
 	biosdisknum = -1;
 	dotrim = 0;
 	trimiv = 0;
@@ -6148,6 +6149,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 	attrclause =
 		"(attrkey='bootdisk_unit' or "
 		" attrkey='bootdisk_bios_id' or "
+		" attrkey='bootdisk_serial' or "
 		" attrkey='bootdisk_trim' or "
 		" attrkey='bootdisk_trim_interval' or "
 		" attrkey='bootdisk_lasttrim' or "
@@ -6204,6 +6206,10 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 					dotrim = atoi(attrstr);
 					free(attrstr);
 				}
+				else if (strcmp(row2[0], "bootdisk_serial") == 0) {
+					if (diskserial) free(diskserial);
+					diskserial = attrstr;
+				}
 				else if (strcmp(row2[0], "bootdisk_trim_interval") == 0) {
 					trimiv = (unsigned int)atoi(attrstr);
 					free(attrstr);
@@ -6252,6 +6258,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 	*disktypep = disktype ? disktype : strdup(DISKTYPE);
 	*disknump = disknum;
 	*biosdisknump = biosdisknum;
+	*diskserialp = diskserial;
 	*useacpip = useacpi ? useacpi : strdup("unknown");
 	*useasfp = useasf ? useasf : strdup("unknown");
 	*noclflushp = noclflush ? noclflush : strdup("unknown");
@@ -6357,6 +6364,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 	int		nrows, zfill;
 	char		*server, *disktype, *useacpi, *useasf, *noclflush;
 	char		*vgaonly, *consoletype, *dom0mem, *disableif;
+	char		*diskserial;
 	int		disknum, biosdisknum, dotrim, heartbeat;
 
 	/*
@@ -6368,7 +6376,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "   ov.version,pa.`partition`,iv.size,"
 			 "   iv.lba_low,iv.lba_high,iv.lba_size,iv.relocatable,"
 			 "   UNIX_TIMESTAMP(iv.updated),r.imageid_version,"
-			 "   iv.format "
+			 "   iv.format,"
+			 "   FIND_IN_SET('cloud-init',ov.osfeatures) as canci "
 			 "from current_reloads as r "
 			 "left join images as i on i.imageid=r.image_id "
 			 "left join image_versions as iv on "
@@ -6384,7 +6393,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "     pa.node_id=r.node_id and "
 			 "     pa.osid=iv.default_osid and loadpart=0 "
 			 "where r.node_id='%s' order by r.idx",
-			 21, reqp->nodeid);
+			 22, reqp->nodeid);
 
 	if (!res) {
 		error("doloadinfo: %s: DB Error getting loading address!\n",
@@ -6432,7 +6441,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 	 */
 	if (get_node_loadinfo(reqp, &server, &disktype, &disknum, &biosdisknum,
 			      &dotrim, &useacpi, &useasf, &noclflush,
-			      &vgaonly, &consoletype, &dom0mem, &disableif)) {
+			      &vgaonly, &consoletype, &dom0mem, &disableif,
+			      &diskserial)) {
 		mysql_free_result(res);
 		return 1;
 	}
@@ -6732,6 +6742,30 @@ COMMAND_PROTOTYPE(doloadinfo)
 				bufp += OUTPUT(bufp,ebufp - bufp," PATH=");
 		}
 
+		/*
+		 * Two unrelated features added at the same time.
+		 */
+		if (vers >= 45) {
+			/*
+			 * Bootdisk serial number.
+			 */
+			if (diskserial && strcmp(diskserial, "none") != 0) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " BOOTSERIAL=%s", diskserial);
+			}
+			
+			/*
+			 * Image is cloudinit aware.
+			 */
+			if (row[21] && row[21][0] && atoi(row[21]) > 0) {
+				/* XXX right now there is only 1. */
+				int ci = 1;
+
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " CLOUDINIT=%d", ci);
+			}
+		}
+		
 		/* Tack on the newline, finally */
 		bufp += OUTPUT(bufp, ebufp - bufp, "\n");
 
@@ -6750,6 +6784,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 		free(server);
 	if (disktype)
 		free(disktype);
+	if (diskserial)
+		free(diskserial);
 	if (useacpi)
 		free(useacpi);
 	if (useasf)
@@ -6960,7 +6996,7 @@ COMMAND_PROTOTYPE(donseconfigs)
  */
 COMMAND_PROTOTYPE(dostate)
 {
-	char 		newstate[128];	/* More then we will ever need */
+	char 		newstate[128+1]; /* More then we will ever need */
 	MYSQL_RES	*res;
 	int		nrows;
 	int		i;
@@ -7395,7 +7431,7 @@ COMMAND_PROTOTYPE(dosecurestate)
  */
 COMMAND_PROTOTYPE(doquoteprep)
 {
-	char            newstate[128];	/* More then we will ever need */
+	char            newstate[128+1]; /* More then we will ever need */
         ETPM_NONCE       nonce;
         char            nonce_hex[2*TPM_NONCE_BYTES + 1];
         int             i;
@@ -8035,7 +8071,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public,NULL "
+				 " r.rootkey_private,r.rootkey_public,NULL, "
+				 " e.private "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -8066,7 +8103,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 47, nodekey);
+				 48, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -8108,7 +8145,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
 				 " r.rootkey_private,r.rootkey_public, "
-				 " es.slice_uuid "
+				 " es.slice_uuid,e.private "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -8137,7 +8174,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 47, reqp->vnodeid, clause);
+				 48, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -8172,7 +8209,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
 				 " r.rootkey_private,r.rootkey_public, "
-				 " es.slice_uuid "
+				 " es.slice_uuid,e.private "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -8204,7 +8241,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 47, clause);
+				 48, clause);
 	}
 
 	if (!res) {
@@ -8244,6 +8281,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	reqp->isplabsvc    = (row[22] && strcasecmp(row[22], "0")) ? 1 : 0;
 	reqp->elab_in_elab = (row[23] && strcasecmp(row[23], "0")) ? 1 : 0;
 	reqp->singlenet    = (row[24] && strcasecmp(row[24], "0")) ? 1 : 0;
+	reqp->isdedicatedwa = (row[29] && !strncmp(row[29], "1", 1)) ? 1 : 0;
 	reqp->isdedicatedwa = (row[29] && !strncmp(row[29], "1", 1)) ? 1 : 0;
 	reqp->geniflags    = 0;
 	reqp->isnonlocal_pid = 0;
@@ -8401,6 +8439,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	if (row[46]) {
 		strcpy(reqp->slice_uuid, row[46]);
 	}
+	/* Private experiment */
+	reqp->private = (row[47] && !strncmp(row[47], "1", 1)) ? 1 : 0;
 	
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
@@ -14091,7 +14131,7 @@ static char *getgenistatus( tmcdreq_t *reqp ) {
 	row = mysql_fetch_row( res );
 
 	p = buf + snprintf( buf, sizeof buf, "{\"geni_urn\":\"%s\","
-			    "geni_slivers\":[", row[ 0 ] );
+			    "\"geni_slivers\":[", row[ 0 ] );
 	strcpy( expires, row[ 1 ] );
 
 	mysql_free_result( res );

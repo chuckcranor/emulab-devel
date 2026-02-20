@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -66,13 +66,13 @@ my $OURDOMAIN	= "@OURDOMAIN@";
 #
 # Stitcher is in a python virtualenv. 
 #
-my $VIRTUALENV =
-    ". $TB/venv/fabric/bin/activate ; ".
-    ". $TB/fabric/fabric_rc ; ";
+my $VIRTUALENV = ". $TB/venv/fabric/bin/activate ; ";
+my $FABRICENV  = ". $TB/fabric/fabric_rc ; ";
+
 my $GETCONFIG  = "$VIRTUALENV python $TB/fabric/getconfig.py ";
 my $SLICEINFO  = "$VIRTUALENV python $TB/fabric/getslice.py ";
 my $LISTSLICES = "$VIRTUALENV python $TB/fabric/listslices.py ";
-my $REFRESH    = "$VIRTUALENV fabric-cli tokens refresh ";
+my $REFRESH    = "$VIRTUALENV $FABRICENV fabric-cli tokens refresh ";
 my $DELETE     = "$VIRTUALENV python $TB/fabric/deleteslice.py ";
 my $RENEW      = "$VIRTUALENV python $TB/fabric/renewslice.py ";
 my $GETAD      = "$VIRTUALENV python $TB/fabric/getads.py ";

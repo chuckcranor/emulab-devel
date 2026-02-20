@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2022 University of Utah and the Flux Group.
+# Copyright (c) 2009-2022, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -310,7 +310,7 @@ while (1) {
 
 	$reload_args{'debug'}     = $debug;
 	$reload_args{'waitmode'}  = 2; # XXX Wait till reboot after reload.
-	$reload_args{'prepare'}   = 1; # XXX Clear out old disk metadata.
+	$reload_args{'prepare'}   = 2; # XXX Clear out old disk metadata.
 	$reload_args{'nodelist'}  = [ @nodenames ];
 	logit("Running osload on @nodenames", 0);
 	my $failures = $loadobj->osload(\%reload_args, \%reload_results);

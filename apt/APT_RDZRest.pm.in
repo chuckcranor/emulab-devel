@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -159,6 +159,7 @@ sub REST($$$$)
 	    print STDERR $client->responseContent() . "\n";
 	}
 	if ($client->responseCode() ne "200") {
+	    $rval->{"errorCode"} = $client->responseCode();
 	    print Dumper($rval);
 	}
 	$$prval = $rval;
@@ -263,7 +264,8 @@ sub GetElementID($;$)
 	next
 	    if (!defined($role_binding->{"element_id"}));
 
-	if ($role_name eq "owner" || $role_name eq "viewer") {
+	if ($role_name eq "owner" || $role_name eq "viewer" ||
+	    $role_name eq "member") {
 	    $id = $role_binding->{"element_id"};
 	    last;
 	}
@@ -282,6 +284,8 @@ sub New($$;$) {
     $url = APT_RDZRest::ZMCURL() if (!defined($url));
 
     my $self = $class->SUPER::Create($token, $url);
+    return undef
+	if (!defined($self));
     bless($self, $class);
     return $self;
 }
@@ -294,6 +298,8 @@ sub New($$;$) {
     $url = APT_RDZRest::DSTURL() if (!defined($url));
 
     my $self = $class->SUPER::Create($token, $url);
+    return undef
+	if (!defined($self));
     bless($self, $class);
     return $self;
 }
@@ -306,6 +312,8 @@ sub New($$;$) {
     $url = APT_RDZRest::IDENTITYURL() if (!defined($url));
 
     my $self = $class->SUPER::Create($token, $url);
+    return undef
+	if (!defined($self));
     bless($self, $class);
     return $self;
 }

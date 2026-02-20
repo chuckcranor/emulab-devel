@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 #
-# Copyright (c) 2004-2023 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -184,6 +184,10 @@ def init_server():
         URI = "https://" + XMLRPC_SERVER + ":" + str(XMLRPC_PORT) + prefix
         
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        try:
+            ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        except:
+            pass
         ctx.load_cert_chain(CERTIFICATE)
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE

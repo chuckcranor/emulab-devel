@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -455,6 +455,10 @@ EOF8
 dofreebsd() {
 	pchar=$freebsd_pchar
 
+	if [ -n "$SLICEFIX_CLOUDINIT" -a "$SLICEFIX_CLOUDINIT" != "0" ]; then
+	    echo "WARNING: cloud-init not supported for FreeBSD images yet!"
+	fi
+
 	if [ $OS = FreeBSD ]; then
 		vers=`uname -v | sed -e 's/FreeBSD \([0-9]\).*/\1/'`
 
@@ -483,7 +487,8 @@ dofreebsd() {
 	elif [ $OS = Linux ]; then
 		echo "Reloading partition table for $disk..."
 		if [ -x /usr/sbin/partprobe ]; then
-			/usr/sbin/partprobe $disk > /dev/null 2>&1
+			/usr/sbin/partprobe /dev/$disk
+			sleep 1
 		else
 			echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
 		fi
@@ -519,7 +524,7 @@ dofreebsd() {
 
 	mount -t $fstype -o $fsopts $rootdev /mnt 2> /dev/null || {
 		fsopts=ro,ufstype=ufs2
-		mount -t $fstype -o $fsopts $rootdev /mnt 2> /dev/null || {
+		mount -t $fstype -o $fsopts $rootdev /mnt || {
 			echo "RO-mount of $rootdev failed"
 			return 1
 		}
@@ -1202,7 +1207,7 @@ fixone() {
 	dofreebsd
 	return $?
 	;;
-    131|0x83|8300)
+    131|0x83|8300|8304)
 	dolinux
 	return $?
 	;;

@@ -24,10 +24,15 @@ BATCH=		yes
 RUN_DEPENDS+=	\
 	ansible:${PORTSDIR}/sysutils/ansible \
 	gnuplot:${PORTSDIR}/math/gnuplot-emulab \
-	racket:${PORTSDIR}/lang/racket \
 	syncthing:${PORTSDIR}/net/syncthing \
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \
 	bareos-fd:${PORTSDIR}/sysutils/bareos-client
+
+# Powder things
+# XXX we require a specific version of UHD so don't include it here
+#	uhd_find_devices:${PORTSDIR}/comms/uhd
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi
 
 # Things we like
 RUN_DEPENDS+=	\
@@ -40,12 +45,11 @@ RUN_DEPENDS+=	\
 	nmap:${PORTSDIR}/security/nmap \
 	smartctl:${PORTSDIR}/sysutils/smartmontools \
 	valgrind:${PORTSDIR}/devel/valgrind \
-	zip:${PORTSDIR}/archivers/zip \
+	zip:${PORTSDIR}/archivers/zip
 
 # For Leigh
 RUN_DEPENDS+=	\
 	autocutsel:${PORTSDIR}/deskutils/autocutsel \
-	vncserver:${PORTSDIR}/net/tigervnc-server \
 	xorg-fonts>=7.2:${PORTSDIR}/x11-fonts/xorg-fonts \
 	fvwm:${PORTSDIR}/x11-wm/fvwm2 \
 	xdpyinfo:${PORTSDIR}/x11/xdpyinfo \
@@ -53,6 +57,10 @@ RUN_DEPENDS+=	\
 	xrdb:${PORTSDIR}/x11/xrdb \
 	xset:${PORTSDIR}/x11/xset \
 	xsetroot:${PORTSDIR}/x11/xsetroot
+
+# This causes lots of multimedia crap packages to be installed
+# XXX hacked tigervnc makefile to not include ffmpeg, the primary culprit
+RUN_DEPENDS+=	vncserver:${PORTSDIR}/net/tigervnc-server
 
 # Unknown, but sound useful or important
 RUN_DEPENDS+=	\
@@ -71,7 +79,8 @@ RUN_DEPENDS+=	\
 # XXX for old binaries
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/ldconfig/compat10x-amd64:${PORTSDIR}/misc/compat10x \
-	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x
+	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x \
+	${LOCALBASE}/libdata/ldconfig/compat12x-amd64:${PORTSDIR}/misc/compat12x
 
 USES=		perl5 python:$(PY_VER) php
 

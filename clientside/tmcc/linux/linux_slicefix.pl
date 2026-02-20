@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #
-# Copyright (c) 2015-2024 University of Utah and the Flux Group.
+# Copyright (c) 2015-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1647,6 +1647,11 @@ sub main
 	my $lilo_default;
 	my $lilo_commandline = 0;
 
+	my $cloudinit = $ENV{"SLICEFIX_CLOUDINIT"};
+	if ($cloudinit) {
+	    print STDERR "WARNING: woulda, coulda, shoulda done the cloud-init thing!\n";
+	}
+	
 	my $old_uuid = get_uuid($root);
 	#
 	# Currently this break our UEFI images where the UUID is embedded
@@ -1657,6 +1662,9 @@ sub main
 	#set_random_rootfs_uuid($root);
 	disable_time_dependent_fsck($root);
 	my $fstype = mount_image($root, $imageroot);
+	# XXX there seems to be an issue if we run blkid (in get_uuid)
+	# too soon after the mount.
+	sleep(2);
 	my $uuid = get_uuid($root);
 	my $label = get_label($root);
 	my $bootloader = guess_bootloader($root);

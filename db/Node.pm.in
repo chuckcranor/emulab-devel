@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2024 University of Utah and the Flux Group.
+# Copyright (c) 2005-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2059,7 +2059,19 @@ sub requires_reservation($;$) {
 	$$stuff = $val if (defined($stuff));
 	return $val;
     }
-    return $val;
+    return NodeTypeInfo($self)->requires_reservation($stuff);
+}
+
+sub stated_noreboot($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "stated_noreboot", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->stated_noreboot($stuff);
 }
 
 sub root_password($) {
@@ -2112,6 +2124,53 @@ sub rfswitchSettings($$$$)
 	return -1;
     }
     return 0;
+}
+
+sub snmpitafterossetup($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "snmpitafterossetup", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->snmpitafterossetup($stuff);
+}
+
+sub snmpitbeforeossetup($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "snmpitbeforeossetup", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->snmpitbeforeossetup($stuff);
+}
+
+sub jailipbase_style($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "jailipbase_style", \$val);
+    return $val;
+}
+sub jailipbase_value($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "jailipbase_value", \$val);
+    return $val;
+}
+
+sub noidle_detection($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "noidle_detection", \$val);
+    return $val;
 }
 
 #
@@ -2239,8 +2298,10 @@ sub ClearInterfaces($)
 
     my $node_id = $self->node_id();
 
-    DBQueryWarn("update interfaces set IP='',IPaliases=NULL,mask=NULL,".
-		"       rtabid='0',vnode_id=NULL,current_speed='0',trunk='0' ".
+    DBQueryWarn("update interfaces set IP='',IPaliases=NULL,mask=NULL, ".
+		"       rtabid='0',vnode_id=NULL,current_speed='0', ".
+		"       trunk='0',trunk_mode='equal', ".
+		"       ptp='0',synce='0' ".
 		"where node_id='$node_id' and ".
 		"  role='" . TBDB_IFACEROLE_EXPERIMENT() . "'")
 	or return -1;
@@ -2725,6 +2786,8 @@ sub CreateVnodes($$$)
     my $nodeprefix;
     my $nodenum;
     my $ipbase;
+    my $ipbase_style = $node->jailipbase_style();
+    my $ipbase_value = $node->jailipbase_value();
 
     if ($isfednode) {
 	$nodeprefix = $nodetype->type();
@@ -2737,12 +2800,12 @@ sub CreateVnodes($$$)
 	$nodenum    = "$2$3";
 	$ipbase     = $nodenum;
     }
-    elsif ($pnode =~ /^(.*\D)(\d{1,3})$/) {
+    elsif (!$ipbase_style && $pnode =~ /^(.*\D)(\d{1,3})$/) {
 	$nodeprefix = $1;
 	$nodenum    = $2;
 	$ipbase     = $nodenum;
     }
-    else {
+    elsif (!$ipbase_style || $ipbase_style eq "control_ip") {
 	$nodeprefix = $pnode;
 	$nodenum    = "";
 	$ipbase     = 0;
@@ -4939,9 +5002,10 @@ sub NeedsAdminMFS($)
 #
 # Spectrum stuff.
 #
-sub AddSpectrum($$$)
+sub AddSpectrum($$;$$)
 {
-    my ($self, $spectrum, $iface) = @_;
+    my ($self, $spectrum, $iface, $purge) = @_;
+    $purge = 0 if (!defined($purge));
     my $node_id = $self->node_id();
     my @ifaces = ();
     require EmulabConstants;
@@ -4953,6 +5017,11 @@ sub AddSpectrum($$$)
 	if (Interface->LookupAll($self, \@ifaces)) {
 	    return -1;
 	}
+    }
+    if ($purge) {
+	DBQueryWarn("delete from interfaces_rf_limit ".
+		    "where node_id='$node_id'")
+	    or return -1;
     }
     foreach $iface (@ifaces) {
 	my $iface_id = $iface->iface();

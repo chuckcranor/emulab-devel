@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023, 2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -391,7 +391,7 @@ sub Delete($$)
 	}
 	if ($sliver->Delete($purge) != 0) {
 	    print STDERR "Could not delete $sliver from $self\n";
-	    $sliver->SetStatus("broken");
+	    #$sliver->SetStatus("broken");
 	    $broken++;
 	    last;
 	}
@@ -1197,6 +1197,8 @@ sub ActionStart($$;$@)
     my $msg = "SliverStart: ";
     my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     $flags      = 0 if (!defined($flags));
+    my $snmpitafterossetup  = 0;
+    my $snmpitbeforeossetup = 0;
     require Lan;
     require OSImage;
     require libossetup;
@@ -1301,6 +1303,14 @@ sub ActionStart($$;$@)
 
 	# Back pointer, see below.
 	$node->_sliver($sliver);
+
+	# Hack for the Benetel radios,
+	if ($node->snmpitafterossetup()) {
+	    $snmpitafterossetup = 1;
+	}
+	elsif ($node->snmpitbeforeossetup()) {
+	    $snmpitbeforeossetup = 1;
+	}
 
 	#
 	# If the node is a previous failure, we want to change the
@@ -1503,68 +1513,100 @@ sub ActionStart($$;$@)
     #
     my $snmpit_child;
 
-    if (!$experiment->skipvlans() &&
-	(VLan->ExperimentHasVLans($experiment) ||
-	 $flags & $ACTION_FLAGS_SYNCVLANS)) { 
-	$snmpit_child = fork();
-	if ($snmpit_child) {
-	    #
-	    # Parent just continues on, but will wait later, we cannot
-	    # return to the caller until snmpit is done. 
-	    #
-	    print STDERR "Forked off snmpit: process $snmpit_child\n";
-	}
-	else {
-	    EventFork();
-	    my $msg;
+    #
+    # We now have an option to delay snmpit till before or after OSSETUP runs.
+    #
+    my $dosnmpit = sub {
+	my $childpid;
 	
-	    DebugTimeStamp("snmpit started");
-	    if ($flags & $ACTION_FLAGS_SYNCVLANS) {
-		if (Lan->CompareVlansWithSwitches2($experiment)) {
-		    $msg .= "CompareVlansWithSwitches2 failed!\n";
-		    goto badsnmpit;
-		}
-		system("$SNMPIT -X $pid $eid");
-		if ($?) {
-		    $msg .= "Failed to synchronize vlans";
-		    goto badsnmpit;
-		}
+	if (!$experiment->skipvlans() &&
+	    (VLan->ExperimentHasVLans($experiment) ||
+	     $flags & $ACTION_FLAGS_SYNCVLANS)) { 
+	    $childpid = fork();
+	    if ($childpid) {
+		#
+		# Parent just continues on, but will wait later, we cannot
+		# return to the caller until snmpit is done. 
+		#
+		print STDERR "Forked off snmpit: process $childpid\n";
 	    }
 	    else {
-		my @diff = ();
-		my @same = ();
-	    
-		if (Lan->CompareVlansWithSwitches($experiment, \@diff,\@same)) {
-		    print STDERR "CompareVlansWithSwitches failed!\n";
-		    goto badsnmpit;
-		}
-		if (@diff) {
-		    system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
+		EventFork();
+		my $msg;
+	
+		DebugTimeStamp("snmpit started");
+		if ($flags & $ACTION_FLAGS_SYNCVLANS) {
+		    if (Lan->CompareVlansWithSwitches2($experiment)) {
+			$msg .= "CompareVlansWithSwitches2 failed!\n";
+			goto badsnmpit;
+		    }
+		    system("$SNMPIT -X $pid $eid");
 		    if ($?) {
-			$msg .= "Failed to remove obsolete VLANs.";
+			$msg .= "Failed to synchronize vlans";
 			goto badsnmpit;
 		    }
 		}
-		system("$SNMPIT -t $pid $eid");
-		if ($?) {
-		    $msg .= "Failed to setup vlans";
-		    goto badsnmpit;
-		}
-		if ($pid ne "@TUTORIALPID@") {
-		    system("$PORTSTATS -z -a -q $pid $eid");
-		}
-	    }
-	    DebugTimeStamp("snmpit finished");
-	    # Avoid END block processing
-	    POSIX::_exit(0);
+		else {
+		    my @diff = ();
+		    my @same = ();
 	    
-	  badsnmpit:
-	    print STDERR "Failed to setup vlans: $msg\n";
-	    # Avoid END block processing
-	    POSIX::_exit(-1);
+		    if (Lan->CompareVlansWithSwitches($experiment, \@diff,\@same)) {
+			print STDERR "CompareVlansWithSwitches failed!\n";
+			goto badsnmpit;
+		    }
+		    if (@diff) {
+			system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
+			if ($?) {
+			    $msg .= "Failed to remove obsolete VLANs.";
+			    goto badsnmpit;
+			}
+		    }
+		    system("$SNMPIT -t $pid $eid");
+		    if ($?) {
+			$msg .= "Failed to setup vlans";
+			goto badsnmpit;
+		    }
+		    if ($pid ne "@TUTORIALPID@") {
+			system("$PORTSTATS -z -a -q $pid $eid");
+		    }
+		}
+		DebugTimeStamp("snmpit finished");
+		# Avoid END block processing
+		POSIX::_exit(0);
+	    
+	      badsnmpit:
+		print STDERR "Failed to setup vlans: $msg\n";
+		# Avoid END block processing
+		POSIX::_exit(-1);
+	    }
+	}
+	return $childpid;
+    };
+    if (! $snmpitafterossetup) {
+	$snmpit_child = &$dosnmpit();
+    }
+    if ($snmpitbeforeossetup && defined($snmpit_child)) {
+	print STDERR "Waiting for snmpit process to finish before os_setup\n";
+
+	my $kid = waitpid($snmpit_child, 0);
+	if ($kid == $snmpit_child) {
+	    if ($?) {
+		$msg .= "Failed to set up experimental networks\n";
+		$bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
+		goto bad;
+	    }
+	    else {
+		print STDERR "Waiting for snmpit process done\n";
+	    }
+	    $snmpit_child = undef;
+	}
+	else {
+	    $bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
+	    $msg .= "Waitpid for snmpit process problem: $kid";
+	    goto bad;
 	}
     }
-    
+
     my @nodes = keys(%nodes);
     my $os_setup_rval  = 0;
     my $os_setup_output;
@@ -1614,6 +1656,11 @@ sub ActionStart($$;$@)
 	$slice->UnLockTables();
 	$msg = "canceled; terminating early";
 	goto bad;
+    }
+
+    # Do not worry about failures, this is just a hack for one node type.
+    if ($snmpitafterossetup) {
+	$snmpit_child = &$dosnmpit();
     }
 
     #
@@ -3811,7 +3858,7 @@ sub UnProvision($;$)
     foreach my $sliver (@links) {
 	if ($sliver->UnProvision() != 0) {
 	    print STDERR "Could not unprovision $sliver in $self\n";
-	    $sliver->SetStatus("broken");
+	    #$sliver->SetStatus("broken");
 	    next;
 	}
     }
@@ -3851,7 +3898,7 @@ sub UnProvision($;$)
 	foreach my $sliver (@sliverlist) {
 	    if ($sliver->UnProvision($nophysfree) != 0) {
 		print STDERR "Could not unprovision $sliver in $self\n";
-		$sliver->SetStatus("broken");
+		#$sliver->SetStatus("broken");
 		next;
 	    }
 	}
@@ -3859,7 +3906,7 @@ sub UnProvision($;$)
     foreach my $sliver (values(%pnodes)) {
 	if ($sliver->UnProvision($nophysfree) != 0) {
 	    print STDERR "Could not unprovision $sliver in $self\n";
-	    $sliver->SetStatus("broken");
+	    #$sliver->SetStatus("broken");
 	    next;
 	}
     }

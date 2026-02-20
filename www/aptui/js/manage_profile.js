@@ -226,6 +226,10 @@ $(function ()
 	    // Bind the copy to clipboard button for the push URL.
 	    window.APT_OPTIONS.
 		SetupCopyToClipboard("#copy-push-url");
+
+	    // Bind the copy to clipboard button for the push URL.
+	    window.APT_OPTIONS.
+		SetupCopyToClipboard("#repourl-copy-to-clipboard");
 	}
 	else {
 	    CopyProfile.InitCopyProfile('#copy-profile-button',
@@ -1372,17 +1376,17 @@ $(function ()
 	// Clear errors
 	$('#git-repo-modal [for=git-repo-url]').addClass("hidden");
 	$('#git-repo-modal .form-group').removeClass("has-error");
-	sup.HideModal('#git-repo-modal');
 	
 	var callback = function(json) {
 	    console.info("HandleGitRepoChange", json);
 
 	    if (json.code) {
-		sup.HideWaitWait();
-		sup.SpitOops("oops",
-			     "<pre><code>" +
-			     $('<div/>').text(json.value).html() +
-			     "</code></pre>");
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops",
+			         "<pre><code>" +
+			         $('<div/>').text(json.value).html() +
+			         "</code></pre>");
+                });
 		return;
 	    }
 	    fromrepo = 1;
@@ -1409,13 +1413,16 @@ $(function ()
 	if ($.trim($('#profile_name').val()) != "") {
 	    args["profile_name"] = $.trim($('#profile_name').val());
 	}
-	WaitWait("We are attempting to clone your repository. " +
-		 "Patience please.");
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
-					    "GetRepository", args);
-					    
-	xmlthing.done(callback);
+	sup.HideModal('#git-repo-modal', function () {
+	    sup.ShowWaitWait("We are attempting to clone your repository. " +
+		             "Patience please.", undefined, function () {
+	                         var xmlthing = sup.CallServerMethod(
+                                     ajaxurl,
+				     "manage_profile",
+				     "GetRepository", args);
+	                         xmlthing.done(callback);
+                             });
+        });
     }
 
     /*

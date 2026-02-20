@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,18 @@
 include("defs.php3");
 
 #
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$classic) {
+        RedirectToPortal("images.php");
+        return;
+    }
+}
+
+#
 #
 # Only known and logged in users allowed.
 #
@@ -31,18 +43,21 @@ $this_user = CheckLoginOrDie();
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 
+# Mere users do not see this page.
+if (!$CLASSICWEB_OVERRIDE) {
+    if (!$isadmin) {
+        RedirectToPortal("images.php");
+        return;
+    }
+}
+
 #
 # Admin users can see all ImageIDs, while normal users can only see
 # ones in their projects or ones that are globally available.
 #
 $optargs = OptionalPageArguments("searchfor", PAGEARG_STRING,
-				 "searchby",  PAGEARG_STRING,
-                                 "classic",   PAGEARG_BOOLEAN);
+				 "searchby",  PAGEARG_STRING);
 
-if (!$CLASSICWEB_OVERRIDE && !$classic) {
-    header("Location: apt/images.php");
-    return;
-}
 $extraclause = "";
 $extrajoin   = "";
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,8 +36,8 @@ class User
     #
     # For pedantic checks early in pages.
     #
-    function ValidWebID($token) {
-	if (! preg_match("/^[-\w]+$/", $token)) {
+    public static function ValidWebID($token) {
+	if (! preg_match("/^[-\w\.\@]+$/", $token)) {
 	    return 0;
 	}
 	return 1;
@@ -2037,6 +2037,53 @@ class User
 
         return 0;
     }
+
+    function AptURL()
+    {
+        global $APTBASE, $TBBASE;
+        $uid = $this->uid();
+
+        if ($APTBASE) {
+            $url = "$APTBASE/user-dashboard.php?user=$uid";
+        }
+        else {
+            $url = "$TBBASE/showuser.php3?user=$uid";
+        }
+        return $url;
+    }
     
+    #
+    # JWT token.
+    #
+    function GetRestToken()
+    {
+        $uid_idx = $this->uid_idx();
+
+        $query_result = DBQueryFatal(
+            "select *,UNIX_TIMESTAMP(expires) as expires from user_jwt_tokens ".
+            "where uid_idx='$uid_idx' and role='user' and scope_type='global'");
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        $row = mysql_fetch_array($query_result);
+        return $row;
+    }
+
+    #
+    # SSO code.
+    #
+    function GetSSOCode()
+    {
+        $uid     = $this->uid();
+        $uid_idx = $this->uid_idx();
+        $code    = GENHASH();
+        $expires = time() + 60;
+        
+        DBQueryFatal("insert into user_sso_codes set ".
+                     "  uid='$uid', uid_idx='$uid_idx', code='$code', ".
+                     "  expires=FROM_UNIXTIME($expires)");
+        return $code;
+    }
+    # https://www.cloudlab.us/dev/stoller/login.php?client_id=XXX&redirect_uri=https://www.cloudlab.us/dev/stoller/user-dashboard.php
 }
 ?>

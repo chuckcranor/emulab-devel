@@ -1,6 +1,6 @@
 diff -rcN tftp-hpa-5.2.orig/MCONFIG.in tftp-hpa-5.2/MCONFIG.in
 *** tftp-hpa-5.2.orig/MCONFIG.in	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/MCONFIG.in	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/MCONFIG.in	Fri Aug  1 13:42:09 2025
 ***************
 *** 31,36 ****
 --- 31,45 ----
@@ -45,7 +45,7 @@ diff -rcN tftp-hpa-5.2.orig/MCONFIG.in tftp-hpa-5.2/MCONFIG.in
   LDFLAGS = @LDFLAGS@
 diff -rcN tftp-hpa-5.2.orig/tftp/tftp.c tftp-hpa-5.2/tftp/tftp.c
 *** tftp-hpa-5.2.orig/tftp/tftp.c	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftp/tftp.c	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftp/tftp.c	Fri Aug  1 13:42:09 2025
 ***************
 *** 48,54 ****
   #define PKTSIZE    SEGSIZE+4
@@ -65,7 +65,7 @@ diff -rcN tftp-hpa-5.2.orig/tftp/tftp.c tftp-hpa-5.2/tftp/tftp.c
   static void nak(int, const char *);
 diff -rcN tftp-hpa-5.2.orig/tftpd/Makefile tftp-hpa-5.2/tftpd/Makefile
 *** tftp-hpa-5.2.orig/tftpd/Makefile	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftpd/Makefile	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/Makefile	Fri Aug  1 13:42:09 2025
 ***************
 *** 17,26 ****
   	sed -e 's/@@VERSION@@/$(VERSION)/g' < $< > $@
@@ -92,7 +92,7 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/Makefile tftp-hpa-5.2/tftpd/Makefile
   	rm -f *.o *.obj *.exe tftpd tftpsubs.c tftpsubs.h tftpd.8
 diff -rcN tftp-hpa-5.2.orig/tftpd/remap.c tftp-hpa-5.2/tftpd/remap.c
 *** tftp-hpa-5.2.orig/tftpd/remap.c	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftpd/remap.c	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/remap.c	Fri Aug  1 13:42:09 2025
 ***************
 *** 340,346 ****
       /* Default error */
@@ -194,39 +194,29 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/remap.c tftp-hpa-5.2/tftpd/remap.c
       return current;
 diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd-hpa.sh tftp-hpa-5.2/tftpd/tftpd-hpa.sh
 *** tftp-hpa-5.2.orig/tftpd/tftpd-hpa.sh	Wed Dec 31 17:00:00 1969
---- tftp-hpa-5.2/tftpd/tftpd-hpa.sh	Sat Apr 20 16:18:50 2024
+--- tftp-hpa-5.2/tftpd/tftpd-hpa.sh	Fri Aug  1 13:43:58 2025
 ***************
 *** 0 ****
---- 1,47 ----
+--- 1,50 ----
 + #!/bin/sh
 + 
 + # PROVIDE: tftpd
-+ # REQUIRE: NETWORKING
++ # REQUIRE: DAEMON
 + # KEYWORD: shutdown
 + #
 + 
-+ if ! PREFIX=$(expr $0 : "\(/.*\)/etc/rc\.d/$(basename $0)\$"); then
-+     echo "$0: Cannot determine the PREFIX" >&2
-+     exit 1
-+ fi
++ PREFIX=/usr/local
 + 
 + tftpd_flags="-l"
-+ 
-+ if [ -z "${source_rc_confs_defined}" ]; then
-+ 	if [ -r /etc/defaults/rc.conf ]; then
-+ 		. /etc/defaults/rc.conf
-+ 		source_rc_confs
-+ 	elif [ -r /etc/rc.conf ]; then
-+ 		. /etc/rc.conf
-+ 	fi
-+ fi
++ . /etc/rc.conf
++ tftpd_flags=${tftpd_flags:-""}
 + 
 + if [ -r ${PREFIX}/etc/tftpd.rules ]; then
 + 	tftpd_flags="-m ${PREFIX}/etc/tftpd.rules $tftpd_flags"
 + fi
 + 
 + case "$1" in
-+ start)
++ start|faststart|quietstart|onestart|forcestart)
 + 	if [ -x ${PREFIX}/libexec/tftpd ]; then
 + 		echo -n ' tftpd'
 + 		if [ `grep -c -E '^tftp' /etc/inetd.conf` -ne 0 ]; then
@@ -236,18 +226,31 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd-hpa.sh tftp-hpa-5.2/tftpd/tftpd-hpa.sh
 + 		fi
 + 	fi
 + 	;;
-+ stop)
++ restart|fastrestart|quietrestart|onerestart|forcerestart)
++ 	killall tftpd && echo -n ' tftpd'
++ 	sleep 2
++ 	if [ -x ${PREFIX}/libexec/tftpd ]; then
++ 		if [ `grep -c -E '^tftp' /etc/inetd.conf` -ne 0 ]; then
++ 			echo ": enabled in inetd.conf, not starting daemon"
++ 		else
++ 			${PREFIX}/libexec/tftpd $tftpd_flags
++ 		fi
++ 	fi
++ 	;;
++ stop|faststop|quietstop|onestop|forcestop)
 + 	killall tftpd && echo -n ' tftpd'
 + 	;;
 + *)
-+ 	echo "Usage: `basename $0` {start|stop}" >&2
++ 	echo "$0: unknown command \"$1\""
++ 	echo ""
++ 	exit 64
 + 	;;
 + esac
 + 
 + exit 0
 diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.c tftp-hpa-5.2/tftpd/tftpd.c
 *** tftp-hpa-5.2.orig/tftpd/tftpd.c	Sun Dec 11 15:13:52 2011
---- tftp-hpa-5.2/tftpd/tftpd.c	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/tftpd.c	Fri Aug  1 13:42:09 2025
 ***************
 *** 48,53 ****
 --- 48,54 ----
@@ -793,7 +796,7 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.c tftp-hpa-5.2/tftpd/tftpd.c
       if (send(peer, buf, length, 0) != length)
 diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.rules tftp-hpa-5.2/tftpd/tftpd.rules
 *** tftp-hpa-5.2.orig/tftpd/tftpd.rules	Wed Dec 31 17:00:00 1969
---- tftp-hpa-5.2/tftpd/tftpd.rules	Sat Apr 20 16:14:30 2024
+--- tftp-hpa-5.2/tftpd/tftpd.rules	Fri Aug  1 13:42:09 2025
 ***************
 *** 0 ****
 --- 1,37 ----

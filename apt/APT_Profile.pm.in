@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,6 @@ use APT_Dataset;
 use APT_Aggregate;
 use APT_Reservation;
 use APT_RFRange;
-use APT_RDZ;
 use GeniXML;
 use GeniHRN;
 use GeniIMS;
@@ -60,6 +59,7 @@ use GeniResponse;
 use libtestbed;
 use EmulabFeatures;
 use Project;
+use User;
 use Lease;
 use OSImage;
 use Image;
@@ -635,6 +635,20 @@ sub Stringify($)
     my $version   = $self->version();
 
     return "[Profile: $pid,$name:$version]";
+}
+
+sub GetProject($)
+{
+    my ($self) = @_;
+
+    return Project->Lookup($self->pid_idx());
+}
+
+sub GetCreator($)
+{
+    my ($self) = @_;
+
+    return User->Lookup($self->creator_idx());
 }
 
 #
@@ -1579,6 +1593,24 @@ sub NeedStitcher($$)
 }
 
 #
+# Is the rspec requesting "private" mode.
+#
+sub IsPrivate($$$)
+{
+    my ($rspec, $pref, $perrmsg) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "IsPrivate: Could not parse rspec";
+	    return -1;
+	}
+    }
+    $$pref = GeniXML::IsPrivate($rspec);
+    return 0;
+}
+
+#
 # Check everything that needs to be checked. :-)
 #
 sub CheckEverything($$$$$$$$$$$)
@@ -1635,13 +1667,9 @@ sub CheckEverything($$$$$$$$$$$)
     #
     # Spectrum sanity checks, then spectrum reservation checks.
     #
-    my $checkranges = 1
-	if (EmulabFeatures->FeatureEnabled("powder-verify-spectrum",
-					   $user, $project));
-
     my $spectrum;
     $retval = APT_Profile::CheckSpectrum($rspec, $perrmsg, \$spectrum,
-					 $resources, $checkranges);
+					 $resources);
     if ($retval) {
 	return $retval;
     }
@@ -2288,6 +2316,23 @@ sub CheckResourceReservations($$$$$$$;$)
 	}
     }
 
+    #
+    # Need to check for blocking zones. This check looks at both
+    # current resgroups and running experiments and if there is a
+    # conflict, returns the start of that conflict. 
+    #
+    if (defined($resources->{'zones'})) {
+	my @zones = split(",", $resources->{'zones'});
+
+	foreach my $zone (@zones) {
+	    my $conflict;
+	    if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+		    $group, $user, $start, $end, $zone, \$conflict)) {
+		$$pmsg = $conflict->{'errmsg'};
+		return 1;
+	    }
+	}
+    }
     return 0;
 }
 
@@ -2450,11 +2495,10 @@ sub CheckForDeprecatedImages($$$$)
 #
 # Check spectrum validity.
 #
-sub CheckSpectrum($$;$$$)
+sub CheckSpectrum($$;$$)
 {
-    my ($rspec, $pmsg, $pspectrum, $resources, $checkranges) = @_;
+    my ($rspec, $pmsg, $pspectrum, $resources) = @_;
     my $spectrum = [];
-    $checkranges = 0 if (!defined($checkranges));
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2482,8 +2526,10 @@ sub CheckSpectrum($$;$$$)
 	foreach my $request (@{$spectrum}) {
 	    my $frequency_low  = $request->{"frequency_low"};
 	    my $frequency_high = $request->{"frequency_high"};
+	    my $frequency_uuid = $request->{"frequency_uuid"};
 	    my $power          = $request->{"power"};
 	    my $width          = $request->{"bandwidth"};
+	    my $element        = $request->{"element"};
 
 	    if (!TBcheck_dbslot($frequency_low, "default", "float",
 				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
@@ -2506,6 +2552,18 @@ sub CheckSpectrum($$;$$$)
 		$$pmsg = "Invalid integer or float: $width";
 		return 1;
 	    }
+	    #
+	    # The RDZ makes this problematic, cause of dynamic ranges.
+	    # We cannot use low,high to search the DB table. With a unique
+	    # key on the table, the user cannot do any damage by seeding a
+	    # bad UUID in an rspec. 
+	    #
+	    if (defined($frequency_uuid)) {
+		if ($frequency_uuid !~ /^\w{8}\-\w{4}\-\w{4}\-\w{4}\-\w{12}$/i) {
+		    $$pmsg = "Invalid frequency uuid";
+		    return 1;
+		}
+	    }
 	}
 	return 0;
     };
@@ -2517,8 +2575,6 @@ sub CheckSpectrum($$;$$$)
 	return 1;
     }
     
-    if ($checkranges) {
-
     my %global_errors = ();
     my %node_errors   = ();
     my %route_errors  = ();
@@ -2686,7 +2742,6 @@ sub CheckSpectrum($$;$$$)
 	$$pmsg = $message;
 	return 1;
     }
-    }
     if (0) {
 	$$pmsg = "oops";
 	return 1;
@@ -2802,7 +2857,7 @@ sub CheckSpectrumReservations($$$$$$$$;$$)
 	# The user does not provide this
 	$request->{"frequency_zones"} = $resources->{"zones"};
 
-	if (!$noresokay &&
+	if (!$noresokay && !$rdzenabled && 
 	    !APT_Reservation::Group::RFReservation->RangeReserved(
 		 $group, $user, $start, $end,
 		 $frequency_low, $frequency_high, $resources->{"zones"})) {
@@ -3230,9 +3285,12 @@ sub SetRepo($$$$$$$)
 	"git checkout $repohash ";
     if (defined($reporef) && $reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
-	$command .= "&& git branch -ft $branchname origin/$branchname" .
-	    "&& git checkout -B $branchname HEAD && git submodule update --init --recursive";
+	$command .= "&& git branch -ft $branchname origin/$branchname " .
+	    "&& git checkout -B $branchname HEAD && git submodule update --init --recursive ";
     }
+    $command .= "&& ( [ ! -f /local/repository/test-common.py ] || ".
+	"sed -i'' -e 's/2.25.305821105408246119474742976030998643995/".
+	"2.25.305821105.408246119.47474297.603099864.3995/g' /local/repository/test-common.py ) ";
     $command .= "&& sudo chown -R $owner . ";
 
     #
@@ -3281,18 +3339,32 @@ sub SetRepoOnNode($$)
     my ($node, $command) = @_;
 
     my $service;
-    my $services = FindNodes("n:services", $node)->shift();
-    if (!defined($services)) {
-	$services = GeniXML::AddElement("services", $node);
+    my @services = GeniXML::GetServices($node);
+    if (!@services) {
+	my $services = GeniXML::AddElement("services", $node);
 	$service  = GeniXML::AddElement("execute", $services);
     }
     else {
-	$service = XML::LibXML::Element->new("execute");
-	$services->insertBefore($service,
-				FindNodes("n:execute", $services)->shift());
+	# Find existing service and update.
+	my @execute_services = GeniXML::GetExecuteServices($node);
+	foreach my $s (@execute_services) {
+	    my $tag = $s->{'tag'};
+	    
+	    if (defined($tag) && $tag eq "portal-repository") {
+		$service = $s->{'element'};
+		last;
+	    }
+	}
+	if (!defined($service)) {
+	    my $services = FindNodes("n:services", $node)->shift();
+	    $service = XML::LibXML::Element->new("execute");
+	    $services->insertBefore($service,
+				    FindNodes("n:execute", $services)->shift());
+	}
     }
     GeniXML::SetText("shell", $service, "/bin/sh");
     GeniXML::SetText("command", $service, $command);
+    GeniXML::SetText("tag", $service, "portal-repository");
     return 0;
 }
 
@@ -3362,7 +3434,20 @@ sub EncryptBlocks($$$;$)
 		if (defined($previous));
 	}
 	if (!$encref->textContent()) {
-	    my $plaintext = substr(TBGenSecretKey(), 0, 12);
+	    my $plaintext;
+	    my $type = GeniXML::GetText("type", $encref) || "password";
+	    
+	    if ($type eq "password") {
+		$plaintext = substr(TBGenSecretKey(), 0, 12);
+	    }
+	    elsif ($type eq "openzms-token") {
+		$plaintext = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
+		if ($? || !defined($plaintext) || $plaintext eq "") {
+		    $$pmsg = "Could not generate an openzms token";
+		    return -1;
+		}
+		chomp($plaintext);
+	    }
 	    $encref->appendText($plaintext);
 	}
 	push(@encrypt, $encref);

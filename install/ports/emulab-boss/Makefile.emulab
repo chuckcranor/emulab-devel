@@ -1,6 +1,6 @@
 #
 # Common settings for new Emulab ports.
-# This version only supports version 7 and 8 (FreeBSD 11 and 12) and above.
+# This version will probably only work with version 9 (FreeBSD 13) and above.
 #
 
 .if !defined(EMULAB_PORTVERSION)
@@ -11,20 +11,19 @@ OSARCH != /usr/bin/uname -m
 
 EMULAB_PORTVERSION=	UNSUPPORTED
 
-.if ${OSMAJOR} >= 13
-EMULAB_PORTVERSION=	9.3
-.else
-.  if ${OSMAJOR} == 12
-EMULAB_PORTVERSION=	8.3
-.  else
-.    if ${OSMAJOR} >= 11
-EMULAB_PORTVERSION=	7.3
-.    else
-EMULAB_PORTVERSION=	0.0
-.    endif
-.  endif
+.if ${OSMAJOR} < 13
+.error "only support FBSD 13 or higher"
 .endif
 
+.if ${OSMAJOR} > 13
+.error "only support FBSD 13"
+.else
+.  if ${OSMINOR} < 5
+EMULAB_PORTVERSION=	9.3
+.  else
+EMULAB_PORTVERSION=	9.5
+.  endif
+.endif
 .endif
 
 #
@@ -46,27 +45,16 @@ SWIG_PORT=devel/swig
 PHP_MAJ=8
 PHP_VER=81
 .else
-.  if (${EMULAB_PORTVERSION} == "8.3")
-PY_VER=3.8
-DEFAULT_VERSIONS= perl5=5.32 python=3.8 python3=3.8 tcltk=8.6 php=7.4 mysql=5.7 apache=2.4
+.  if (${EMULAB_PORTVERSION} == "9.5")
+# Note that mysql is really mariadb
+PY_VER=3.11
+DEFAULT_VERSIONS= perl5=5.36 python=3.11 python3=3.11 tcltk=8.6 php=8.1 mysql=10.6m apache=2.4
 APACHE_PORT=www/apache24
 APACHEMODDIR=libexec/apache24
-MYSQL_VER=57
-# swig v4 installs as just "swig"
+MYSQL_VER=106
 SWIG_VER=
 SWIG_PORT=devel/swig
-PHP_MAJ=7
-PHP_VER=74
-.  else
-.    if (${EMULAB_PORTVERSION} == "7.3")
-DEFAULT_VERSIONS= perl5=5.30 python=2.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
-APACHE_PORT=www/apache24
-APACHEMODDIR=libexec/apache24
-MYSQL_VER=57
-SWIG_VER=3.0
-SWIG_PORT=devel/swig30
-PHP_MAJ=7
-PHP_VER=72
-.    endif
+PHP_MAJ=8
+PHP_VER=81
 .  endif
 .endif

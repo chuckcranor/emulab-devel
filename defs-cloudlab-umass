@@ -56,7 +56,9 @@ EXTERNAL_NTPSERVER4=ntp.umass.edu
 DISABLE_NSE=1
 TBCOOKIESUFFIX="UMASS"
 # Start a multicast IGMP querier
-NEEDMCQUERIER=1
+# XXX it appears this is not needed and in fact, boss acting as a
+# querier screws up the xen bridge on the control node!
+NEEDMCQUERIER=0
 # XXX hack to work around perl bug
 TBUSEDBI=1
 #

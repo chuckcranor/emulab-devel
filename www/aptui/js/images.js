@@ -6,7 +6,7 @@ $(function ()
 						   "image-format-modal"]);
     var mainTemplate = _.template(templates['images']);
     var formatTemplate = _.template(templates['image-format-modal']);
-    var filterindex = 7;
+    var filterindex = 8;
     var showformat = false;
 
     /*
@@ -69,10 +69,18 @@ $(function ()
 
 	// Set up the urn link popovers to the table.
 	addUrnPopovers("images-table");
+
+        // Optional initial filter.
+        if (window.INITIAL_FILTER === "project") {
+            $('#system-images').prop("checked", false);
+        }
+        else if (window.INITIAL_FILTER === "system") {
+            $('#project-images').prop("checked", false);
+        }
 	
 	// Bind handlers for the checkboxes.
 	$('#my-images, #project-images, #public-images, ' +
-	  '#admin-images, #system-images')
+	  '#admin-images, #system-images, #deprecated-images, #unlisted-images')
 	    .change(function () {
 		SetFilters();
 	    });
@@ -103,9 +111,17 @@ $(function ()
 		    filter_columnFilters : false,
 		    // Search as typing
 		    filter_liveSearch : true,
-		},
+
+                    // Initial sort on updated column. Hmm, this is not working.
+                    //sortList: [[0,1]],
+                }
 	    });
-	
+
+	// Update the count of matched experiments
+	table.bind('filterEnd', function(e, filter) {
+	    $('#images-count').text(filter.filteredRows);
+	});
+
 	/*
 	 * We have to implement our own live search cause we want to combine
 	 * the search box with the checkbox filters. To do that, we have to
@@ -126,6 +142,11 @@ $(function ()
 		}, 500);
 	});
 	SetFilters();
+
+        // Since sortList does not work, do this to set initial sort on updated column
+        $('#images-table').trigger('sorton', [ [[3,"d"]] ]);
+
+	$("#images-table, #images-counter").removeClass("hidden");
     }
 
     function SetFilters()
@@ -162,6 +183,32 @@ $(function ()
 	    // Hmm, an empty string will get everything.
 	    filters[filterindex - 1] = "WHY";
 	}
+
+        if (0) {
+	if ($('#deprecated-images').is(":checked")) {
+            flags.push("deprecated")
+	}
+        else {
+            flags.push("notdeprecated")
+        }
+	if ($('#unlisted-images').is(":checked")) {
+            flags.push("notlisted")
+	}
+        else {
+            flags.push("listed")
+        }
+        }
+        var flags = ["noflags"];
+	if ($('#deprecated-images').is(":checked")) {
+            flags.push("deprecated")
+	}
+	if ($('#unlisted-images').is(":checked")) {
+            flags.push("notlisted")
+	}
+        if (flags.length) {
+            filters[filterindex - 2] = "/" + flags.join("|") + "/";
+        }
+        
 	console.info("SetFilters", filters);
 	$.tablesorter.setFilters($('#images-table'), filters, true);
     }

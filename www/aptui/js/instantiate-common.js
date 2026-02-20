@@ -235,7 +235,25 @@ window.instantiateCommon = (function () {
 	    var node_id = $(this).attr("client_id");
 	    var site    = this.getElementsByTagNameNS(JACKS_NS, 'site');
 	    var manager = $(this).attr("component_manager_id");
+	    var stype   = $(this).find("sliver_type");
 
+            // blockstore node should not cause a cluster selector.
+	    if (stype.length) {
+		var type = $(stype).attr("name");
+                if (type && type == "emulab-blockstore") {
+                    //console.info("Skipping emulab-blockstore");
+                    return;
+                }
+            }
+
+            // blockstore node should not cause a cluster selector.
+	    if (stype.length) {
+		var type = $(stype).attr("name");
+                if (type && type == "emulab-blockstore") {
+                    //console.info("Skipping emulab-blockstore");
+                    return;
+                }
+            }
 	    // Keep track of how many bound nodes, of the total.
 	    count++;
 
@@ -870,10 +888,16 @@ window.instantiateCommon = (function () {
 	    var manager_id   = $(this).attr("component_manager_id");
 	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
 
-	    if (manager_id || !site.length) {
+	    if (manager_id) {
 		return;
 	    }
-	    siteid = $(site).attr("id");
+            if (!site.length) {
+                // Case when there are no site tags and one cluster.
+                siteid = "nosite_selector";
+            }
+            else {
+	        siteid = $(site).attr("id");
+            }
 	    if (!_.has(sites, siteid)) {
 		console.info("setSites, no cluster for " + siteid);
 		return;

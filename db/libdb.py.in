@@ -305,7 +305,7 @@ def DBQuery(queryPat, querySub = (), asDict = False, dbnum = 0):
             pass
         pass
 
-    tbmsg  = queryPat % cursor.connection.literal(querySub)
+    tbmsg  = queryPat % querySub
     tbmsg += "\n\n"
     tbmsg += "".join(traceback.format_exception(*sys.exc_info()))
     if __dbMailOnFail:

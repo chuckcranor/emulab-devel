@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2010, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,7 +22,6 @@
 # }}}
 #
 include("defs.php3");
-include_once("template_defs.php");
 
 #
 # Only known and logged in users.
@@ -84,27 +83,6 @@ if (isset($record) && $record != "" && TBvalid_integer($record)) {
     else {
 	USERERROR("There is no NS file recorded for ".
 		  "experiment resource record $record!", 1);
-    }
-    return;
-}
-
-#
-# A template.
-#
-if (isset($template)) {
-    if (! $template->AccessCheck($this_user, $TB_EXPT_READINFO)) {
-	USERERROR("You do not have permission to view template!", 1);
-    }
-    header("Content-Type: text/plain");
-
-    #
-    # Grab all of the input files. Display each one. 
-    #
-    $input_list = $template->InputFiles();
-
-    for ($i = 0; $i < count($input_list); $i++) {
-	echo $input_list[$i];
-	echo "\n\n";
     }
     return;
 }

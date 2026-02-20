@@ -1,0 +1,330 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use Getopt::Std;
+
+#
+# Hack script to catch instances where an OS package has modified the
+# UEFI boot variables and ensures that the control network interface is
+# first in the order.
+#
+# The library parses the options.
+sub usage()
+{
+    print STDERR "usage: uefifixboot [options]\n";
+    print STDERR " Ensure that control network interface is first in the\n";
+    print STDERR " boot order and (optionally) clean up the boot path.\n";
+    print STDERR " By default, does the minimal amount to ensure PXE boot\n";
+    print STDERR " works and will exit on any unexpected situation.\n";
+    print STDERR " -d		Turn on debugging.\n";
+    print STDERR " -p		Do not do anything, just print the boot info.\n";
+    print STDERR " -n		Do not do anything, just say what would happen.\n";
+    print STDERR " -q		Be quiet about anomalies.\n";
+    print STDERR " -F		Perform a full cleanup of the boot path.\n";
+    print STDERR " -f file	Get efibootmgr output from file (debug).\n";
+    exit(1);
+}
+my $optlist	= "dFpnqf:";
+my $debug       = 0;
+my $impotent	= 0;
+my $printonly	= 0;
+my $fullclean	= 0;
+my $quiet	= 0;
+my $input	= "";
+
+sub parse_description($);
+sub classify_dev($);
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+# This library is the guts of the protocol.
+use libtmcc;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Parse command line options
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"p"})) {
+    $printonly = 1;
+    $impotent = 1;
+}
+if (defined($options{"F"})) {
+    $fullclean = 1;
+}
+if (defined($options{"f"})) {
+    $input = $options{"f"};
+    $impotent = 1;
+}
+
+my @output = ();
+
+if ($input eq "") {
+    if (!$impotent && $UID != 0) {
+	print STDERR "FATAL: must run as root!\n";
+	exit(1);
+    }
+
+    my $efibootmgr = "/usr/bin/efibootmgr";
+    if (! -x $efibootmgr) {
+	$efibootmgr = "/usr/sbin/efibootmgr";
+	if (! -x $efibootmgr) {
+	    print STDERR "FATAL: efibootmgr program not found!\n";
+	    exit(1);
+	}
+    }
+    @output = `$efibootmgr 2>&1`;
+} else {
+    print STDERR "Faking efibootmgr output from '$input' ...\n";
+    @output = `cat $input`;
+}
+
+#
+# XXX we assume that boot devices are going to be 0HHH, where HHH will be
+# three hex digits; i.e., we assume that a device ID starts with 0. 
+#
+my %bootdev = ();
+my @bootorder = ();
+my $bootcur = "";
+my $bootnext = "";
+foreach my $line (@output) {
+    if ($line =~ /EFI variables are not supported/) {
+	print STDERR "WARNING: no EFI variables (not in UEFI mode?)\n"
+	    if (!$quiet);
+	exit(0);
+    }
+    if ($line =~ /^bootcurrent\D+(0[0-9a-f]{3})/i) {
+	$bootcur = $1;
+	print STDERR "Got bootcurstr '$bootcur'\n"
+	    if ($debug > 2);
+	next;
+    }
+    if ($line =~ /^bootnext\D+(0[0-9a-f]{3})/i) {
+	$bootnext = $1;
+	print STDERR "Got bootnextstr '$bootnext'\n"
+	    if ($debug > 2);
+	next;
+    }
+    if ($line =~ /^bootorder\D+((?:0[0-9a-f]{3},?)+)/i) {
+	my $str = $1;
+	print STDERR "Got bootorderstr '$str'\n"
+	    if ($debug > 2);
+	$str =~ s/ *//g;
+	@bootorder = split(",", $str);
+	print STDERR "Got bootorder: ", join(":", @bootorder), "\n"
+	    if ($debug > 2);
+	next;
+    }
+    if ($line =~ /^[ \+]?boot(0[0-9a-f]{3})\*?\s+(.*)/i) {
+	my ($dev,$desc) = ($1,$2);
+	$bootdev{$dev}{'desc'} = $desc;
+	classify_dev($dev);
+    }
+}
+
+if ($printonly) {
+    my $devtype = $bootdev{$bootcur}{'type'};
+    my $devinfo = $bootdev{$bootcur}{'info'};
+    print "Current boot dev: $bootcur ($devtype:$devinfo)\n";
+    if ($bootnext) {
+	$devtype = $bootdev{$bootnext}{'type'};
+	$devinfo = $bootdev{$bootnext}{'info'};
+	print "Next boot dev: $bootnext ($devtype:$devinfo)\n";
+    }
+    print "Boot order is:\n";
+    my $ix = 1;
+    foreach my $dev (@bootorder) {
+	if (!exists($bootdev{$dev})) {
+	    print STDERR "WARNING: no entry for boot device $dev!\n"
+		if (!$quiet);
+	    next;
+	}
+	$devtype = $bootdev{$dev}{'type'};
+	$devinfo = $bootdev{$dev}{'info'};
+	print "#$ix: $dev ($devtype:$devinfo)\n";
+	my ($devdesc) = parse_description($dev);
+	print "  '$devdesc'\n";
+	$ix++;
+    }
+    exit(0);
+}
+
+#
+# Try to ensure that the control network is first.
+#
+my $ctrlmac = control_mac();
+my $needsfixing = 0;
+my $newbootdev = "";
+
+my $dev = $bootorder[0];
+if (!exists($bootdev{$dev})) {
+    print "First boot device ($dev) not in boot list!\n";
+    $needsfixing = 1;
+    goto cleanup;
+}
+my $devdesc = $bootdev{$dev}{'desc'};
+my $devtype = $bootdev{$dev}{'type'};
+my $devinfo = $bootdev{$dev}{'info'};
+if ($devtype eq "network") {
+    # If we have a MAC address see if it matches our control net
+    if ($ctrlmac && $ctrlmac eq $devinfo) {
+	print "Control net device $dev ('$devdesc') is first boot device.\n"
+	    if (!$quiet);
+	if (!$fullclean) {
+	    exit(0);
+	}
+	$newbootdev = $dev;
+	goto cleanup;
+    }
+    # Have a control net MAC, but it is not this device, try to fix it
+    elsif ($ctrlmac) {
+	# Quick pass to see if we have a bootdev corresponding to cnet
+	foreach my $tdev (keys %bootdev) {
+	    if ($bootdev{$tdev}{'type'} eq "network" &&
+		$bootdev{$tdev}{'info'} eq $ctrlmac)
+	}
+	$needsfixing = 1;
+	goto fixit;
+    }
+    # Otherwise we have incomplete cnet info, so just call it good.
+    else {
+	print "Network device $dev ('$devdesc') is first boot device, ".
+	    "this is probably correct.\n"
+	    if (!$quiet);
+	if (!$fullclean) {
+	    exit(0);
+	}
+    }
+} else {
+    print "Primary boot device $dev ('$devdesc') is not a network device.\n";
+}
+
+ fixit:
+    
+exit(0);
+
+#
+# In verbose mode, they make the description info nearly impossible to parse
+# unambiguously. We use a known set of "markers" to differentiate the verbose
+# description from the "name" (non-verbose description).
+#
+sub parse_description($)
+{
+    my ($dev) = @_;
+    my $desc = $bootdev{$dev}{'desc'};
+    
+    if ($desc =~ /^(.*\S)\s+((?:HD|VenHw|VenMedia|BBS|PciRoot|FvVol|Usb).*)/) {
+	$desc = $1;
+	$vdesc = $2;
+	if ($debug > 1) {
+	    print STDERR "$dev:\n";
+	    print STDERR "  Basic:    $desc\n";
+	    print STDERR "  Extended: $vdesc\n";
+	}
+    } else {
+	print STDERR "INFO: could not parse verbose description '$desc'!\n"
+	    if (!$quiet);
+	$vdesc = "";
+    }
+
+    return ($desc, $vdesc);
+}
+
+sub classify_dev($;$)
+{
+    my ($dev,$extrap) = @_;
+    my @network_re = (
+	"NIC\\s",
+	"Network\\s",
+	"Ethernet\\s",
+	"PXE\\s"
+    );
+    my @disk_re = (
+	"GPT",
+	"HD\\W"
+    );
+
+    my $desc = $bootdev{$dev}{'desc'};
+    $bootdev{$dev}{'type'} = "other";
+    $bootdev{$dev}{'info'}= "<unknown>";
+
+    foreach my $re (@network_re) {
+	if ($desc =~ /$re/) {
+	    $bootdev{$dev}{'type'} = "network";
+	    # Return MAC if we can
+	    if ($desc =~ /MAC\(([0-9a-f]{12}),\d\)/) {
+		$bootdev{$dev}{'info'} = $1;
+	    }
+	    return;
+	}
+    }
+    foreach my $re (@disk_re) {
+	if ($desc =~ /$re/) {
+	    $bootdev{$dev}{'type'} = "disk";
+	    # Return EFI path if we can
+	    if ($desc =~ /File\((\\EFI[^\)]+)\)/) {
+		$bootdev{$dev}{'info'} = $1;
+	    }
+	    return;
+	}
+    }
+    if ($desc =~ /\WShell/) {
+	$bootdev{$dev}{'type'} = "uefi-shell";
+	return;
+    }
+}
+
+#
+# See if we can identify our control network and get its MAC
+#
+sub control_mac()
+{
+    if ($input eq "" && open(FD, "</var/emulab/boot/controlif")) {
+	my $iface = <FD>;
+	close(FD);
+	chomp($iface);
+	my $info = `ifconfig $iface | fgrep -w ether`;
+	if ($info =~ /ether\s+(..:..:..:..:..:..)/) {
+	    my $mac = $1;
+	    $mac =~ s/://g;
+	    return $mac;
+	}
+    }
+
+    return "";
+}

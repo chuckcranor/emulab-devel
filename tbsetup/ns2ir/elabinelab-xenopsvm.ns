@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -220,6 +220,29 @@ if { $bossmem != {} } {
 }
 
 #
+# Virtualization tech
+#
+set forcehvm [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_HVM"]
+if { $forcehvm != {} } {
+    $myboss add-attribute XEN_FORCE_HVM $forcehvm
+    $vhost add-attribute XEN_FORCE_HVM $forcehvm
+}
+set forcepvh [tb-get-elabinelab-role-attribute "boss" "XEN_FORCE_PVH"]
+if { $forcepvh != {} } {
+    $myboss add-attribute XEN_FORCE_PVH $forcepvh
+    $vhost add-attribute XEN_FORCE_PVH $forcepvh
+}
+
+#
+# Add extra features for us.
+#
+set devices [tb-get-elabinelab-role-attribute "boss" "XEN_USBDEVICES"]
+if { $devices != {} &&
+     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
+    $myboss add-attribute XEN_USBDEVICES $devices
+}
+
+#
 # Debugging support; this turns off antispoofing for the VMs, but only
 # for emulab-ops experiments when requested.
 #
@@ -238,9 +261,4 @@ set thinpool [tb-get-elabinelab-role-attribute "boss" "XEN_LVMNOTHINPOOL"]
 if { $thinpool != {} &&
      (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
     $vhost add-attribute "XEN_LVMNOTHINPOOL" $thinpool
-}
-set devices [tb-get-elabinelab-role-attribute "boss" "XEN_USBDEVICES"]
-if { $devices != {} &&
-     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
-    $myboss add-attribute "XEN_USBDEVICES" $devices
 }

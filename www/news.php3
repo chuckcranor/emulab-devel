@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,25 @@
 include("defs.php3");
 
 #
+# If user is an admin, present edit options.
+#
+$this_user = CheckLogin($check_status);
+$isadmin   = 0;
+if ($this_user) {
+    $uid     = $this_user->uid();
+    $uid_idx = $this_user->uid_idx();
+    $isadmin = ISADMIN();
+}
+
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$isadmin || !$classic) {
+        RedirectToPortal("portal-news.php");
+        return;
+    }
+}
+
+#
 # Standard Testbed Header is sent below.
 #
 $optargs = OptionalPageArguments("show_archived",   PAGEARG_BOOLEAN,
@@ -43,11 +62,6 @@ $optargs = OptionalPageArguments("show_archived",   PAGEARG_BOOLEAN,
 				 "msgid",           PAGEARG_STRING,
 				 "date",            PAGEARG_STRING,
 				 "protogeni",       PAGEARG_BOOLEAN);
-
-#
-# If user is an admin, present edit options.
-#
-$this_user = CheckLogin($check_status);
 
 if (! isset($show_archived)) {
     $show_archived = 0;
@@ -69,15 +83,6 @@ if ($protogeni) {
     $view['hide_versioninfo'] = 1;
     $view['show_protogeni']   = 1;
     $db_table = "webnews_protogeni";
-}
-
-if ($this_user) {
-    $uid     = $this_user->uid();
-    $uid_idx = $this_user->uid_idx();
-    $isadmin = ISADMIN();
-}
-else {
-    $isadmin = 0;
 }
 
 if ($isadmin) {

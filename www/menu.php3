@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -560,11 +560,6 @@ function WRITEEXPERIMENTMENU($firstinitstate) {
                 #
  		NavMenuButton("Begin an Experiment",
 			      "$TBBASE/beginexp.php");
-
-		if ($EXPOSETEMPLATES) {
-		    NavMenuButton("Create a Template",
-				  "$TBBASE/template_create.php");
-		}
 
 		NavMenuButton("Experiment List", "$TBBASE/showexp_list.php3");
 

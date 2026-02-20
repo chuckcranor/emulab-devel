@@ -1,3 +1,38 @@
+If you need to add a new endpoint follow steps 1-5, otherwise skip to step 6.
+
+1. Add it to fixed.list or mobile.list as appropriate.
+
+2. Save off a copy of the current /usr/testbed/tmp/syncthing:
+
+   sudo cp -rp /usr/testbed/tmp/syncthing /usr/testbed/tmp/syncthing.old
+
+3. Create a new version:
+
+   cd <testbed-src>/powder/syncthing
+   sudo genstconfig -M boss.list,fixed.list,mobile.list
+
+4. Compare it to the old:
+
+   diff -r /usr/testbed/tmp/syncthing.old /usr/testbed/tmp/syncthing
+
+   The only difference should be new files for each endpoint you added
+   and some added text to boss.emulab.net/config.xml.
+
+5. Install the new boss syncthing config and restart
+
+   sudo /usr/local/etc/rc.d/syncthing stop
+   sudo cp /usr/testbed/tmp/syncthing/boss.emulab.net/config.xml \
+       /usr/testbed/etc/syncthing/
+   sudo /usr/local/etc/rc.d/syncthing start
+   sudo /usr/local/etc/rc.d/syncthing status
+
+6. Create the tarball for new configs:
+
+   cd /usr/testbed/tmp/syncthing/boss.bus-XXXX.powderwireless.net
+   sudo tar czf ../bus-XXXX.tar.gz .
+
+
+
 To add collection of RF monitoring data from buses and other endpoints.
 
 Mothership boss:
@@ -15,15 +50,17 @@ Mothership boss:
    sudo scp $tarball boss.$aggregate.powderwireless.net:/tmp/st.tar.gz
 
 2. Create the mirror directory where aggregate data goes, along with the
-   marker:
+   marker (only needed on new installs):
 
    sudo mkdir -p /usr/testbed/www/rfmonitor-$type/$aggregate/.stfolder
    sudo chown -R elabman:tbadmin /usr/testbed/www/rfmonitor-$type/$aggregate
 
-
-
 Aggregate boss:
 
+0. Connect
+
+   sudo ssh boss.$aggregate.powderwireless.net
+   
 1. Enable the "global" syncthing daemon, append this to the aggregate boss
    node's /etc/rc.conf:
 
@@ -58,6 +95,20 @@ syncthing_group="tbadmin"
    (no files show up in the mirror directory on mothership boss), then
    it is probably because this subdir is missing.
 
+3a. Restore old data if you have it.
+
+   cd /usr/testbed/www
+   sudo mv rfmonitor/.htaccess rfmonitor/.htaccess.new
+   sudo tar xzf /tmp/rfmonitor.tar.gz
+   sudo mv rfmonitor/.htaccess.new rfmonitor/.htaccess
+   sudo rm /tmp/rfmonitor.tar.gz
+
+   It is probably best to get things back in sync while the node is in
+   Mike's office with good WiFi, to temporarily up the allowed send rate
+   of the node by changing the send bandwith (maxSendKbps) in the config file
+   (/usr/testbed/etc/syncthing/config.xml) from "500" (500Kbps) to "0"
+   (unlimited).
+
 4. Start em up and see if there was anything obviously wrong:
 
    sudo /usr/local/etc/rc.d/syncthing start
@@ -75,3 +126,15 @@ and then go to "localhost:9090" in your browser.
 
 You can do the same with the boss.emulab.net syncthing as well, running
 a port forward on boss.emulab.net.
+
+If you restored old data to the rfmonitor directory, this initial sync
+could take a long time. After it is done you can change the send rate in
+the config file back to 500:
+
+        <maxSendKbps>500</maxSendKbps>
+
+We should revisit this limit after we have switched our our buses over to
+our own AT&T unlimited data plans. I would guess we should be able to do
+at least 1000Kbps without affecting anything. We can do almost 10Mb/sec
+via the WiFi in MEB.
+

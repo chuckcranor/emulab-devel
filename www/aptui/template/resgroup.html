@@ -41,6 +41,7 @@
  }
  .form-group-sm .control-label, .form-group-ota .control-label {
      padding-top: 0px !important;
+     font-size: 0.80rem;
  }
  .reservation-error, .underused-warning, .ota-message {
      padding-top: 0px !important;
@@ -57,6 +58,11 @@
  }
  .canned-response {
      white-space: normal !important;
+ }
+ .error-link {
+     text-decoration: underline;
+     font-weight: bold;
+     color: inherit;
  }
 </style>  
 <div class='row main-row'>
@@ -99,13 +105,13 @@
 	</div>
 	<div class='row'>
 	  <div class='col-sm-12'>
-	    <form id='reserve-request-form'
-		  class='form-horizontal' role='form'>
+	    <form id='reserve-request-form' role='form'>
 	      <% var d = new Date(); var offset = d.getTimezoneOffset(); %>
 	      <input id="timezone" name="timezone" type="hidden"
 		     value=<%- offset %>>
 	      <input id="start" name="start" type="hidden">
 	      <input id="end" name="end" type="hidden">
+	      <input id="powder-zones" name="powder-zones" type="hidden">
 	      <% if (editing) { %>
 		<input id="uuid" name="uuid" type="hidden">
 	      <% } %>
@@ -265,6 +271,30 @@
 		  <label id="allroutes-error"
 			 class="hidden control-label"></label>
 		  <span id="allroutes-ota-warning" class="has-warning hidden">
+		    <label class="control-label">
+		      Current project does not have OTA permission.
+		      <a href='' class='ota-request-permission'>
+			Request permission.</a>
+		    </label>
+		  </span>
+		</div>
+	      </div>
+	      <div class="form-group hidden" id="ota-alloc-div">
+		<div class="format-me"
+		     data-label="OTA Lab"
+		     data-optional="yep"
+		     data-key="otalab">
+		  <input name="otalab-checkbox" style="margin-top: 12px;"
+			 id="otalab-checkbox"
+			 class="ignore-unsaved"
+			 type="checkbox">
+		  <a href='#' class='btn btn-xs otalab-help'>
+		    <span class='glyphicon glyphicon-question-sign'
+		          style="margin-bottom: 6px;"></span>
+		  </a>
+		  <label id="otalab-error"
+			 class="hidden control-label"></label>
+		  <span id="otalab-ota-warning" class="has-warning hidden">
 		    <label class="control-label">
 		      Current project does not have OTA permission.
 		      <a href='' class='ota-request-permission'>
@@ -494,6 +524,10 @@
 		      style="margin-right: 10px"
 		      id='reserve-approve-button'
 		      type='submit' name='submit'>Approve</button>
+	      <button class='hidden btn btn-info btn-sm pull-right'
+		      style="margin-right: 10px"
+		      id='reserve-recheck-button'
+		      type='submit' name='submit'>Recheck</button>
 	    <% } %>
 	    <div class="hidden checkbox form-check form-check-inline pull-left"
 		 id="idle-detection-checkbox-div"
@@ -596,6 +630,14 @@
       </div>
     </div>
     <div id="history-graphs"></div>
+    <div class='panel card panel-default hidden' id="current-reservations">
+      <div class='panel-heading card-header'>
+	<center>
+          <h3 class='panel-title card-title'>Other reservations</h3>
+	</center>
+      </div>
+      <div class='panel-body card-body' style="padding: 2px;"></div>
+    </div>
   </div>
   <div class='col-lg-5 col-md-5'>
     <div id="range-info-div" class="hidden"
@@ -967,6 +1009,17 @@
 	      <li>
 		<a class="dropdown-item canned-response" href="#">
 		  <p>
+		    You have at least two other approved reservations
+		    for this node type, and we are currently very
+		    overloaded. We need to give all users an
+		    opportunity to get resources, so please wait to
+		    submit additional reservations for this node type.
+		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
 		    This reservation is not being utilized. 
 		  </p>
 		</a>
@@ -1128,7 +1181,7 @@
   </div>
 </div>
 <!-- PhantomNet Matrix Connections -->
-<div id='matric-connections-modal' class='modal fade'>
+<div id='matrix-connections-modal' class='modal fade'>
   <div class='modal-dialog modal-sm'>
     <div class='modal-content'>
       <div class='modal-body'>
@@ -1161,6 +1214,69 @@
 	      </tbody>
 	    </table>
 	  </small>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='blocking-zone-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<button type="button" class="close btn-close"
+		data-dismiss="modal" data-bs-dismiss="modal"
+	  <span aria-hidden="true"></span></button>
+	<p>
+	  We have changed the policy for how resources are reserved in the
+	  POWDER indoor OTA lab. Only a single reservation covering a particular
+	  time window may be present at a time for indoor lab resources,
+	  regardless of how many devices are included in the reservation.
+	</p>
+
+	<p>
+	  The reason for the change is to prevent conflicts between simultaneous
+	  experiments from different users. The key difficulty is that when two
+	  (or more) experimenters run different 5G gNB (or 4G eNB) services, the
+	  COTS UEs can get confused and behave unexpectedly, attaching to the
+	  wrong gNB/Core, taking a long time to attach, or not attempting to
+	  attach at all.  There is also simply more potential to inadvertently
+	  impact a fellow experimenter by using the wrong channel on accident
+	  when running experiments at the same time in the indoor OTA lab.
+	</p>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='zone-selection-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'> 
+      <div class='modal-body'>
+	<button type="button" class="close btn-close"
+		data-dismiss="modal" data-bs-dismiss="modal"
+	  <span aria-hidden="true"></span></button>
+	<div class="mt-4 mb-1 fs-5">
+	  <p>Since you are requesting to reserve a frequency range without
+	    specifying any radios, you need to tell us in what <em>zone</em>
+	    you will be using your reserved ranges,
+	  </p>
+	  <center>
+	    <div class="col-sm-4">
+	      <select class="form-control form-select" type="text">
+		<option value="">Please Select</option>
+		<option value="Outdoor">Outdoor</option>
+		<option value="Indoor OTA Lab">Indoor OTA Lab</option>
+		<option value="Flux">Flux</option>
+	      </select>
+	    </div>
+	  </center>
+	</div>
+        <center>
+	  <br>
+          <button class='btn btn-success btn-sm confirm-button'
+		  id='confirm-uncancel'>Continue</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
 	</center>
       </div>
     </div>

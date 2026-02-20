@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,10 +41,12 @@ sub usage()
 	  "       -n     Impotent mode, show what would be done.\n".
 	  "       -f     Force deletion of system image\n".
 	  "       -V     Delete only the version\n".
-	  "       -F     Force deletion of global system image\n");
+	  "       -F     Force deletion of global system image\n".
+	  "       -L     Override the image lock\n");
+	  
     exit(-1);
 }
-my $optlist     = "dFprRnfV";
+my $optlist     = "dFprRnfVL";
 my $debug       = 0;
 my $purge       = 0;
 my $rename      = 1;
@@ -53,6 +55,7 @@ my $FORCE       = 0;
 my $impotent    = 0;
 my $needunlock  = 0;
 my $versonly    = 0;
+my $takelock    = 0;
 
 #
 # Configure variables
@@ -135,6 +138,9 @@ if (defined($options{"F"})) {
 if (defined($options{"f"})) {
     $force = 1;
 }
+if (defined($options{"L"})) {
+    $takelock = 1;
+}
 usage()
     if (@ARGV != 1);
 
@@ -203,7 +209,9 @@ if ($image->pid() eq TBOPSPID() && $image->global() && !$FORCE) {
 #
 if (!$impotent) {
     if ($image->Lock()) {
-	fatal("Image is locked, please try again later!\n");
+	if (!$takelock) {
+	    fatal("Image is locked, please try again later!\n");
+	}
     }
     $needunlock = 1;
 }

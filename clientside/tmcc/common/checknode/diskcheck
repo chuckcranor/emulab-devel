@@ -1,6 +1,6 @@
 #! /bin/bash
 #
-# Copyright (c) 2013-2023 University of Utah and the Flux Group.
+# Copyright (c) 2013-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,6 +36,7 @@ source hbis.sh
 x=$(caller)
 [[ "${x/NULL}" = "$x" ]] && declare -ri diskcheck_standalone=0 || declare -ri diskcheck_standalone=1
 
+declare failed=""
 ## declare -p todo_exit
 
 main_diskcheck() {
@@ -354,7 +355,15 @@ case $err in
     scan | missing | device )
 	case $os in
 	    Linux )
-		list="a b c d e f g h i j k l m n o p"
+		# XXX there appear to be static entries in the MFS's /dev
+		# including /dev/sda, so for sda, we ensure there is really
+		# something there. This only comes up when you have an all
+		# NVMe machine.
+		list=""
+		if grep -q 'sda$' /proc/partitions; then
+		    list+="a "
+		fi
+		list+="b c d e f g h i j k l m n o p"
 		for i in $list
 		do
 		    if [ -b /dev/sd${i} ] ; then

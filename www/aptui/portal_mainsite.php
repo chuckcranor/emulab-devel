@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020, 2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020, 2023, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -163,6 +163,11 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $PORTAL_GENESIS        = "powder";
     $PORTAL_NAME           = "Powder";
     $PROTOGENI_GENIWEBLOGIN = 0;
+    #
+    # Some SSO stuff, hardwired for now,
+    #
+    $SSO_CLIENT_ID    = "t4DgFrG1T5TRrTEAr";
+    $SSO_REDIRECT_URI = "https://rdz.powderwireless.net/auth/powder";
 }
 
 #

@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_radio_info", "hidden")) {
+	DBQueryFatal("ALTER TABLE apt_aggregate_radio_info ADD ".
+		     " `hidden` tinyint(1) NOT NULL default '0'");
+    }
+
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

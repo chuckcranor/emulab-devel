@@ -34,7 +34,14 @@ $(function ()
 	});
 	// Bootstrap 5 sillyness.
 	setTimeout(function f() {
-	    sup.ShowModal("#mustaccept-modal");	    
+	    sup.ShowModal("#mustaccept-modal");
+
+            // This is for users with 3 point font.
+            var panel = $('#aup-panel .scrollable-panel');
+	    if ($(panel).scrollTop() + $(panel).innerHeight() +2 >=
+	        $(panel)[0].scrollHeight) {
+	        $('#confirm-aup').removeClass("disabled");
+	    }
 	}, 100);	
     }
 

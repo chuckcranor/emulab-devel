@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -921,6 +921,7 @@ sub os_ifconfig_veth($$$$$;$$$$$%)
     #
     #	ifconfig eth0 up (should be done before we are ever called)
     #	vconfig add eth0 601
+    #     (replace with ip link add link eth0 name eth0.601 type vlan id 601)
     #   ifconfig vlan601 inet ...
     #
     #   ifconfig vlan601 down

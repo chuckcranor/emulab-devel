@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,11 @@ $page_title = "Licenses";
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
-$optargs = OptionalPageArguments("referrer", PAGEARG_URL);
+
+# Now a cookie
+$referrer = null;
+GetReferrer($referrer);
+ClearReferrer();
 
 SPITHEADER(1);
 
@@ -40,7 +44,6 @@ echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($referrer) {
-    #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }
 echo "</script>\n";

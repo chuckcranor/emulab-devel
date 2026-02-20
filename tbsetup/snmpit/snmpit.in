@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -270,6 +270,16 @@ if ($opt{q}) {
 	select $nulldev; # supresses print foo(); without explicit fileglob
     }
 }
+
+my $warned = 0;
+$SIG{__WARN__} = sub {
+    my $message = shift;
+    exit(-1)
+	if ($warned);
+    $warned = 1;
+    cluck($message);
+    $warned = 0;
+};
 
 #if ($opt{F}) { push @commands, ["synchleader"]; }
 # Values that may have been passed on the command line
@@ -2160,7 +2170,24 @@ sub doVlansFromTables($$@) {
 
 	foreach my $ref (@{ $stackvlans{$stackid} }) {
 	    foreach my $port (values(%{$ref->{"trunkports"}})) {
-		$errors += doTrunkEnable([$stack], $port, 1);
+
+		if ($port->pvid()) {
+		    my $trunk_vlanid = $port->pvid();
+
+		    my $vlan = VLan->Lookup($trunk_vlanid);
+		    if (!defined($vlan)) {
+			die("Could not locate pvid vlan $trunk_vlanid in the DB\n");
+		    }
+		    if ($vlan->IsInternal()) {
+			$trunk_vlanid = $vlan->vname();
+		    }
+		    print "Setting up $port in dual trunk mode, ".
+			"vlan $trunk_vlanid\n";
+		    $errors += doTrunkEnable([$stack], $port, 0, $trunk_vlanid);
+		}
+		else {
+		    $errors += doTrunkEnable([$stack], $port, 1);
+		}
 	    }
 	}
     }

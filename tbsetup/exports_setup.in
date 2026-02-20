@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -381,12 +381,14 @@ if ($ZFS_NOEXPORT) {
     # consider such a download as "activity". It could/should, but it is
     # easy to compensate for it here.
     #
-    my $pid = "GeniSlices";
-    if (!exists($bossexports{"$projdir/$pid"})) {
-	$bossexports{"$projdir/$pid"} = "$projdir/$pid";
-    }
-    if (!exists($bossexports{"$groupdir/$pid"})) {
-	$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+    if (system("grep -q GeniSlices /etc/group") == 0) {
+	my $pid = "GeniSlices";
+	if (!exists($bossexports{"$projdir/$pid"})) {
+	    $bossexports{"$projdir/$pid"} = "$projdir/$pid";
+	}
+	if (!exists($bossexports{"$groupdir/$pid"})) {
+	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+	}
     }
 }
 

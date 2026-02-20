@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1141,7 +1141,7 @@ sub DeactivateUser()
     #
     if ($status ne USERSTATUS_INACTIVE) {
 	fatal("$user is still active! Cannot deactivate the account!")
-	    if (!$update);
+	    if (! ($update || $force));
 
 	$target_user->SetStatus(USERSTATUS_INACTIVE());
 	$status = USERSTATUS_INACTIVE();
@@ -1185,10 +1185,9 @@ sub ReactivateUser()
     if ($status ne USERSTATUS_ACTIVE) {
 	fatal("$user is not active! Cannot reactivate the account!")
 	    if (! ($update || $force));
-	if ($update) {
-	    $target_user->SetStatus(USERSTATUS_ACTIVE());
-	    $status = USERSTATUS_ACTIVE();
-	}
+
+	$target_user->SetStatus(USERSTATUS_ACTIVE());
+	$status = USERSTATUS_ACTIVE();
     }
     $UID = 0;
     if ($CONTROL ne $BOSSNODE) {

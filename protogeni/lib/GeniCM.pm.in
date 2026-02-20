@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -2223,6 +2223,30 @@ sub GetTicketAuxAux($)
 					    "attrkey"   => "adb_target",
 					    "attrvalue" => $adb_target } );
 	}
+
+	#
+	# COTS RU parameter extraction.
+	#
+	my %ru_param_checks = (
+	    'center_frequency' => qr/^\d{1,12}(\.\d{1,6})?$/,
+	    'bandwidth' => qr/^\d{1,12}(\.\d{1,6})?$/,
+	    'mimo_mode' => qr/^\w{1,16}$/
+	    );
+	my $ru_params = GeniXML::GetCOTSRUParameters( $ref );
+	if ( defined( $ru_params ) ) {
+	    while ( my ( $k, $v ) = each %{ $ru_params } ) {
+		if ( $v !~ $ru_param_checks{$k} ) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_BADARGS, undef,
+			"COTS RU parameter '$k' invalid: $v" );
+		    goto bad;
+		}
+		$virtexperiment->NewTableRow( "virt_node_attributes",
+					      { "vname"     => $node_nickname,
+						"attrkey"   => $k,
+						"attrvalue" => $v } );
+	    }
+	}
 	
 	#
 	# Special hack for allocating from a specific chassis.
@@ -2267,11 +2291,11 @@ sub GetTicketAuxAux($)
 			# ignore silly user.
 			next;
 		    }
-		    if ($isshared && 0 && $attrvalue > 1024) {
+		    if ($isshared && 0 && $attrvalue > (128 * 1024)) {
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad XEN setting; ".
-						 "limited to 1024 MB");
+						 "limited to 128 GB");
 			goto bad;
 		    }
 		    $attrkey = "XEN_MEMSIZE";
@@ -2282,11 +2306,11 @@ sub GetTicketAuxAux($)
 			# ignore silly user.
 			next;
 		    }
-		    if ($isshared && $attrvalue > 12) {
+		    if ($isshared && $attrvalue > 16) {
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad XEN setting; ".
-						 "limited to 1-12 cores");
+						 "limited to 1-16 cores");
 			goto bad;
 		    }
 		}
@@ -5228,6 +5252,7 @@ sub SliverWorkAux($)
     if ($isupdate) {
 	$experiment->PreSwap($realuser->emulab_user(),
 			     $Experiment::EXPT_SWAPMOD, EXPTSTATE_ACTIVE());
+	$experiment->SetState(EXPTSTATE_MODIFY_RESWAP);
     }
     else {
 	$experiment->PreSwap($realuser->emulab_user(),
@@ -6191,11 +6216,12 @@ sub SliverWorkAux($)
     if ($isupdate) {
 	$experiment->PostSwap($realuser->emulab_user(),
 			      $Experiment::EXPT_SWAPMOD);
+	$experiment->SetState(EXPTSTATE_ACTIVE());
     }
     else {
-	$experiment->SetState(EXPTSTATE_ACTIVE());
 	$experiment->PostSwap($realuser->emulab_user(),
 			      $Experiment::EXPT_SWAPIN);
+	$experiment->SetState(EXPTSTATE_ACTIVE());
 	
 	$ticket->Redeem()
 	    if (defined($ticket));
@@ -6293,6 +6319,7 @@ sub SliverWorkAux($)
 		print STDERR "Could not restore backup state for $pid,$eid\n";
 	    }
 	}
+	$experiment->SetState(EXPTSTATE_ACTIVE());
 	if (!$v2) {
 	    system("$SNMPIT -t $pid $eid");
 	    if ($?) {
@@ -8312,7 +8339,7 @@ sub GeniExperiment($;$)
 #
 # Given slice and user, flip to the proper user to operate as.
 #
-sub FlipToUser($$)
+sub FlipToUser($;$)
 {
     my ($object, $user) = @_;
     my ($project,$group,$creator, $experiment, $image);
@@ -9438,7 +9465,7 @@ sub HandleBlockstore($$$$$$@)
 		#
 		# Only one read-write user at a time.
 		#
-		if (!$readonly && $lease->InUseReadWrite()) {
+		if ((!($readonly || $rwclone)) && $lease->InUseReadWrite()) {
 		    $message = "Dataset $dataset_id is already in use RW";
 		    $errorcode = GENIRESPONSE_BADARGS;
 		    last;

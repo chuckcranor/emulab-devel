@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1876,6 +1876,10 @@ EOF7
 }
 
 fixone() {
+    if [ -n "$SLICEFIX_CLOUDINIT" -a "$SLICEFIX_CLOUDINIT" != "0" ]; then
+	echo "WARNING: cloud-init not supported from FreeBSD MFS yet!"
+    fi
+
     echo "*** ${disk}${pchar}${part}:"
     if [ $isgpt -eq 0 ]; then
 	ptype=`fdisk -${part} ${disk} | grep sysid | \

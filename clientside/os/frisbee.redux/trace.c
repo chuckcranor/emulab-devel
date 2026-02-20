@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2002-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -168,13 +168,15 @@ TraceDump(int serverrel, int level)
 			case EV_JOINREP:
 			{
 				unsigned long long bytes;
+				uint32_t csize = ptr->args[1] >> 16;
+				uint32_t bsize = ptr->args[1] & 0xFFFF;
 				bytes = (unsigned long long)ptr->args[2] << 32;
 				bytes |= ptr->args[3];
-				fprintf(fd, "%s: JOIN reply, "
+				fprintf(fd, "%s: sent JOIN reply, ID=%x, "
 					"chunksize=%u, blocksize=%u, "
 					"imagebytes=%llu\n",
 					inet_ntoa(ptr->srcip),
-					ptr->args[0], ptr->args[1], bytes);
+					ptr->args[0], csize, bsize, bytes);
 				break;
 			}
 			case EV_LEAVEMSG:

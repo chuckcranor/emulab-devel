@@ -23,7 +23,7 @@ fi
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
 	if [ -x $sshbanlist ]; then
-	    $sshbanlist
+	    $sshbanlist -C
 	    echo -n "sshbanlist";
 	fi
 	;;

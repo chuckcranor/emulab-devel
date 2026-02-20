@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,17 +25,27 @@ include("defs.php3");
 include("imageid_defs.php");
 
 #
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $reqargs = RequiredPageArguments("node_type", PAGEARG_STRING);
+    $optargs = OptionalPageArguments("classic",   PAGEARG_BOOLEAN);
+    if (!$classic) {
+        RedirectToPortal("show-nodetype.php", "type=$node_type");
+        return;
+    }
+}
+else {
+    $classic = 1;
+}
+
+#
 # Anyone can access this info, its a PUBLIC PAGE!
 # Get current user if there is one.
 #
 $this_user = CheckLogin($check_status);
 $reqargs   = RequiredPageArguments("node_type", PAGEARG_STRING);
-$optargs   = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
-
-if (!$CLASSICWEB_OVERRIDE && !$classic) {
-    header("Location: apt/show-nodetype.php?type=$node_type");
-    return;
-}
 
 # Sanitize.
 if (!preg_match("/^[-\w]+$/", $node_type)) {
@@ -172,7 +182,8 @@ $query_result =
 if (mysql_num_rows($query_result)) {
     echo "<br>
           <center>
-	  Nodes (<a href=nodecontrol_list.php3?showtype=$node_type>Show details</a>)
+	  Nodes (<a href=nodecontrol_list.php3?showtype=$node_type" .
+          ($classic ? "&classic=1" : "") . ">Show details</a>)
 	  <br>
           <table class=nogrid cellspacing=0 border=0 cellpadding=5>\n";
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -304,17 +304,6 @@ function Do_Create()
         fwrite($fp, "<attribute name='profile_public'><value>" .
                ($who == "public" ? 1 : 0) . "</value></attribute>\n");
 
-        if (isset($formfields["profile_project_write"])) {
-            fwrite($fp, "<attribute name='profile_project_write'><value>");
-            if ($formfields["profile_project_write"] == "checked") {
-                fwrite($fp, "1");
-            }
-            else {
-                fwrite($fp, "0");
-            }
-            fwrite($fp, "</value></attribute>\n");
-        }
-        
         if (ISADMIN()) {
             fwrite($fp, "<attribute name='profile_topdog'><value>");
 
@@ -604,7 +593,9 @@ function Do_CloneStatus()
     else {
 	$blob["image_size"] = 0;
     }
-    $blob["image_status"] = $taskdata["image_status"];
+    if (isset($taskdata["image_status"])) {
+        $blob["image_status"] = $taskdata["image_status"];
+    }
     
     #
     # Lets put the node status in too. The backend has helpfully told us
@@ -1760,16 +1751,16 @@ function Do_SearchProfiles()
         $blob["version"]   = $row["version"];
         $blob["name"]      = $row["name"];
         $blob["pid"]       = $row["pid"];
-        $blob["desc"]      = CleanString($row["description"]);
+        $blob["desc"]      = "";
         $blob["created"]   = DateStringGMT($row["created"]);
         $blob["public"]    = $row["public"];
         $blob["listed"]    = $row["listed"] ? "Yes" : "No";
         $blob["shared"]    = $row["shared"];
         $blob["creator"]   = $row["creator"];
 
-        if ($public)
+        if ($row["public"] != 0)
             $privacy = "Public";
-        elseif ($shared)
+        elseif ($row["shared"] != 0)
             $privacy = "Site";
         else
             $privacy = "Project";

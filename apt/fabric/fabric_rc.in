@@ -23,4 +23,4 @@ export FABRIC_SLICE_PRIVATE_KEY_FILE=@prefix@/fabric/fabric
 export FABRIC_SLICE_PUBLIC_KEY_FILE=@prefix@/fabric/fabric.pub
 
 export FABRIC_LOG_LEVEL=DEBUG
-export FABRIC_LOG_FILE=/tmp/fablib/fablib.log
+#export FABRIC_LOG_FILE=/tmp/fablib/fablib.log

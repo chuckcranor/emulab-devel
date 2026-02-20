@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -128,7 +128,7 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
 	#
 	if (!empty($classclause) || !empty($noclassclause)) {
 	    DBQueryFatal("CREATE TEMPORARY TABLE nodelogtemp ".
-			 "SELECT r.node_id, MAX(reported) AS reported ".
+			 "SELECT r.node_id, MAX(log_id) AS log_id ".
 			 "FROM reserved AS r ".
 			 "LEFT JOIN nodelog AS l ON r.node_id=l.node_id ".
 			 "LEFT JOIN nodes AS n ON r.node_id=n.node_id ".
@@ -138,7 +138,7 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
 			 "GROUP BY r.node_id");
 	} else {
 	    DBQueryFatal("CREATE TEMPORARY TABLE nodelogtemp ".
-			 "SELECT r.node_id, MAX(reported) AS reported ".
+			 "SELECT r.node_id, MAX(log_id) AS log_id ".
 			 "FROM reserved AS r ".
 			 "LEFT JOIN nodelog AS l ON r.node_id=l.node_id ".
 			 "WHERE r.eid='$eid' and r.pid='$pid' ".
@@ -167,7 +167,7 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
 			 "left join tiplines as tip on tip.node_id=r.node_id and ".
 			 "     tip.disabled=0 ".
 		         "inner join nodelogtemp as t on t.node_id=r.node_id ".
-		         "left join nodelog as nl on nl.node_id=r.node_id and nl.reported=t.reported ".
+		         "left join nodelog as nl on nl.node_id=r.node_id and nl.log_id=t.log_id ".
 
 		         "WHERE r.eid='$eid' and r.pid='$pid' ".
 			 "$classclause $noclassclause".

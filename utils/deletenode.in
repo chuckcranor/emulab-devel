@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,6 +31,7 @@ my $TB         = "@prefix@";
 my $ELABINELAB = @ELABINELAB@;
 my $MAINSITE   = @TBMAINSITE@;
 my $KILL       = "/bin/kill";
+my $DBPACKAGE = "@DBPACKAGE@";
 
 use lib '@prefix@/lib';
 use libdb;
@@ -165,12 +166,36 @@ if ($options{"S"}) {
 	}
 	
 	my $dumpopts = "--compact --no-create-info --add-locks";
-	$dumpopts .= " --set-gtid-purged=OFF";
+	if ($DBPACKAGE eq "mysql") {
+	    $dumpopts .= " --set-gtid-purged=OFF";
+	}
 	while (my ($table, $clist) = each %clean_tables) {
 	    foreach my $column (@$clist) {
 		if (system("mysqldump $dumpopts -w \"$column='$node'\" tbdb $table >> $savefile")) {
 		    print STDERR "*** Failed to save $table info for $node, aborting\n";
 		    exit(1);
+		}
+	    }
+	    #
+	    # Save off state related to the bsidx for the blockstores.
+	    # Right now, this is the S/N of the local disks in
+	    # blockstore_attributes. There should not be anything in
+	    # _state or _trees.
+	    #
+	    if ($table eq "blockstores") {
+		my $res = DBQueryFatal("select bsidx from blockstores ".
+				       "where node_id='$node'");
+		my $wclause = "";
+		if ($res->num_rows()) {
+		    my @ids = ();
+		    while (($bsidx) = $res->fetchrow_array()) {
+			push @ids, $bsidx;
+		    }
+		    $wclause = "bsidx in (" . join(',', @ids) . ")";
+		    if (system("mysqldump $dumpopts -w \'$wclause\' tbdb blockstore_attributes >> $savefile")) {
+			print STDERR "*** Failed to save blockstore_attribute info for $node blockstores, aborting\n";
+			exit(1);
+		    }
 		}
 	    }
 	}
@@ -208,6 +233,12 @@ foreach $node (@subnodes) {
 	    print "${pre}Removing from table blockstore_trees, column bsidx\n"
 		if (defined($options{"v"}));
 	    DBQueryFatal("DELETE FROM blockstore_trees WHERE bsidx IN ".
+		"(SELECT bsidx FROM blockstores WHERE node_id='$node')")
+		if (!defined($options{"n"}));
+
+	    print "${pre}Removing from table blockstore_state, column bsidx\n"
+		if (defined($options{"v"}));
+	    DBQueryFatal("DELETE FROM blockstore_state WHERE bsidx IN ".
 		"(SELECT bsidx FROM blockstores WHERE node_id='$node')")
 		if (!defined($options{"n"}));
 	}

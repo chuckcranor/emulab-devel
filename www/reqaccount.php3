@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,11 @@
 # }}}
 #
 include("defs.php3");
+
+if (!$CLASSICWEB_OVERRIDE) {
+    RedirectToPortal("signup.php");
+    return;
+}
 
 #
 # Standard Testbed Header

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -690,7 +690,7 @@ handle_loadinfo()
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		echo "Failed to write image to disk, status $rc"
-		exit 1
+		return $rc
 	fi
 
 	# remove keyfiles
@@ -716,21 +716,41 @@ handle_loadinfo()
 		sgdisk -e /dev/$DISK >/dev/null 2>&1
 		rc=$?
 		if [ $rc -ne 0 ]; then
-		    echo "*** could not repair secondary GPT, trying gdisk"
+		    echo "*** sgdisk could not repair secondary GPT, trying gdisk"
 		fi
 	    fi
 	    if [ $rc -ne 0 ]; then
 		/bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+		rc=$?
+		if [ $rc -ne 0 ]; then
+		    echo "WARNING: could not repair secondary GPT"
+		fi
 	    fi
-	    echo "Re-reading partition table after GPT fixups ..."
-	    if [ -x /usr/sbin/partprobe ]; then
-		/usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
-	    else
-		echo w | fdisk /dev/$DISK > /dev/null 2>&1
+	    if [ $rc -eq 0 ]; then
+		echo "Re-reading partition table after GPT fixups ..."
+		if [ -x /usr/sbin/partprobe ]; then
+		    /usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
+		    if [ $? -ne 0 ]; then
+			echo "*** pausing and retrying partprobe"
+			sleep 1
+			/usr/sbin/partprobe /dev/$DISK
+		    fi
+		else
+		    echo w | fdisk /dev/$DISK > /dev/null 2>&1
+		fi
+		rc=$?
+		if [ $rc -ne 0 ]; then
+		    echo "WARNING: re-reading partition table failed"
+		fi
 	    fi
 	elif [ ! $rc -eq 0 ]; then
 	    echo "WARNING: get_part_type /dev/$DISK failed ($pttype, $?)"
 	fi
+
+	# Failing to fix up a GPT is not considered fatal.
+	# This is dubious, but in the common case (only case right now)
+	# of loading a single image, we are about to reboot anyway.
+	return 0
 }
 
 #
@@ -752,6 +772,7 @@ fixone() {
     export SLICEFIX_BIOSDISK=`getvar BIOSDISK "$iline"`
     export SLICEFIX_DOM0MEM=`getvar DOM0MEM "$iline" unknown`
     export SLICEFIX_DISABLEIF=`getvar DISABLEIF "$iline"`
+    export SLICEFIX_CLOUDINIT=`getvar CLOUDINIT "$iline"`
 
     $BINDIR/slicefix $PART $DISK
     return $?
@@ -824,6 +845,24 @@ fi
 # Enable IPoD
 if [ -x $BINDIR/rc/rc.ipod ]; then
 	$BINDIR/rc/rc.ipod
+fi
+
+#
+# Reset NVMe devices to have a single namespace per controller.
+# XXX FIXNVME could be passed in via the loadinfo if needed.
+#
+FIXNVME=1
+if [ ! -x /usr/sbin/nvme -o ! -x $BINDIR/fixnvme ]; then
+    FIXNVME=0
+fi
+if [ $FIXNVME -eq 1 ]; then
+    nvmedevs=`/bin/ls /dev/nvme? /dev/nvme?? 2>/dev/null`
+    if [ -n "$nvmedevs" ]; then
+	echo "Checking format of NVMe devices ..."
+	for dev in $nvmedevs; do
+	    $BINDIR/fixnvme $dev doit
+	done
+    fi
 fi
 
 # Try to map disks to BIOS drive numbers via EDD
@@ -968,6 +1007,53 @@ while read line; do
 	    LDISK=${LDISK%% *}
 	    ;;
     esac
+
+    #
+    # XXX attempt to detect non-deterministic naming of NVMe drives in Linux.
+    # If we have multiple NVMe drives, we might load the wrong one here which
+    # is bad if the last load used a different disk. Then we wind up with
+    # multiple drives with a bootable OS leading to confusion.
+    #
+    # So before doing anything, we attempt to locate an existing Emulab-style
+    # bootdisk:
+    #
+    # If we don't find one, all is well.
+    # Otherwise, if we find one and it matches LDISK, all is well.
+    # Otherwise, if we find one and it does not match, use the existing one.
+    # Otherwise, we found multiple OS disk, just plow ahead with LDISK.
+    #
+    if [ -x "$BINDIR/findbootdisk.pl" ]; then
+	echo "Identifying boot disk ..."
+	fbdarg=
+	BOOTSERIAL=`getvar BOOTSERIAL "$line" none`
+	if [ "$BOOTSERIAL" != "none" ]; then
+	    fbdarg="serial=$BOOTSERIAL"
+	fi
+
+	bdisks=`$BINDIR/findbootdisk.pl $fbdarg`
+	bdisk=${bdisks%% *}
+	if [ -z "$bdisk" ]; then
+	    true
+	elif [ "$bdisk" = "$bdisks" ]; then
+	    if [ "$bdisk" = "$LDISK" ]; then
+		true
+	    else
+		echo "Boot disk appears to be $bdisk NOT $LDISK, imaging $bdisk..."
+		LDISK=$bdisk
+		# Ick, we have to regenerate a new BSD disk name.
+		# XXX probably only needed for FreeBSD images.
+		if [ -x "$BINDIR/linux_to_freebsd_disk" ]; then
+		    DISK=`$BINDIR/linux_to_freebsd_disk $bdisk`
+		else
+		    DISK=$bdisk
+		fi
+	    fi
+	else
+	    echo "WARNING: found more than one potential boot disk, imaging $LDISK"
+	    echo "         but might boot from any one of: $bdisks"
+	fi
+    fi
+
     line="$line LDISK=$LDISK"
 
     PART=`getvar PART "$line" 0`

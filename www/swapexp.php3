@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,7 +22,6 @@
 # }}}
 #
 include("defs.php3");
-include_once("template_defs.php");
 
 #
 # Only known and logged in users.
@@ -128,8 +127,7 @@ $idlethresh    = min($idleswap_time/60.0,TBGetSiteVar("idle/threshold"));
 $lockdown      = $experiment->lockdown();
 $isgeni        = $experiment->geniflags();
 
-# Template Instance Experiments get special treatment in this page.
-$instance = TemplateInstance::LookupByExptidx($exptidx);
+$instance = null;
 
 # Convert inout to informative text.
 if (!strcmp($inout, "in")) {

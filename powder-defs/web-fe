@@ -24,7 +24,8 @@ DELAYCAPACITY=1
 BOSSNODE=boss.web.powderwireless.net
 USERNODE=ops.web.powderwireless.net
 FSNODE=boss.web.powderwireless.net
-MAILERNODE=boss
+# This would typically not change, is usually ops. But can be boss too.
+MAILERNODE="boss"
 OURDOMAIN=web.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
@@ -48,7 +49,7 @@ SFSSUPPORT=0
 CVSSUPPORT=0
 NFSTRACESUPPORT=0
 ARCHIVESUPPORT=0
-NTPSERVER=boss
+NTPSERVER=ntp1.emulab.net
 EXTERNAL_NTPSERVER1=ntp1.emulab.net
 EXTERNAL_NTPSERVER2=ntp1.emulab.net
 EXTERNAL_NTPSERVER3=ntp1.emulab.net
@@ -56,6 +57,8 @@ EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
+# For getting initial email setup
+#ELABINELAB_MAILTARGET="stoller@emulab.net"
 # If we can run old images ... depends on whther elvind is installed.
 ELVIN_COMPAT=0
 # The name of the outer boss for inner boss to request services from.
@@ -113,12 +116,14 @@ MIN_UNIX_GID=2000
 
 # use ZFS
 WITHZFS=1
+ZFS_NOEXPORT=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="10G"
+ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
-WITHAMD=1
-AMD_ROOT=
+WITHAMD=0
+# This will default to /.amd_mnt/ops in configure
+AMD_ROOT=""""
 
 # Which console to use in the MFS. We need to set this for GeniRacks.
 NODECONSOLE="sio"
@@ -133,6 +138,10 @@ BROWSER_CONSOLE_ENABLE=1
 
 # Do not expire passwords.
 EXPIRE_PASSWORDS=0
+
+# Collect idle statistics by default, and store in RRD files.
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1
 CONFIG_TARGETSYS=1
 TARGETSYS_TARGET="POWDER-FIXED"
 PROTOGENI_SUPPORT=1
@@ -146,17 +155,16 @@ CLUSTER_PORTAL="boss.emulab.net"
 CLUSTER_PUBSUBD_SSLPORT=16506
 CLUSTER_PUBSUBD_ALTPORT=16507
 EC2META_ENABLE=1
-# Mobile networking support (PhantomNet)
-MOBILESUPPORT=1
-POWDER_RFMONITOR=1
-POWDER_RFMONITOR_HOST="10.10.10.2"
-POWDER_NICKNAME="WEB"
-POWDER_WBSTORE=1
-# Collect idle statistics by default, and store in RRD files.
-SDCOLLECTD_DOSTATS=1
-SDCOLLECTD_USE_RRDTOOL=1
+# Added by Emulab - Version: POWDER-FIXED
 PROTOGENI_NOPORTALEXPIRE=1
 PROTOGENI_PORTALONLY=1
-
 DISABLE_RESERVATION_EMAIL=1
+
+POWDER_RFMONITOR=1
+POWDER_RFMONITOR_HOST="10.10.10.2"
 POWDER_DEADMAN=1
+POWDER_WBSTORE=1
+
+ZFS_QUOTA_PROJECT="10G"
+POWDER_NICKNAME="WEB"
+# End of Emulab added section

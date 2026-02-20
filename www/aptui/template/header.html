@@ -218,7 +218,7 @@
 	    <% if (vars.page_title != "Login") { %>
               <li id='loginitem' class='apt-left'>
 		<a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
-                   href="login.php?referrer=<%- encodeURI(window.location.href) %>"
+                   href="login.php"
                    id='loginbutton'>Login</a>
 	      </li>
 	    <% } %>
@@ -253,6 +253,14 @@
               <li><a href='portal-news.php'
                      class='dropdown-item' target='_blank'>News</a></li>
             <% } %>
+            <li>
+	      <a class="dropdown-item"
+		 data-toggle='modal' data-bs-toggle='modal'
+		 style='cursor: pointer; '
+		 data-target='#helpforum-modal'
+		 data-bs-target='#helpforum-modal'>
+		Help Forum</a>
+	    </li>
 	  </ul>
 	</li> <!-- End of Docs menu -->
 
@@ -280,6 +288,10 @@
 			 class='dropdown-item'>Download Credentials</a></li>
          	  <li><a href='ssh-keys.php'
 			 class='dropdown-item'>Manage SSH Keys</a></li>
+		  <% if (1 || vars.isadmin || vars.isstud) { %>
+         	    <li><a href='gettoken.php'
+			   class='dropdown-item'>Portal API Token</a></li>
+		  <% } %>
                   <li class='divider'></li>
                 <% } %>
 	      <% } %>

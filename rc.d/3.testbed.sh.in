@@ -384,7 +384,7 @@ case "$1" in
 			kill `cat /var/run/reportboot_daemon.pid`
 		fi
 		if [ -r /var/run/cnode-tempmonitor.pid ]; then
-			kill `cat /var/run/cnode-tempmonitor.pid.pid`
+			kill `cat /var/run/cnode-tempmonitor.pid`
 		fi
 		if [ -r /var/run/rdz_expdaemon.pid ]; then
 			kill `cat /var/run/rdz_expdaemon.pid`

@@ -693,6 +693,7 @@ sub tagged($)  { return field($_[0], 'tagged'); }
 sub enabled($) { return field($_[0], 'enabled'); }
 sub ptp($)     { return field($_[0], 'ptp'); }
 sub synce($)   { return field($_[0], 'synce'); }
+sub pvid($)    { return field($_[0], 'pvid'); }
 
 sub wire_end($) { return $_[0]->{'WIRE_END'}; }
 sub is_switch_side($) { return $_[0]->wire_end() eq $WIRE_END_SWITCH; }

@@ -29,9 +29,9 @@
 import argparse
 import traceback
 import sys
+from os import getenv
 
 from fabrictestbed_extensions.fablib.fablib import FablibManager
-import os
 
 FABRIC_RC = "./fabric_rc"
 

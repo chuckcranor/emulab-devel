@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2024 University of Utah and the Flux Group.
+# Copyright (c) 2004-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -691,7 +691,8 @@ sub DumpDBGoo()
 	    "    Could not chmod $statedir\n");
 
     if (exists($elabinelab_attributes->{'CONFIG_ADMINUSERS'}) &&
-	$elabinelab_attributes->{'CONFIG_ADMINUSERS'} != 0) {
+	exists($elabinelab_attributes->{'CONFIG_ADMINUSERS'}->{'boss'}) &&
+	$elabinelab_attributes->{'CONFIG_ADMINUSERS'}->{'boss'}->[0] != 0) {
 
 	# XXX Yes, bad. But we have a bunch of users with admin bit set
 	# that should not.
@@ -1241,8 +1242,14 @@ sub TearDownEmulab()
     #
     $UID = 0;
 
+    #
+    # When ssh'ing into the nascent boss node, do not wait too long as the
+    # setup might not have gotten very far.
+    #
+    my $opts = "-o ConnectTimeout=10";
+
     print "Killing DHCPD on inner boss ($bossnode)\n";
-    system("$SSH -host $bossnode /usr/local/etc/rc.d/2.dhcpd.sh stop");
+    system("$SSH $opts -host $bossnode /usr/local/etc/rc.d/2.dhcpd.sh stop");
     if ($?) {
 	#
 	# This error is non-fatal. If DHCPD cannot be killed, then the inner
@@ -1266,7 +1273,7 @@ sub TearDownEmulab()
     }
     
     print "Asking inner boss ($bossnode) to reboot inner nodes\n";
-    system("$SSH -host $bossnode $wap $nodereboot -b @expnodes");
+    system("$SSH $opts -host $bossnode $wap $nodereboot -b @expnodes");
     if ($?) {
 	#
 	# This error is non-fatal; Outer boss will just resort to power cycle.

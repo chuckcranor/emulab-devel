@@ -207,6 +207,10 @@ function Do_AllInuseRanges()
                      "order by i.pid,i.name");
 
     while ($row = mysql_fetch_array($query_result)) {
+        $zones = $row["powder_zones"];
+        if (!$zones) {
+            $zones = "Outdoor";
+        }
         $range = array(
             "freq_low"  => $row["freq_low"],
             "freq_high" => $row["freq_high"],
@@ -216,7 +220,7 @@ function Do_AllInuseRanges()
             # Ick, for txgraph.js
             "started"   => DateStringGMT($row["started"]),
             "end"       => DateStringGMT($row["expires"]),
-            "powder_zones" => $row["powder_zones"],
+            "powder_zones" => $zones,
             "isexp"     => 1,
             "txlist"    => null,
         );

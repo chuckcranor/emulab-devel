@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# Hook for FreeBSD shutdown to run prepare script when imaging.
+# If a file "/bootcmd" exists, it contains the name of a script to
+# run as final prep for image creation.
+#
+# Replaces the hacked up init we used prior to FreeBSD 13.
+#
+
+if [ -f "/bootcmd" ]; then
+    script=`cat /bootcmd`;
+    rm -f /bootcmd
+    if [ -x "$script" ]; then
+	echo "Running Emulab pre-imaging cleanup script $script..."
+	exec $script
+    fi
+fi
+exit 0

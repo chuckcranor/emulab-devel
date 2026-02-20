@@ -31,7 +31,7 @@ include $(OBJDIR)/Makeconf
 BINS		= suexec runsuid
 SBINS		= genlastlog lastlog_daemon runmedusa sshbanlist
 OTHERS          = hosts.allow
-CTRL_SBINS      = sshbanlist dbb-daemon
+CTRL_SBINS      = sshbanlist
 NMAPSERVICES    = /usr/local/share/nmap/nmap-services
 
 # These scripts installed setuid, with sudo. 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2022 University of Utah and the Flux Group.
+# Copyright (c) 2003-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,14 +40,16 @@ sub usage()
     print STDERR " -n       - Impotent mode; just say what will happen.\n";
     print STDERR " -C       - Clean up (close/store) stale logfiles.\n";
     print STDERR " -P       - Prune some logs (sliverstatus,deletesliver).\n";
+    print STDERR " -S       - Print contents of logfile in show mode.\n";
     exit(-1);
 }
-my $optlist   = "oCndP";
+my $optlist   = "oCndPS";
 my $debug     = 0;
 my $impotent  = 0;
 my $open      = 0;
 my $clean     = 0;
 my $prune     = 0;
+my $dumpfile  = 0;
 
 # Protos
 sub ShowOpen();
@@ -68,7 +70,7 @@ my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 
 #
 # Testbed Support libraries
-#
+ #
 use lib "@prefix@/lib";
 use emdb;
 use emutil;
@@ -124,6 +126,9 @@ elsif ($prune) {
     exit(PruneLogfiles());
 }
 elsif (@ARGV) {
+    if (defined($options{'S'})) {
+	$dumpfile = 1;
+    }
     exit(ShowLogfiles(@ARGV));
 }
 else {
@@ -349,8 +354,18 @@ sub ShowLogfiles(@)
 		    }
 		}
 	    }
+	    if ($dumpfile) {
+		print "+++++++++++++++++++++++++++++++++++++++++++++++++++++\n";
+		
+		if ($logfile->compressed()) {
+		    system("/bin/cat " . $logfile->filename() . "| gunzip");
+		}
+		else {
+		    system("/bin/cat " . $logfile->filename());
+		}
+	    }
 	}
-	print "-----------------\n";
+	print "----------------------------------------------------\n";
     }
 }
 

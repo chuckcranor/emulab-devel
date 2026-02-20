@@ -1,0 +1,25 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("apt_instance_logfile_history")) {
+       DBQueryFatal("CREATE TABLE `apt_instance_logfile_history` ( ".
+		    " `uuid` varchar(40) NOT NULL default '', ".
+		    " `logfileid` varchar(40) NOT NULL default '', ".
+		    " `created` datetime default NULL, ".
+		    " PRIMARY KEY (`uuid`,`logfileid`) ".
+		    " ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

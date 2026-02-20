@@ -3,4 +3,10 @@ Defaults        env_keep += "PKG_PATH PKG_DBDIR PKG_TMPDIR TMPDIR PACKAGEROOT PA
 Defaults        env_keep += "PORTSDIR PORTS_INDEX PORTS_DBDIR PACKAGES PKGTOOLS_CONF"
 Defaults        env_keep += "EDITOR VISUAL"
 
+#
+# Latest version does not allow PATH to be passed through
+# And it does not allow secure_path to be extended with +=
+#
+Defaults        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/testbed/sbin:/usr/testbed/bin:/usr/testbed/sbin/protogeni"
+
 %wheel  ALL=(ALL) NOPASSWD: ALL

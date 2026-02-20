@@ -14,4 +14,4 @@ lib/perl5/site_perl/ABAC.so
 lib/perl5/site_perl/ABAC.so.0
 lib/perl5/site_perl/ABAC.so.0.0.0
 lib/perl5/site_perl/abac_wrap.cxx
-man/man1/creddy.1.gz
+share/man/man1/creddy.1.gz

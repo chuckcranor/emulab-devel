@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,6 +54,8 @@ $geni_response_codes =
           "Insufficient Nodes",
           "Insufficient Memory",
           "No Mapping Possible",
+          "No Connection Possible",
+          "Mapping Impossible",
     );
 define("GENIRESPONSE_BADARGS",   	       1);
 define("GENIRESPONSE_ERROR",       	       2);
@@ -85,8 +87,11 @@ class Instance
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
-	    DBQueryWarn("select * from apt_instances ".
-			"where uuid='$safe_uuid'");
+	    DBQueryWarn("select i.*,d.last_retry,d.reason as deferred_reason  ".
+                        "  from apt_instances as i ".
+                        "left join apt_deferred_instances as d on ".
+                        "  d.uuid=i.uuid ".
+			"where i.uuid='$safe_uuid'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->instance = null;
@@ -156,8 +161,11 @@ class Instance
     function isopenstack()  { return $this->field('isopenstack'); }
     function params()       { return $this->field('params'); }
     function paramdefs()    { return $this->field('paramdefs'); }
+    function script()       { return $this->field('script'); }
     function portal()       { return $this->field('portal'); }
     function powder_zones() { return $this->field('powder_zones'); }
+    function deferred_reason() { return $this->field('deferred_reason'); }
+    function last_retry()   { return $this->field('last_retry'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
@@ -929,19 +937,23 @@ class Instance
                            "nuvo7501"  => true,
                            "pnbase2"   => true,
                            "pnbase1"   => true,
-                           "cellsdr1-browning"  => true,
                            "cellsdr1-dentistry" => true,
                            "cbrssdr1-dentistry" => true,
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
                            "cellsdr1-ustar"     => true,
-                           "cellsdr1-meb"       => true,
                            "mmimo-ac"           => true,
                            "n310-ustar"         => true,
                            "cap-ustar"          => true,
                            "ceg1"               => true,
                            "cap1"               => true,
                            "cl-ap"              => true,
+                           "wifi-ap"            => true,
+                           "bb-pc"              => true,
+                           "ue1"                => true,
+                           "ue2"                => true,
+                           "ue3"                => true,
+                           "ue4"                => true,
                            # Wisconsin, not ready yet
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
@@ -964,6 +976,10 @@ class Instance
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
+            $skiptypes["d760p"]    = true;
+            $skiptypes["d760-gpu"] = true;
+            $skiptypes["d760-hgpu"]= true;
+
             #
             # Grab all the local individually reservable nodes.
             #

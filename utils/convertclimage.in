@@ -1,0 +1,520 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# Convert from a "cloud" image to an Emulab imagezip image suitable for
+# import into the testbed. We run this on ops and not boss because:
+#
+#    * qemu-img uses file locking that does not work across NFS (/proj)
+#    * reading/writing large files will be much faster when not across NFS
+#
+# Conseqently, we cannot actually create the Emulab image, because that
+# has to be done on boss.
+#
+# Also needs to be run as root so that the `mdconfig -a` command works.
+#
+# XXX currently we only handle QCOW2 format images.
+# It could actually handle any image format that `qemu_img` does.
+#
+use strict;
+use English;
+use Getopt::Std;
+use POSIX qw(strftime);
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+#
+# Take a raw image and make a proper emulab image based off of it
+#
+sub usage()
+{
+    print(STDOUT
+	  "Usage: convertimage [-dIn] [-i imagefile | -u url] [-f fmt] [-P infofile] [-R maxrate] [-S maxsize] <pid>[/<gid>] <imagename>\n".
+	  "-d          - turn on debugging\n".
+	  "-I          - do not delete intermediate images\n".
+	  "-n          - run in impotent mode\n".
+	  "-i image    - image file to convert\n".
+	  "-u url      - image URL to download and convert\n".
+	  "-f fmt      - format of input image (only do 'qcow2' right now)\n".
+	  "-P          - print info about the image partitions\n".
+	  "-R maxrate  - maximum transfer rate in MB/sec (-u only)\n".
+	  "-S maxsize  - maximum size of uncompressed image in GB\n".
+	  "<pid>       - project for new image\n".
+	  "<pid>/<gid> - project and subgroup of new image\n".
+	  "<imagename> - image name\n".
+	  "Converted image will be in ".
+	  "/proj/<pid>/imports/<imagename>.ndz or ".
+	  "/groups/<pid>/<gid>/imports/<imagename>.ndz.\n");
+    exit(-1);
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+
+    my $stamp = strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print STDERR "$stamp: $msg\n";
+}
+
+my $optlist  = "dIni:u:f:PR:S:";
+my $debug = 0;
+my $keepfiles = 0;
+my $impotent = 0;
+my $infile = "";
+my $inurl = "";
+my $format = "qcow2";
+my $pid = "";
+my $gid = "";
+my $imagename = "";
+my $maxsize = 50;	# 50GB
+my $maxrate = "100";	# 100MBs (800Mbs)
+my $printpartinfo = 0;
+my %pinfo = ();
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $PROJROOT    = "@PROJROOT_DIR@";
+my $GROUPROOT   = "@GROUPSROOT_DIR@";
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Non configure vars.
+#
+my $curl     = "/usr/local/bin/curl";
+my $qemutool = "/usr/local/bin/qemu-img";
+my $mdconfig = "/sbin/mdconfig";
+my $blkid    = "/usr/local/sbin/blkid";
+my $zipper   = "/usr/testbed/bin/imagezip";
+my $error    = 0;
+
+#
+# Takes a valid MD device and figures out the partition type and
+# contents of every partition. Return one on success, zero otherwise.
+#
+sub gather($)
+{
+    my ($munit) = @_;
+    my $mdev = "/dev/md$munit";
+    my $biospart = 0;
+    my $efipart = 0;
+    my $ospart = 0;
+    my $lastoff = undef;
+    my $pttype = "";
+
+    # Use gpart to determine the partition table and types
+    my @output = `gpart show $mdev 2>&1`;
+    if ($?) {
+	print STDERR "md$munit: Could not get info\n";
+	return 0;
+    }
+    foreach my $line (@output) {
+	chomp($line);
+	if ($line =~ /^=>\s+(\d+)\s+(\d+)\s+md${munit}\s+(GPT|MBR)/) {
+	    my $pnum = 0;
+	    $pinfo{$pnum}{'start'} = $1;
+	    $pinfo{$pnum}{'size'} = $2;
+	    $pinfo{$pnum}{'ptype'} = $pttype = $3;
+	    next;
+	}
+	if ($line =~ /^\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)/) {
+	    my ($start, $ptype, $fstype);
+	    my $pnum = $3;
+	    $pinfo{$pnum}{'start'} = $start = $1;
+	    $pinfo{$pnum}{'size'} = $2;
+	    $pinfo{$pnum}{'ptype'} = $ptype = $4;
+
+	    # get blkid info for legit partitions
+	    my $ch = ($pttype eq "GPT") ? 'p' : 's';
+	    my $info = `$blkid ${mdev}${ch}${pnum} 2>/dev/null`;
+	    chomp($info);
+	    if ($info =~ /TYPE="([^"]+)"/) {
+		$pinfo{$pnum}{'fstype'} = $fstype = $1;
+		if ($info =~ /UUID="([^"]+)"/) {
+		    $pinfo{$pnum}{'uuid'} = $1;
+		}
+		if ($info =~ /LABEL="([^"]+)"/) {
+		    $pinfo{$pnum}{'label'} = $1;
+		}
+	    }
+	    # XXX ironically, blkid on FreeBSD does not identify ufs
+	    elsif ($ptype eq "freebsd-ufs") {
+		$pinfo{$pnum}{'fstype'} = $fstype = "ufs";
+	    }
+
+	    if (!$biospart &&
+		($ptype eq "bios-boot" || $ptype eq "freebsd-boot")) {
+		$biospart = $pnum;
+	    }
+	    if (!$efipart && $ptype eq "efi") {
+		$efipart = $pnum;
+	    }
+	    #
+	    # Identify the OS partition. It will likely be the last partition
+	    # on the disk that has a non-FAT filesystem. Last so that it can
+	    # be expanded to fill the disk. I have seen ext4, xfs, btrfs.
+	    # There are likely also lvm and zfs volume manager based ones.
+	    #
+	    if (defined($fstype) && $fstype ne "vfat" &&
+		(!defined($lastoff) || $start > $lastoff)) {
+		$lastoff = $start;
+		$ospart = $pnum;
+	    }
+	    next;
+	}
+    }
+    # Gotta have a type
+    if (!exists($pinfo{0})) {
+	print STDERR "md$munit: Unparseable partition table\n";
+	return 0;
+    }
+    $pinfo{'pttype'} = $pttype;
+    $pinfo{'ospart'} = $ospart;
+
+    #
+    # If MBR or has a BIOS boot partition, it should work with legacy BIOS
+    # XXX note that we already boot thru the MBR on legacy BIOS
+    #
+    if ($pttype eq "MBR" || $biospart > 0) {
+	$pinfo{'legacyboot'} = 1;
+	$pinfo{'legacypart'} = 0;
+    } else {
+	$pinfo{'legacyboot'} = 0;
+    }
+
+    #
+    # If GPT and there is an EFI partition, it should work with UEFI.
+    # For these we will boot thru the designated EFI partition.
+    #
+    if ($pttype eq "GPT" && $efipart > 0) {
+	$pinfo{'efiboot'} = 1;
+	$pinfo{'efipart'} = $efipart;
+    } else {
+	$pinfo{'efiboot'} = 0;
+    }
+
+    return 1;
+}
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"I"})) {
+    $keepfiles = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"i"})) {
+    $infile = $options{"i"};
+}
+if (defined($options{"u"})) {
+    $inurl = $options{"u"};
+}
+if (defined($options{"f"})) {
+    $format = $options{"f"};
+}
+if (defined($options{"P"})) {
+    $printpartinfo = 1;
+}
+if (defined($options{"R"})) {
+    if ($options{"R"} =~ /^(\d+)$/) {
+	$maxrate = $1;
+	if ($maxrate >= 1000) {
+	    print STDERR "maxrate is too large (>=1000MB/sec)\n";
+	    usage();
+	}
+    } else {
+	print STDERR "Invalid maxrate\n";
+	usage();
+    }
+}
+if (defined($options{"S"})) {
+    if ($options{"S"} =~ /^(\d+)$/) {
+	$maxsize = $1;
+	if ($maxsize >= 100) {
+	    print STDERR "maxsize is too large (>=100GB)\n";
+	    usage();
+	}
+    } else {
+	print STDERR "Invalid maxsize\n";
+	usage();
+    }
+}
+if (@ARGV != 2) {
+    usage();
+}
+
+if (($infile && $inurl) || (!$infile && !$inurl)) {
+    print STDERR "Must specify exactly one of -i and -u\n";
+    usage();
+}
+if ($format ne "qcow2") {
+    print STDERR "Only handle 'qcow2' images right now\n";
+    usage();
+}
+if ($ARGV[0] =~ /^([0-9a-zA-Z][-\w]*)(?:\/([0-9a-zA-Z][-\w]+))?$/) {
+    $pid = $1;
+    $gid = $2 if ($2);
+} else {
+    print STDERR "Invalid pid or pid/gid argument '$ARGV[0]'\n";
+    usage();
+}
+if ($ARGV[1] =~ /^([a-zA-Z0-9][-\w\.+]+)$/) {
+    $imagename = $1;
+} else {
+    print STDERR "Invalid image name argument '$ARGV[1]'\n";
+    usage();
+}
+
+# make sure qcow tools are installed
+if (! -x "$qemutool") {
+    print STDERR "FATAL: qemu-img (qcow-tools) not installed\n";
+    exit(1);
+}
+if (! -x "$blkid") {
+    print STDERR "FATAL: blkid (e2fsprogs-core) not installed\n";
+    exit(1);
+}
+
+if ($UID != 0) {
+    print STDERR "FATAL: must be run as root!\n";
+    exit(1);
+}
+
+# cleanup vars
+my ($tmpdir, $tmpfile, $rawfile, $mdunit);
+my $rv = 1;
+
+if ($gid) {
+    $tmpdir = "$GROUPROOT/$pid/$gid/imports/$imagename";
+} else {
+    $tmpdir = "$PROJROOT/$pid/imports/$imagename";
+}
+
+# XXX take a lock on image conversion?
+
+# see if image has already been imported (?)
+if (-e "$tmpdir/$imagename.ndz") {
+    print STDERR ($gid ? "Group" : "Project"),
+	" image $imagename already imported\n";
+    exit(1);
+}
+
+# create directories
+logit("debug: mkdir -p $tmpdir") if ($debug);
+if (!$impotent && system("mkdir -p $tmpdir")) {
+    print STDERR "Could not create image import directory\n";
+    exit(1);
+}
+
+# import image via URL to expected place
+$tmpfile = "$tmpdir/$imagename.tmp";
+logit("debug: rm -f $tmpdir/$imagename.tmp") if ($debug);
+if (!$impotent && system("rm -f $tmpfile")) {
+    print STDERR "Input image tmp file already exists\n";
+    exit(1);
+}
+my $suffix = "";
+if ($inurl) {
+    if ($inurl =~ /^.*\.(bz|bz2|gz|xz|zst)$/) {
+	$suffix = ".$1";
+    }
+    my $cmd = "$curl -f -k -L -s -S -o $tmpfile$suffix".
+	" --limit-rate ${maxrate}m --max-filesize ${maxsize}g";
+    $cmd .= " --remove-on-error" if (!$keepfiles);
+    logit("debug: $cmd $inurl") if ($debug);
+    if (!$impotent && system("$cmd $inurl")) {
+	print STDERR "Could not fetch '$inurl' to tmp directory\n";
+	goto cleanup;
+    }
+}
+# copy file to expected place
+else {
+    # XXX if running as root need to make sure user has access to source file
+
+    if ($infile =~ /^.*\.(bz|bz2|gz|xz|zst)$/) {
+	$suffix = ".$1";
+    }
+    logit("debug: cp $infile $tmpfile$suffix") if ($debug);
+    if (!$impotent && system("cp $infile $tmpfile$suffix")) {
+	print STDERR "Could not copy $infile to tmp directory\n";
+	goto cleanup;
+    }
+}
+
+
+# Ugh, if the original file was compressed, we need to decompress it
+# First make sure it won't be too big.
+if ($suffix) {
+    logit("debug: gzip -l $tmpfile$suffix") if ($debug);
+    if (!$impotent) {
+	my $line = `gzip -l $tmpfile$suffix`;
+	chomp $line;
+	if ($line =~ /^\s*\d+\s+(\d+)/) {
+	    if ($1 >= ($maxsize * 1000 ** 3)) {
+		print STDERR "Uncompressed $format image is too large!\n";
+		goto cleanup;
+	    }
+	}
+    }
+    logit("debug: guzip $tmpfile$suffix") if ($debug);
+    if (!$impotent && system("gunzip $tmpfile$suffix")) {
+	print STDERR "Could not decompress $tmpfile$suffix\n";
+	goto cleanup;
+    }
+    $suffix = "";
+}
+
+# run tools on image to make sure it is a support format and get its size
+#    file format: qcow2
+#    virtual size: 3.5 GiB (3758096384 bytes)
+#    ...
+logit("debug: $qemutool info $tmpfile") if ($debug);
+if (!$impotent) {
+    my @output = `$qemutool info $tmpfile`;
+    if ($?) {
+	print STDERR "Could not get info on input file!\n";
+	goto cleanup;
+    }
+    chomp @output;
+    my $dsize = -1;
+    my $itype = "UNKNOWN";
+    foreach my $line (@output) {
+	if ($line =~ /file format: (\S+)/) {
+	    $itype = $1;
+	} elsif ($line =~ /virtual size: .*\((\d+) bytes\)/) {
+	    $dsize = $1;
+	}
+    }
+    if ($itype ne $format) {
+	print STDERR "Input image not in correct format ($itype != $format)\n";
+	goto cleanup;
+    }
+    # make sure size is under some limit
+    # XXX make sure there is space in the project's /proj tree
+    if ($dsize < 0 || $dsize >= ($maxsize * 1000 ** 3)) {
+	print STDERR "Input image is too large ($dsize bytes)\n";
+	goto cleanup;
+    }
+}
+
+# Convert the image into raw format
+$rawfile = "$tmpdir/$imagename.raw";
+logit("debug: rm -f $rawfile") if ($debug);
+if (!$impotent && system("rm -f $rawfile")) {
+    print STDERR "Input image raw file already exists\n";
+    goto cleanup;
+}
+logit("debug: $qemutool convert -O raw -m 1 $tmpfile $rawfile") if ($debug);
+if (!$impotent && system("$qemutool convert -O raw -m 1 $tmpfile $rawfile")) {
+    print STDERR "Could not convert $tmpfile!\n";
+    goto cleanup;
+}
+
+# Map the raw format file as a memory disk so we can run imagezip
+logit("debug: $mdconfig -a -n -t vnode -f $rawfile") if ($debug);
+if (!$impotent) {
+    my @output = `$mdconfig -a -n -t vnode -f $rawfile`;
+    if ($?) {
+	print STDERR "Could not map input image\n";
+	goto cleanup;
+    }
+    chomp @output;
+    if ($output[0] =~ /^(\d+)$/) {
+	$mdunit = $1;
+    } else {
+	print STDERR "Unexpected output from mdconfig: '$output[0]' !?\n";
+	goto cleanup;
+    }
+    if ($debug) {
+	logit("debug: partition table:\n----\n");
+	system("gpart show /dev/md$mdunit");
+	print STDERR "----\n";
+    }
+} elsif ($impotent) {
+    $mdunit = 0;
+}
+
+#
+# Gather information about the image to see if it is a viable candidate:
+#   * partition table must be MBR/EFI and bootable
+#   * must have an "ext" OS partition
+#
+if (!gather("/dev/md$mdunit") ||
+    !($pinfo{'legacyboot'} || $pinfo{'efiboot'})) {
+    print STDERR "Could not identify bootable partition\n";
+    goto cleanup;
+}
+if ($pinfo{'ospart'} !~ /^ext.$/) {
+    print STDERR "Can only convert EXT format root FS right now\n";
+    goto cleanup;
+}
+
+# run "imagezip -r" on the zvol device to create image
+logit("debug: $zipper -r /dev/md$mdunit $tmpdir/$imagename.ndz") if ($debug);
+if (!$impotent) {
+    if (system("$zipper -r /dev/md$mdunit $tmpdir/$imagename.ndz")) {
+	print STDERR "Could not imagezip image\n";
+	unlink("$tmpdir/$imagename.ndz");
+	goto cleanup;
+    }
+}
+
+# drop the lock
+
+$rv = 0;
+
+cleanup:
+
+if (!$impotent) {
+    if (defined($mdunit)) {
+	system("mdconfig -d -u $mdunit");
+    }
+    if (!$keepfiles) {
+	unlink($rawfile) if ($rawfile);
+	unlink("$tmpfile$suffix") if ($tmpfile);
+    }
+}
+if ($keepfiles) {
+    $tmpfile = "" if (!defined($tmpfile));
+    $rawfile = "" if (!defined($rawfile));
+    print STDERR "Original image file ($tmpfile$suffix) and raw image file ($rawfile) kept\n";
+}
+
+exit($rv);

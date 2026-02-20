@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,24 @@ $isadmin   = ISADMIN();
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("target_user",   PAGEARG_STRING,
-				 "all",           PAGEARG_BOOLEAN);
+				 "all",           PAGEARG_BOOLEAN,
+                                 "classic",       PAGEARG_BOOLEAN);
+
+#
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    if (!$isadmin || !$classic) {
+        if ($isadmin) {
+            RedirectToPortal("list-datasets.php");
+        }
+        else {
+            RedirectToPortal("user-dashboard.php#datasets");
+        }
+        return;
+    }
+}
 
 $url = 'apt/list-datasets.php?embedded=1';
 if (isset($target_user)) {

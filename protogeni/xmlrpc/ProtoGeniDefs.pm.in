@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -301,6 +301,7 @@ ProtoGeniDefs::AddModule("cluster",
 		  "Portstats"            => \&GeniCluster::Portstats,
 		  "PortalManifest"       => \&GeniCluster::PortalManifest,
 		  "PowerControl"         => \&GeniCluster::PowerControl,
+		  "UpdateSpectrum"       => \&GeniCluster::UpdateSpectrum,
 	      }},
 	  });
 

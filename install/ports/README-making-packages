@@ -1,19 +1,19 @@
 Making boss/ops/fs/etc. packages. This is only for the latest FreeBSD
-(as of this writing, 13.3). If you need help with older packages, check out
+(as of this writing, 13.5). If you need help with older packages, check out
 an older version of this document.
 
 As of FreeBSD 10, I started using the quarterly ports release at the time
-of the OS release and then update the packages quarterly. For the 13.3 release,
-I am currently using 2024Q2.
+of the OS release and then update the packages quarterly. For the 13.5
+release, I am currently using 2025Q1.
 
 ################ TL;DR ################
 
 This is a condensed version of the steps below. It is also the most up-to-date
-version as I tend not to update anything below the TL;DR. SO TREAT THIS SECTION
-AS THE DEFINITIVE TEXT! I leave the later stuff just as it might still contain
-some useful tidbit that I should extract at some point.
+version as I tend not to update anything below the TL;DR. SO TREAT THIS
+SECTION AS THE DEFINITIVE TEXT! I leave the later stuff just as it might
+still contain some useful tidbit that I should extract at some point.
 
-0. Updating the Emulab package repo (13.3 specific).
+0. Updating the Emulab package repo (13.5 specific).
 
    Occasionally you will want to make sure the ports are up to date.
    We track the "quarterly" branch of ports, so within a three month
@@ -26,32 +26,32 @@ some useful tidbit that I should extract at some point.
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/13.3/ports on ops
+   a. Make sure the ports tree in /share/freebsd/13.5/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/13.3/ports
+      cd /share/freebsd/13.5/ports
       sudo git pull
 
    b. Make sure the Emulab ports are up to date.
 
-      cd /share/freebsd/13.3/ports/misc
+      cd /share/freebsd/13.5/ports/misc
       diff -r ~mike/testbed-clean/install/ports .
       <update anything that is out of sync>
 
-   c. Swapin a FreeBSD 13.3 node (experiment emulab-ops/freebsd133-64).
+   c. Swapin a FreeBSD 13.5 node (experiment emulab-ops/freebsd133-64).
       This will give you a d740 which is the best thing to use.
 
    d. Mount the ports and source trees.
 
       cd /usr
-      sudo mount -o ro fs:/share/freebsd/13.3/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/13.3/src /usr/src
+      sudo mount -o ro fs:/share/freebsd/13.5/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/13.5/src /usr/src
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-DEFAULT_VERSIONS=perl5=5.36 python=3.9 python3=3.9 php=8.1 mysql=106m apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS=perl5=5.36 python=3.11 python3=3.11 php=8.1 mysql=106m apache=2.4 tcltk=8.6
 DEFAULT_VERSIONS+=ssl=base
 
       We also add a bunch of custom port configurations to avoid needing to
@@ -81,7 +81,7 @@ mail_opendkim_UNSET+=UNBOUND
       - tcl86 (build error)
 
    f1.(NEW for 2022!) You do not need to do f2 below if you are running
-      on the newest 13.3 image which has a 64GB root partition.
+      on the newest 13.5 image which has a 64GB root partition.
 
    f2.(NEW for 2020!) Create a /usr/obj filesystem. There is not enough
       space in the root filesystem to hold all the build trees. You need
@@ -114,7 +114,7 @@ mail_opendkim_UNSET+=UNBOUND
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/13.3/packages
+      pushd /share/freebsd/13.5/packages
       pkg add pkg-*
       pkg add ca_root*
       popd
@@ -150,7 +150,7 @@ mail_opendkim_UNSET+=UNBOUND
        date > /tmp/END2
 
    l. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/13.3/ports with a newer version of the port
+      to update /share/freebsd/13.5/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
@@ -178,7 +178,7 @@ mail_opendkim_UNSET+=UNBOUND
    p. Save packages and update tarball and repo. On boss:
 
        set www=/usr/testbed/www
-       cd /share/freebsd/13.3
+       cd /share/freebsd/13.5
        mkdir packages
        scp pcXXX:/usr/obj/ports/packages/All/\* packages/
        sudo chown -R root:wheel packages
@@ -186,23 +186,23 @@ mail_opendkim_UNSET+=UNBOUND
       For testing purposes (see next step), start with the ports in
       "Emulab-devel" repo.
 
-       sudo mv $www/FreeBSD/13.3-devel/{packages,Opackages}
-       sudo mkdir $www/FreeBSD/13.3-devel
-       sudo cp -rp packages $www/FreeBSD/13.3-devel/packages
-       sudo pkg repo $www/FreeBSD/13.3-devel/packages
+       sudo mv $www/FreeBSD/13.5-devel/{packages,Opackages}
+       sudo mkdir $www/FreeBSD/13.5-devel
+       sudo cp -rp packages $www/FreeBSD/13.5-devel/packages
+       sudo pkg repo $www/FreeBSD/13.5-devel/packages
 
       Do the following when you are sure everything is good.
       
-       set tball="FreeBSD-13.3-packages-64-`date +%Y%m%d`.tar.gz"
+       set tball="FreeBSD-13.5-packages-64-`date +%Y%m%d`.tar.gz"
        sudo tar czf $tball packages
        sudo cp $tball $www/downloads/
-       sudo ln -sfn $tball $www/downloads/FreeBSD-13.3-packages-64.tar.gz
-       sudo mv $www/FreeBSD/13.3/{packages,Opackages}
-       sudo cp -rp packages $www/FreeBSD/13.3/
-       sudo pkg repo $www/FreeBSD/13.3/packages
+       sudo ln -sfn $tball $www/downloads/FreeBSD-13.5-packages-64.tar.gz
+       sudo mv $www/FreeBSD/13.5/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/13.5/
+       sudo pkg repo $www/FreeBSD/13.5/packages
 
        # tar up the ports tree that corresponds to these packages
-       set tball="FreeBSD-13.3-ports.tar.gz"
+       set tball="FreeBSD-13.5-ports.tar.gz"
        sudo tar --exclude=ports/.svn --exclude=ports/.git -czf $tball ports
        sudo cp $tball $www/downloads/
 
@@ -211,7 +211,7 @@ mail_opendkim_UNSET+=UNBOUND
       /etc/pkg/Emulab-devel.conf:
       
 Emulab-devel: {
-  url: "https://www.emulab.net/FreeBSD/13.3-devel/packages",
+  url: "https://www.emulab.net/FreeBSD/13.5-devel/packages",
   mirror_type: NONE,
   enabled: yes
 }
@@ -429,7 +429,7 @@ b. Allocate a node on which to build everything and load the appropriate
    DEFAULT_VERSIONS=perl5=5.32 python=3.7 python3=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
-   # for 13.3
+   # for 13.5
    DEFAULT_VERSIONS=perl5=5.32 python=3.8 python3=3.8 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
@@ -614,7 +614,7 @@ c. As part of the boss/ops/etc. install, we will need to start creating a file
    /etc/pkg/Emulab.conf with:
 
 Emulab: {
-  url: "https://www.emulab.net/FreeBSD/13.3/packages",
+  url: "https://www.emulab.net/FreeBSD/13.5/packages",
   mirror_type: NONE,
   enabled: yes
 }

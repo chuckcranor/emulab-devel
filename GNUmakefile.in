@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -473,12 +473,19 @@ elabinelab-nogit: elabinelab-scripts
 	rm -f /share/emulab/emulab-src.tar.gz
 	tar czf /share/emulab/emulab-src.tar.gz -C $(SRCDIR) --exclude=.git .
 
+#
+# There is an obscure problem with FreeBSD 13.3 tar (libarchive 3.6.2) used to
+# append to the git-produced archive. It runs with no errors, but attempting
+# to extract the result using FreeBSD 13.5 tar (libarchive 3.7.7), produces
+# "tar: (null)" messages for all the appended protogeni files and exits
+# non-zero. Using gtar here seems to get around this very localized problem.
+#
 elabinelab-git: elabinelab-scripts
 	-mkdir -p /share/emulab
 	rm -f /share/emulab/emulab-src.tar.gz
 	(cd $(SRCDIR); \
 	 git archive HEAD > /share/emulab/emulab-src.tar)
-	tar rf /share/emulab/emulab-src.tar -C $(SRCDIR) \
+	gtar rf /share/emulab/emulab-src.tar -C $(SRCDIR) \
 	 --exclude=.git protogeni/rspec-geni
 	gzip /share/emulab/emulab-src.tar
 else
@@ -492,7 +499,7 @@ elabinelab-git: elabinelab-scripts
 	rm -f $(INSTALL_TOPDIR)/src/emulab-src.tar.gz
 	(cd $(SRCDIR); \
 	 git archive HEAD > $(INSTALL_TOPDIR)/src/emulab-src.tar)
-	tar rf $(INSTALL_TOPDIR)/src/emulab-src.tar -C $(SRCDIR) \
+	gtar rf $(INSTALL_TOPDIR)/src/emulab-src.tar -C $(SRCDIR) \
 	 --exclude=.git protogeni/rspec-geni
 	gzip $(INSTALL_TOPDIR)/src/emulab-src.tar
 endif

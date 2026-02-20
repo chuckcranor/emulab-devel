@@ -235,7 +235,7 @@ window.ShowExtendModal = (function()
 	/*
 	 * User has changed the slider. Show new instructions.
 	 */
-	var minchars  = 120; // For the character countdown.
+	var minchars  = 0;   // For the character countdown.
 	var lastvalue = 0;   // Last callback value.
 	var lastlabel = 0;   // So we know which div to hide.
 	var setvalue  = 0;   // where to jump the slider to after stop.
@@ -320,7 +320,7 @@ window.ShowExtendModal = (function()
 	    }
 
 	    // For the char countdown below.
-	    minchars = $('#label' + label + "_request").attr('data-minchars');
+	    minchars = parseInt($('#label' + label + "_request").attr('data-minchars'));
 	    UpdateCountdown();
 
 	    lastvalue = which;
@@ -336,6 +336,11 @@ window.ShowExtendModal = (function()
 	function UpdateCountdown() {
 	    var len   = $('#why_extend').val().length;
 	    var msg   = "";
+
+            if (minchars == 0) {
+		EnableSubmitButton();
+                return;
+            }
 
 	    if (len) {
 		var left  = minchars - len;
@@ -414,7 +419,7 @@ window.ShowExtendModal = (function()
 		howlong = DateToHours($('#datepicker').val());
 	    }
 	    reason = $("#why_extend").val();
-	    if (reason.trim().length == 0) {
+	    if (minchars && reason.trim().length == 0) {
 		$("#why_extend").val("");
 		DisableSubmitButton();
 		alert("Come on, say something useful please, " +
