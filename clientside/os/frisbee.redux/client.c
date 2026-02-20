@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2025 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -2000,6 +2000,7 @@ PlayFrisbee(void)
 	struct timeval  estamp, timeo;
 	int		delay, rv, checkid = 0;
 	int32_t		jtype = 0;
+	int32_t		jtimo = 0;
 
 	gettimeofday(&stamp, 0);
 	CLEVENT(1, EV_CLISTART, 0, 0, 0, 0);
@@ -2048,13 +2049,30 @@ PlayFrisbee(void)
 	 * since we need to know the total block size. We resend the
 	 * message (dups are harmless) if we do not get a reply back.
 	 */
-	rv = -1;
 	gettimeofday(&timeo, 0);
 	while (1) {
 		struct timeval now;
 
 		gettimeofday(&now, 0);
-		if (rv != 0 && timercmp(&timeo, &now, <=)) {
+		/*
+		 * Note that even when we have received a packet below and it
+		 * was not a join reply, we still respect this timeout to
+		 * send another request.
+		 *
+		 * Previously, if we received a non-JOIN reply we would not
+		 * make this check and a resend would not happen even if it
+		 * was time. I guess the logic was that the JOIN reply was
+		 * out there, we just had to clear out all the other packets
+		 * to get to it. Unfortunately, if the reply is lost (an all
+		 * too common occurrence), we will not send a re-request until
+		 * the packet receive returns with a timeout. If another
+		 * client is keeping the server busy, this means that we will
+		 * not send another JOIN request til that client finishes,
+		 * thus serializing the clients. That gives us all the
+		 * downsides of multicast with non of the benefits!
+		 */
+		rv = -1;
+		if (timercmp(&timeo, &now, <=)) {
 			CLEVENT(1, EV_CLIJOINREQ, clientid, 0, 0, 0);
 			DOSTAT(joinattempts++);
 			p->hdr.type = PKTTYPE_REQUEST;
@@ -2089,11 +2107,22 @@ PlayFrisbee(void)
 				pthread_mutex_unlock(&heartbeat_mutex);
 			} else
 				PacketSend(p, 0);
-			timeo.tv_sec = 0;
-			timeo.tv_usec = 500000;
+			/*
+			 * Experience has shown that the initial JOIN reply
+			 * often gets lost. So let's make the initial timeout
+			 * be short and ramp up and see if that helps.
+			 */
+			if (jtimo == 0)
+				jtimo = 125000;
+			else if (jtimo < 1000000)
+				jtimo *= 2;
+			    
+			timeo.tv_sec = jtimo / 1000000;
+			timeo.tv_usec = jtimo % 1000000;
 			timeradd(&timeo, &now, &timeo);
 			if (debug)
-				FrisLog("sent JOIN (%d)", p->hdr.subtype);
+				FrisLog("sent JOIN (%d), waiting %u sec",
+					p->hdr.subtype, jtimo);
 #ifdef USE_REUSEADDR_COMPAT
 			/*
 			 * For backward compat, we need to check the unicast
@@ -2107,18 +2136,20 @@ PlayFrisbee(void)
 			 * after a send.
 			 */
 			rv = PacketRequest(p);
-#else
-			assert(rv != 0);
 #endif
-		} else
-			rv = -1;
+		}
 
+#ifndef USE_REUSEADDR_COMPAT
+		assert(rv != 0);
+#endif
 		if (rv)
 			rv = PacketReceive(p);
 
 		/*
-		 * Throw away any data packets. We cannot start until
-		 * we get a reply back.
+		 * If we got a JOIN reply, break out of the loop, our work
+		 * is done. If it was some other packet, most likely a data
+		 * packet requested by another client, throw it away. We
+		 * cannot start until we get a reply back with the image size.
 		 */
 		if (rv == 0 &&
 		    p->hdr.subtype == jtype &&
@@ -2131,8 +2162,15 @@ PlayFrisbee(void)
 					(uint64_t)p->msg.join.blockcount *
 					MAXBLOCKSIZE;
 			}
-			if (debug)
-				FrisLog("got JOIN (%d) reply", jtype);
+			if (debug) {
+				struct timeval jstamp;
+				gettimeofday(&jstamp, 0);
+				timersub(&jstamp, &stamp, &jstamp);
+				
+				FrisLog("got JOIN (%d) reply after %d.%03ds",
+					jtype, jstamp.tv_sec,
+					jstamp.tv_usec / 1000);
+			}
 			CLEVENT(1, EV_CLIJOINREP,
 				p->msg.join2.chunksize,
 				p->msg.join2.blocksize,
