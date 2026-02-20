@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2010-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -46,6 +46,14 @@
 
 /* Emulab includes */
 #include "config.h"	/* the defs-* defines */
+
+/* XXX not included in clientside config */
+#ifndef PROJROOT_DIR
+#define PROJROOT_DIR "/proj"
+#endif
+#ifndef GROUPSROOT_DIR
+#define GROUPSROOT_DIR "/groups"
+#endif
 
 extern int debug;
 
