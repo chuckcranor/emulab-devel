@@ -1057,6 +1057,7 @@ PlayFrisbee(void)
 			PacketSend(p, 0);
 
 			DOSTAT(joinrep++);
+#ifdef TRACE_EVENTS
 			{
 				struct in_addr ipaddr = { p->hdr.srcip };
 				/* XXX fit in params available */
@@ -1066,6 +1067,7 @@ PlayFrisbee(void)
 				      sizes, (FileInfo.filesize >> 32),
 				      FileInfo.filesize);
 			}
+#endif
 
 			/*
 			 * Arrange for clients to report at the indicated
@@ -1271,6 +1273,22 @@ char *usagestr =
  " -i mcastif      Specify a multicast interface in dotted notation.\n"
  " -b              Use broadcast instead of multicast\n"
  " -A file         Write address info to file in format <addr>:<port>.\n"
+ " -T timo         Quit <timo> seconds after the last packet was received.\n"
+ "                 (default==1800, 0==never, -1==after last client exit).\n"
+ "Advanced options:\n"
+ " -k KB           Max KB of memory for a socket buffer (default 1024).\n"
+ " -R blocks       Number of blocks (1KB) to read from disk per operation.\n"
+ "                 (default 32, max 1024).\n"
+ " -W bandwidth    Maximum transmission rate of blocks (bytes).\n"
+ "                 (default <burstsize> * <burstinterval>, max 10Gbps).\n"
+ " -B burstsize    Maximum number of blocks to output in one burst.\n"
+ "                 (default 16).\n"
+ " -G burstintvl   Send out <burstsize> blocks every <burstintvl> usec.\n"
+ "                 (default 2000 (500 bursts/sec), 0==send continuously).\n"
+ " -D              Use the experimental dynamic congestion control mechanism.\n"
+ "                 (sses calculated bandwidth as a cap).\n"
+ " -H interval     Interval in seconds at which to ask clients for status.\n"
+ "                 (default 0 (none), max 3600).\n"
  "\n";
 
 void
