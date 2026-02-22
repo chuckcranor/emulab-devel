@@ -1339,6 +1339,53 @@ sub fix_grub_defaults
     print FILE @buffer;
 
     close FILE;
+
+    #
+    # XXX Newer (RHEL?) releases might have the kernel command line in
+    # /etc/kernel/cmdline. This seems to be used on the initial boot.
+    #
+    # If using grubby, then there will also be a command line in
+    # /boot/loader/entries/*. This seems to be used on every boot _after_
+    # the first boot.
+    #
+    my $cmdlinefile = "$imageroot/etc/kernel/cmdline";
+    if (-e "$cmdlinefile" && open(FILE, "+<$cmdlinefile")) {
+	# should be only a single line
+	my $ocmdline = <FILE>;
+	chomp($ocmdline);
+	# XXX need to get rid of any old console settings
+	if ($consolestr) {
+	    $ocmdline =~ s/console=\S+//g;
+	}
+	seek(FILE, 0, 0);
+	truncate(FILE, 0);
+	print FILE "$ocmdline $cmdline\n";
+	close(FILE);
+    }
+    if (-d "$imageroot/boot/loader/entries") {
+	my @entries = `grep -l '^options ' $imageroot/boot/loader/entries/*`;
+	chomp(@entries);
+	foreach my $efile (@entries) {
+	    if (open(FILE, "+<$efile")) {
+		@buffer = ();
+		while (<FILE>) {
+		    if (/^options /) {
+			chomp;
+			# XXX need to get rid of any old console settings
+			if ($consolestr) {
+			    s/console=\S+//g;
+			}
+			$_ .= " $cmdline\n";
+		    }
+		    push @buffer, $_;
+		}
+		seek(FILE, 0, 0);
+		truncate(FILE, 0);
+		print FILE @buffer;
+		close(FILE);
+	    }
+	}
+    }
 }
 
 sub fix_grub_console
