@@ -95,10 +95,10 @@ endif
 	$(MAKE) -C genhostsfile client-install
 ifeq ($(SYSTEM),FreeBSD)
 	$(MAKE) -C growdisk client-install
-	$(INSTALL_PROGRAM) $(SRCDIR)/create-swapimage $(LBINDIR)/
 endif
 	$(INSTALL_PROGRAM) $(SRCDIR)/create-image $(LBINDIR)/
 	$(INSTALL_PROGRAM) $(SRCDIR)/create-versioned-image $(LBINDIR)/
+	$(INSTALL_PROGRAM) $(SRCDIR)/findbootdisk.pl $(LBINDIR)/
 
 mfs:
 	$(MAKE) -C growdisk client
@@ -148,7 +148,7 @@ mfs-install:
 	$(MAKE) -C zapdisk mfs-install
 	$(INSTALL_PROGRAM) $(SRCDIR)/create-image $(LBINDIR)/
 	$(INSTALL_PROGRAM) $(SRCDIR)/create-versioned-image $(LBINDIR)/
-	$(INSTALL_PROGRAM) $(SRCDIR)/create-swapimage $(LBINDIR)/
+	$(INSTALL_PROGRAM) $(SRCDIR)/findbootdisk.pl $(LBINDIR)/
 	rm -f $(CBINDIR)/frisbee $(CBINDIR)/frisupload
 	rm -f $(CBINDIR)/imagezip $(CBINDIR)/imageunzip $(CBINDIR)/imagedump
 
