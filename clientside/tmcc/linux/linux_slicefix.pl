@@ -994,12 +994,13 @@ sub mount_image
 	}
 
 	for my $type (@types) {
-		`mount -t $type $root $imageroot >/dev/null 2>&1`;
+		# XXX issues with "can't lookup blockdev" without this
+		sleep(1);
+		`mount -t $type $root $imageroot`;
 		if (!($? >> 8)) {
 			$fstype = $type;
 			last;
 		}
-		sleep(1);
 	}
 
 	if ($fstype) {
@@ -1910,6 +1911,10 @@ sub main
 		my $ismounted;
 
 		my $fstype = mount_image($root, $imageroot);
+		if (!$fstype) {
+			print STDERR "no root FS or FS type unsupported\n";
+			return 1;
+		}
 		($grub_config, $ismounted) =
 		    find_grub_configfile($root, $imageroot);
 		if (!$grub_config) {
