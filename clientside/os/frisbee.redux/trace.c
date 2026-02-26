@@ -107,6 +107,8 @@ TraceStart(int level)
 {
 	evlogging = level;
 	gettimeofday(&startt, 0);
+	/* XXX this works for client or server */
+	CLEVENT(1, EV_CLISTART, 0, 0, 0, 0);
 }
 
 void
@@ -130,11 +132,12 @@ TraceDump(int serverrel, int level)
 			if (!done) {
 				done = 1;
 				fprintf(fd, "%d of %d events, "
-					"start=%ld.%03ld, level=%d:\n",
+					"start=%ld.%06ld, level=%d:\n",
 					evcount > TRACE_EVENTS ?
 					TRACE_EVENTS : evcount,
 					evcount, startt.tv_sec,
-					startt.tv_usec/1000, level);
+					startt.tv_usec, level);
+#ifdef TRACE_EVENT_CRELATIVE
 				/*
 				 * Make all event stamps relative to the
 				 * first event received.  This is specifically
@@ -154,6 +157,7 @@ TraceDump(int serverrel, int level)
 					struct timeval ms = { 0, 120 };
 					timersub(&ptr->tstamp, &ms, &startt);
 				}
+#endif
 			}
 			timersub(&ptr->tstamp, &startt, &stamp);
 			fprintf(fd, " +%03ld.%06ld: ",
@@ -161,7 +165,8 @@ TraceDump(int serverrel, int level)
 			fprintf(fd, "%c: ", evisclient ? 'C' : 'S');
 			switch (ptr->event) {
 			case EV_JOINREQ:
-				fprintf(fd, "%s: JOIN request, ID=%x, vers=%u\n",
+				fprintf(fd, "%s: got JOIN request, "
+					"ID=%x, vers=%u\n",
 					inet_ntoa(ptr->srcip), ptr->args[0],
 					ptr->args[1]);
 				break;

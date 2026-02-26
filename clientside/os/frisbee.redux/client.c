@@ -2003,7 +2003,6 @@ PlayFrisbee(void)
 	int32_t		jtimo = 0;
 
 	gettimeofday(&stamp, 0);
-	CLEVENT(1, EV_CLISTART, 0, 0, 0, 0);
 
 	/*
 	 * Init the random number generator. We randomize the block request

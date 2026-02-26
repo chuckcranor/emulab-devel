@@ -258,6 +258,9 @@ endif
 # Define this to a non-zero value to enable recording of trace data
 #CFLAGS		+= -DTRACE_EVENTS=500000
 
+# Define this to make server trace events relative to the first client event.
+#CFLAGS		+= -DTRACE_EVENT_CRELATIVE
+
 # Turn on client event handling
 ifeq ($(WITH_EVENTS),1)
 CFLAGS		+= -DEMULAB_EVENTS -DBOSSNODE='"$(BOSSNODE)"'
