@@ -209,8 +209,22 @@ endif
 CFLAGS		+= -DUSE_REUSEADDR
 
 #
-# XXX this option is needed for awhile to ensure backward-compatibility.
-# See the comment in network.c::ClinetNetInit() for details.
+# Ensure that packets sent from a client have a source IP of the client
+# and NOT the multicast address. Packets with the source and destination
+# being the same MC address appears to be highly disturbing to multicast
+# routers. This is only relevant if USE_REUSEADDR is defined. This was
+# part of the USE_REUSEADDR_COMPAT flag, but that flag includes a different
+# "compat" behavior that we no longer want by default.
+#
+CFLAGS		+= -DUSE_REUSEADDR_UNICAST_SRCADDR
+
+#
+# XXX this option is needed for backward-compatibility with really old
+# servers that unicast JOIN replies. This option requires that you also
+# define USE_REUSEADDR_UNICAST_SRCADDR above and is only relevant if
+# USE_REUSEADDR is defined.
+#
+# See the comment in network.c::ClinetNetInit() for more details.
 # This only affects the client.
 #
 #CFLAGS		+= -DUSE_REUSEADDR_COMPAT

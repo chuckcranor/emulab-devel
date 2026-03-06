@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2025 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -60,7 +60,7 @@ unsigned long nonetbufs;
 #define MCAST_TTL		5
 
 static int		sock = -1;
-#ifdef USE_REUSEADDR_COMPAT
+#ifdef USE_REUSEADDR_UNICAST_SRCADDR
 static int		selfsock = -1;
 #endif
 struct in_addr		myipaddr;
@@ -430,7 +430,7 @@ ClientNetInit(int port)
 	CommonInit(port, port, 1);
 #endif
 
-#ifdef USE_REUSEADDR_COMPAT
+#ifdef USE_REUSEADDR_UNICAST_SRCADDR
 	/*
 	 * Bind a unicast socket for our interface address and the port.
 	 *
@@ -807,7 +807,7 @@ PacketSend(Packet_t *p, int *resends)
 	to.sin_addr.s_addr = mcastaddr.s_addr;
 
 	delays = 0;
-#ifdef USE_REUSEADDR_COMPAT
+#ifdef USE_REUSEADDR_UNICAST_SRCADDR
 	/* send out selfsock so the source IP is ours and not the MC addr */
 	if (selfsock >= 0)
 		fd = selfsock;
@@ -858,7 +858,7 @@ PacketReply(Packet_t *p, int firenforget)
 	to.sin_addr.s_addr = p->hdr.srcip;
 	p->hdr.srcip       = myipaddr.s_addr;
 
-#ifdef USE_REUSEADDR_COMPAT
+#ifdef USE_REUSEADDR_UNICAST_SRCADDR
 	/* send out selfsock so the source IP is ours and not the MC addr */
 	if (selfsock >= 0)
 		fd = selfsock;
