@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -132,7 +132,7 @@ static void sigpass(int sig)
 
 	/* haven't fired up anything yet or seem to be stuck, just exit */
 	if (mainthread == NULL || ++called > 100)
-		exit(0);
+		_exit(0);
 
 	/* whoever we are, we should not process signals after this */
 	pthread_sigmask(SIG_BLOCK, &threadmask, NULL);
@@ -150,7 +150,23 @@ static void sigpass(int sig)
 	}
 
 	info("event-sched[%d]: exiting\n", getpid());
-	exit(0);
+	/*
+	 * There is some sort of race condition that causes regular exit to
+	 * go off in some sort of infinite user-space loop (a spinlock?) and
+	 * just sit there eating up a CPU. In all cases I have observed there
+	 * is always a second thread (running the simulator agent loop) stuck
+	 * down in pubsub_send_packet (though not using much CPU) while the
+	 * main thread is spinning away in exit.
+	 *
+	 * On our main cluster ops nodes, we see what is likely the same
+	 * problem but with a hang that does not chew up the CPU. On these
+	 * gdb shows the main thread into exit and down in an OPENSSL exit
+	 * handler. Here they seem to be blocked in CRYPTO_THREAD_write_lock.
+	 *
+	 * Anyway, without more time to comprehensively debug, let's skip the
+	 * niceities of exit cleanup handlers and just die.
+	 */
+	_exit(0);
 }
 
 static void sigpanic(int sig)
