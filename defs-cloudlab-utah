@@ -99,8 +99,8 @@ NAMED_ALSONOTIFY="155.98.32.70"
 # Must localize to avoid conflict with outer emulab frisbeed.
 #
 FRISEBEEMCASTADDR="235.4.156"
-FRISEBEEMCASTPORT="6000"
-FRISEBEENUMPORTS="0"
+FRISEBEEMCASTPORT="21700"
+FRISEBEENUMPORTS="100"
 #
 # Ops can be a VM on boss.
 #
