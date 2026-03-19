@@ -5921,6 +5921,10 @@ sub SliverWorkAux($)
 		GeniXML::SetText("component_id", $ifaceref,
 				 $sliver->component_urn());
 		if (defined($vinterface)) {
+		    # First stash the underlying physical mac as an Emulab
+		    # namespace child element before pivoting to the virtual
+		    # interface mac addr (to be stored below).
+		    GeniXML::SaveIfacePhyMac($outref, $macAddress);
 		    $macAddress = $vinterface->mac();
 		}
 	    }

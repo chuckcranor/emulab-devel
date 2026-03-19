@@ -2158,5 +2158,21 @@ sub GetCOTSRUParameters($)
     return \%result;
 }
 
+#
+# Save off the phy mac into a child element of an interface node
+#
+sub SaveIfacePhyMac($$)
+{
+    my ($iface_el, $mac) = @_;
+
+    my $child = FindFirstNS("n:phy_mac",
+			    $iface_el, $EMULAB_NS);
+    if (! defined($child)) {
+	$child = AddElement("phy_mac",
+			    $iface_el, $EMULAB_NS);
+    }
+    SetText("mac_address", $child, $mac);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
