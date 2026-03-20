@@ -2801,7 +2801,10 @@ sub WatchSmartTransmitters($$$)
     my $pid     = $instance->pid();
     my $eid     = $instance->name();
     my $pideid  = $instance->Printable();
-    my $mytxid  = "smarttx:" . $instance->pid() . ":" . $instance->name();
+    # NB: lowercase the expected smarttx extid name, since on the client,
+    # we use geni-get slice_urn, and that returns lowercase pid/eid.  This
+    # is necessary to catch pids or eids with uppercase chars.
+    my $mytxid  = lc("smarttx:" . $instance->pid() . ":" . $instance->name());
     
     # We keep track of grants for experiment termination.
     my %grants  = ();
