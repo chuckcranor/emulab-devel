@@ -846,7 +846,7 @@ class Group
                "Thanks!\n",
                "From: $from\n".
                "Cc: $allleaders\n".
-               "Bcc: $TBMAIL_AUDIT\n".
+               "Bcc: $TBMAIL_AUDIT, $TBMAIL_APPROVAL\n".
                "Errors-To: $TBMAIL_WWW");
 
         $TBMAILTAG = $oldmailtag;
