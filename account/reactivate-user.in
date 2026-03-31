@@ -124,7 +124,16 @@ if ($target_user->status() ne USERSTATUS_INACTIVE) {
 #
 my $lastlogin = $target_user->LastWebLogin();
 if (!defined($lastlogin)) {
-    fatal("Error getting user last web login");
+    # XXX If never logged in, use the account creation date
+    $lastlogin = $target_user->CreatedTimestamp();
+    if (!defined($lastlogin)) {
+	fatal("Error getting user last web login");
+    }
+    if ($impotent) {
+	print "Would use account creation date '$lastlogin'\n";
+    }
+} elsif ($impotent) {
+    print "Would use last login date '$lastlogin'\n";
 }
 if (time() - $lastlogin > (30 * 24 * 3600 * $interval)) {
     my @tmp;

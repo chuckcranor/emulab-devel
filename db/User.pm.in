@@ -2132,6 +2132,19 @@ sub LastWebLogin($)
     return $when;
 }
 
+sub CreatedTimestamp($)
+{
+    my ($self) = @_;
+    my $when = undef;
+
+    my $query_result =
+	DBQueryWarn("select UNIX_TIMESTAMP('" . $self->created() ."')");
+    if ($query_result && $query_result->numrows) {
+	($when) = $query_result->fetchrow_array();
+    }
+    return $when;
+}
+
 #
 # Check permissions.
 #
