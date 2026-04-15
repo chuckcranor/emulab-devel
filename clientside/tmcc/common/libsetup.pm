@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1739,7 +1739,7 @@ sub genhostsfile($@)
     my @hdirs = ("/etc",$DYNRUNDIR,$STATICRUNDIR);
     foreach my $dir (@hdirs) {
 	next if (! -f "$dir/hosts.head");
-	if (!open(my $FH,"$dir/hosts.head") == 0) {
+	if (open(my $FH,"$dir/hosts.head")) {
 	    my @lines = <$FH>;
 	    close($FH);
 	    print HOSTS @lines;
@@ -1793,7 +1793,7 @@ sub genhostsfile($@)
     #
     foreach my $dir (@hdirs) {
 	next if (! -f "$dir/hosts.tail");
-	if (!open(my $FH,"$dir/hosts.tail") == 0) {
+	if (open(my $FH,"$dir/hosts.tail")) {
 	    my @lines = <$FH>;
 	    close($FH);
 	    print HOSTS @lines;
