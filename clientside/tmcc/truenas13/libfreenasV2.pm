@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2025 University of Utah and the Flux Group.
+# Copyright (c) 2013-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -904,18 +904,11 @@ sub freenasVolumeClone($$$;$$)
     # Get volume and snapshot info
     my $vollist = freenasVolumeList(0, 1);
 
-    # The base volume must exist, the clone must not
+    # The base volume must exist
     my $ovref = $vollist->{$ovolname};
     if (!$ovref || $ovref->{'pool'} ne $pool) {
 	warn("*** ERROR: freenasVolumeClone: ".
 	     "Base volume '$ovolname' does not exist in pool '$pool'");
-	freenasUnlock()
-	    if ($dolock);
-	return -1;
-    }
-    if (exists($vollist->{$nvolname})) {
-	warn("*** ERROR: freenasVolumeClone: ".
-	     "Volume '$nvolname' already exists");
 	freenasUnlock()
 	    if ($dolock);
 	return -1;
@@ -960,6 +953,38 @@ sub freenasVolumeClone($$$;$$)
 	}
 	$snapshot = "$ovolname\@$tag";
     }
+
+    #
+    # See if the new volume exists.
+    #
+    # Normally it would not. However if it does, it could be because the
+    # storage server rebooted. In this case, we make sure that the existing
+    # clone is if associated with the correct lease and snapshot.
+    # Otherwise it is an error.
+    #
+    if (exists($vollist->{$nvolname})) {
+	my $nvref = $vollist->{$nvolname};
+	if (exists($nvref->{'cloneof'}) && $nvref->{'cloneof'} eq $snapshot) {
+	    warn("*** WARNING: freenasVolumeClone: ".
+		 "using existing volume $nvolname");
+	    freenasUnlock()
+		if ($dolock);
+	    return 0;
+	}
+
+	# XXX probably a stale clone, try once to move it out of the way
+	if (system("$ZFS_CMD rename $pool/$nvolname $pool/$nvolname-STALE-$PID")) {
+	    warn("*** ERROR: freenasVolumeClone: ".
+		 "Existing volume '$nvolname' is a clone of wrong lease");
+	    freenasUnlock()
+		if ($dolock);
+	    return -1;
+	}
+
+	warn("*** WARNING: freenasVolumeClone: ".
+	     "Moved incorrect existing volume to $pool/$nvolname-STALE-$PID");
+    }
+
 
     my $resource =
 	"$FREENAS_API_RESOURCE_SNAPSHOT/clone";
