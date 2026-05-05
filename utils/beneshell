@@ -236,7 +236,7 @@ class BenetelConfig(object):
         },
         'bandwidth': {
             'def': 20.0,
-            'allowed_values': (20.0, 40.0, 80.0, 100.0)
+            'allowed_values': (20.0, 40.0, 60.0, 80.0, 100.0)
         },
         'gain': {
             'def': 37.0,
