@@ -2147,6 +2147,8 @@ sub removeVlan($@)
 #          add port to vlan_number untagged.
 #      access mode, vlan_number untagged:
 #	   do nothing
+#      access mode, "sacred" vlan untagged:
+#	   fail
 #      access mode, other vlan untagged:
 #          add port to vlan_number untagged.
 #      trunk mode, no access vlan, other tagged vlans:
@@ -2210,6 +2212,11 @@ sub setPortVlan($$@) {
 	    if ($self->inVlanUntagged($vlan_number, $swport)) {
 		$self->debug("$id: Port $portobj[$i] already untagged in $vlan_number\n",2);
 		next;
+	    }
+	    # if port is in the SACRED_VLAN untagged, fail this op
+	    if ($self->inVlanUntagged($SACRED_VLAN, $swport)) {
+		warn "$id: ERROR: port $portobj[$i] is in vlan $SACRED_VLAN untagged, cannot change.\n";
+		return scalar(@ports);
 	    }
 	    $self->debug("$id: Adding port $portobj[$i] as untagged to $vlan_number\n",2);
 
