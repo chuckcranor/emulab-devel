@@ -232,7 +232,7 @@ class BenetelConfig(object):
     DEFAULT_SETTINGS = {
         'center_frequency': {
             'def': 3370.2,
-            'allowed_ranges': ((3358.0,3600.0),)
+            'allowed_ranges': ((3358.0,3800.0),)
         },
         'bandwidth': {
             'def': 20.0,
