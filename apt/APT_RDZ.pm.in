@@ -722,6 +722,11 @@ sub RequestSpectrum($$;$)
     }
     print $ZMC . "\n";
 
+    my $pid             = $instance->pid();
+    my $allow_conflicts = 0;
+    if ($pid eq 'openzms-dyspan26') {
+        $allow_conflicts = 1;
+    }
     foreach my $rfrange (values(%{$rfranges})) {
 	my $frequency_low  = $rfrange->freq_low();
 	my $frequency_high = $rfrange->freq_high();
@@ -745,13 +750,16 @@ sub RequestSpectrum($$;$)
 			"min_freq"  => ($frequency_low * 1000000) + 0,
 			"max_freq"  => ($frequency_high * 1000000) + 0,
 			"max_eirp"  => $power + 0,
-			"exclusive" => (@radio_ports ? JSON::false : JSON::true),
+			"exclusive" => ((@radio_ports || $allow_conflicts) ? JSON::false : JSON::true),
 		    },
 		},
 	    ],
 	    "radio_ports" => \@radio_ports,
 	    "allow_skip_acks" => $heartbeats ? JSON::false : JSON::true,
 	};
+	if ($allow_conflicts) {
+            $request->{"allow_conflicts"} = JSON::true;
+        }
 	if (defined($width) && $width != 0) {
 	    $request->{"constraints"}[0]->{"constraint"}->{'bandwidth'} = $width * 1000000;
 	}
