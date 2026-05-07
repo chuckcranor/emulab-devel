@@ -609,7 +609,7 @@ sub DoRadios()
     my $aggregate;
     my $usage = sub {
 	print STDERR "Usage: manage_rdz radios list\n";
-	print STDERR "Usage: manage_rdz radios create\n";
+	print STDERR "Usage: manage_rdz radios create [<node_id>]\n";
 	print STDERR "Usage: manage_rdz radios delete|show <radio_id>\n";
 	print STDERR "Usage: manage_rdz radios delete|show [-a agg] <node_id>\n";
 	exit(-1);
@@ -695,6 +695,18 @@ sub DoRadios()
 	exit(0);
     }
 
+    my $node_id;
+    my $node_id_clause = "";
+    if (@ARGV > 1) {
+	&$usage();
+    } elsif (@ARGV == 1) {
+	$node_id = shift(@ARGV);
+	if (!($node_id =~ /^([-_a-zA-Z0-9^]+)$/)) {
+	    fatal("invalid node_id '$node_id'");
+	}
+	$node_id_clause = " and i.node_id='$node_id'";
+    }
+
     # Need our one antenna id. Not stored in the DB yet.
     my $response;
     if ($ZMC->GET("/antennas", \$response)) {
@@ -724,7 +736,7 @@ sub DoRadios()
 		     "  f.node_id=i.node_id and ".
 		     "  f.iface='rf0' ".
 		     "where l.rdz_location_id is not null and ".
-		     "      l.itype in ('BS', 'FE', 'DD', 'OAI')");
+		     "      l.itype in ('BS', 'FE', 'DD', 'OAI') $node_id_clause");
     
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $location     = $row->{'location'};
