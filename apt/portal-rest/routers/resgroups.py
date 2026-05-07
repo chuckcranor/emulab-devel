@@ -49,6 +49,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database import get_DB
+from ..database import get_current_db
 from ..dependencies import get_current_user, get_elaborate_header
 from ..dependencies import TBDatetimeGMT, SUEXEC
 from ..dependencies import PortalException, PortalValidate, HandleShellError
@@ -105,20 +106,21 @@ def get_resgroup_access(resgroup_id):
 # Verify that a supplied resgroup reservation UUID is valid
 #
 def check_resgroup_reservation(which, resgroup_id, reservation_id):
+    DB = get_current_db()
     query = "select r.uuid from apt_reservation_groups as g "
 
     if which == "nodetype":
         query += "join apt_reservation_group_reservations as r "
-        query += "on r.uuid=g.uuid and r.remote_uuid=%s "
+        query += "on r.uuid=g.uuid and r.remote_uuid=:reservation_id "
     elif which == "range":
         query += "join apt_reservation_group_rf_reservations as r "
-        query += "on r.uuid=g.uuid and r.freq_uuid=%s "
+        query += "on r.uuid=g.uuid and r.freq_uuid=:reservation_id "
     else:
-        raise PortalExceptio(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
-    query += "where r.uuid=%s"
+        raise PortalException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+    query += "where r.uuid=:resgroup_id"
 
-    qres = DBQueryWarn(query, (str(reservation_id), str(resgroup_id)))
-    if qres == None or len(qres) != 1:
+    qres = DB.execute(text(query), {"reservation_id" : str(reservation_id), "resgroup_id" :str(resgroup_id)}).all()
+    if len(qres) != 1:
         raise PortalException(
             status.HTTP_404_NOT_FOUND,
             "No such resgroup reservation_id: " + str(reservation_id))
@@ -153,8 +155,10 @@ def get_resgroups(
     #
     # At the moment, just the current user experiments.
     #
-    qres = DBQueryWarn("select uuid,pid from apt_reservation_groups "+
-                       "where creator_idx=%s", (current_user.uid_idx,))
+    qres = DB.execute(
+        text("select uuid,pid from apt_reservation_groups where creator_idx=:current_user"),
+        {"current_user": current_user.uid_idx}
+    ).all()
 
     for row in qres:
         uuid = row[0]

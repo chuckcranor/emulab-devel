@@ -82,8 +82,8 @@ def get_version(
         DB: Session = Depends(get_DB)) -> Version:
     LOG.info("get_version: %r", current_user)
 
-    qres = DBQueryWarn("select * from version_info", asDict=True)
-    if qres == None or len(qres) == 0:
+    qres = DB.execute(text("select * from version_info")).mappings().all()
+    if len(qres) == 0:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No version info available")
 

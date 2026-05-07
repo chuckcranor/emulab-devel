@@ -24,15 +24,24 @@
 from . import config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from contextvars import ContextVar
 
 engine = create_engine(config.DATABASE_URL, echo=False, pool_recycle=3600)
 SessionLocal = sessionmaker(autoflush=True, bind=engine)
 
+db_session : ContextVar = ContextVar('db_session', default=None)
+
+def get_current_db():
+    return db_session.get()
+
 def get_DB():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        pass
-    pass
+    yield db_session.get()
+
+# def get_DB():
+#     db = SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         db.close()
+#         pass
+#     pass

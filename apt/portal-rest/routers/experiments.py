@@ -51,6 +51,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database import get_DB
+from ..database import get_current_db
 from ..dependencies import get_current_user, TBDatetimeGMT, SUEXEC
 from ..dependencies import (
     PortalException,
@@ -127,12 +128,14 @@ def get_experiment_access(experiment_id):
 #
 def check_experiment_id(experiment_id):
     LOG.info("check_experiment_id %r", str(experiment_id))
-
+    DB = get_current_db()
     if match := re.match("^([\-\w]+),([\-\w]+)$", experiment_id):
-        qres = DBQueryWarn("select uuid from apt_instances "+
-                           "where pid=%s and name=%s",
-                           (match[1], match[2]))
-        if qres == None or len(qres) != 1:
+        qres = DB.execute(
+            text("select uuid from apt_instances "+
+                           "where pid= :pid and name= :name"),
+                           {"pid" : match[1], "name" : match[2]}
+            ).all()
+        if len(qres) != 1:
             raise PortalException(
                 FStatus.HTTP_404_NOT_FOUND, "No such experiment")
         row = qres[0]
@@ -144,9 +147,12 @@ def check_experiment_id(experiment_id):
         raise RequestValidationError(
             "Validation error for experiment_id, not a valid UUID")
 
-    qres = DBQueryWarn("select uuid from apt_instances "+
-                       "where uuid=%s",(experiment_id,))
-    if qres == None or len(qres) != 1:
+    qres = DB.execute(
+        text("select uuid from apt_instances "+
+            " where uuid=:experiment_id"),{"experiment_id" : experiment_id}
+        ).all()
+    
+    if len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No such experiment")
     
@@ -178,16 +184,18 @@ def check_experiment_node(DB: Session, experiment_id, client_id):
 # Check admission control (load average, too many waiting)
 #
 def checkAdmissionControl():
+    DB = get_current_db()
     load1,load5,load15 = os.getloadavg()
     if load1 > 15:
         raise PortalException(
             FStatus.HTTP_429_TOO_MANY_REQUESTS,
             "Load average to high: " + str(load1))
 
-    qres = DBQueryFatal("select value from emulab_locks " +
-                        "where name='create_instance_lock'");
+    qres = DB.execute(
+        text("select value from emulab_locks where name='create_instance_lock'")
+    ).all()
 
-    if qres == None or len(qres) != 1:
+    if len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
@@ -203,9 +211,12 @@ def checkAdmissionControl():
 # Grab the webtask for an instance
 #
 def get_apt_instance_webtask(experiment_id):
-    qres = DBQueryWarn("select webtask_id from apt_instances "+
-                       "where uuid=%s",(experiment_id,))
-    if qres == None or len(qres) != 1:
+    DB = get_current_db()
+    qres = DB.execute(
+        text("select webtask_id from apt_instances "+
+                       "where uuid=:experiment_id"), {"experiment_id" : experiment_id}
+        ).all()
+    if len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No such experiment")
 
@@ -265,12 +276,15 @@ def get_apt_instance_snapshot_status(experiment_id):
     return status
 
 def get_experiment_expiration(experiment_id):
-    qres = DBQueryWarn("select s.expires from apt_instances as i "+
+    DB = get_current_db()
+    qres = DB.execute(
+        text("select s.expires from apt_instances as i "+
                        "join geni.geni_slices as s on "+
                        "  s.uuid=i.slice_uuid "+
-                       "where i.uuid=%s",(experiment_id,))
+                       "where i.uuid= :experiment_id"),{"experiment_id" : experiment_id}
+    ).all()
 
-    if qres == None or len(qres) != 1:
+    if len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No such experiment")
 
@@ -310,8 +324,10 @@ def get_experiments(
     #
     # At the moment, just the current user experiments.
     #
-    qres = DBQueryWarn("select uuid,pid from apt_instances "+
-                       "where creator_idx=%s", (current_user.uid_idx,))
+    qres = DB.execute(
+        text("select uuid,pid from apt_instances "+
+                       "where creator_idx= :current_user"), {"current_user" : current_user.uid_idx}
+        ).all()
 
     for row in qres:
         uuid = row[0]
@@ -570,10 +586,12 @@ def create_experiment(
     if completed.returncode != 0:
         return HandleShellError(completed)
 
-    qres = DBQueryWarn("select uuid from apt_instances "+
-                       "where pid=%s and name=%s",
-                       (create.project, create.name))
-    if not qres or len(qres) != 1:
+    qres = DB.execute(
+        text("select uuid from apt_instances "+
+                       "where pid=:pid and name=:name"),
+                       {"pid" : create.project, "name" : create.name}
+        ).all()
+    if len(qres) != 1:
         raise PortalException(FStatus.HTTP_404_NOT_FOUND,
                               "Experiment not found after creating")
     uuid = qres[0][0]

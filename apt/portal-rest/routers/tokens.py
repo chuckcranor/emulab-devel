@@ -167,14 +167,17 @@ def get_redeem(
     LOG.info("expires: %r %r", expires, time.time())
     if time.time() > expires:
         # This was easier the using sqlalchemy, bizzare errors
-        DBQueryFatal("delete from user_sso_codes where idx=%s",
-                     (dbcode.idx,))
+        DB.execute(text(
+            "delete from user_sso_codes where idx=:dbcode"),
+                     {"dbcode" : dbcode.idx}
+            ).all()
         raise PortalException(
             status.HTTP_400_BAD_REQUEST, "Code has expired")
 
     # Use once, no errors tolerated
-    DBQueryFatal("delete from user_sso_codes where idx=%s",
-                 (dbcode.idx,))
+    DB.execute(
+        text("delete from user_sso_codes where idx=:dbcode"),
+                 {"dbcode" : dbcode.idx})
 
     # Now create the auth0 token (which is not stored in the DB).
     webtask = WebTask.CreateAnonymous()
