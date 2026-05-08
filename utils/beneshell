@@ -618,7 +618,11 @@ class BenetelWrapper(object):
 #
 def connect(args, loglvl):
     bw = BenetelWrapper(args.address, args.username, log_level = loglvl)
-    passwd = getpass() if args.password else ""
+    passwd = ""
+    if args.read_password:
+        passwd = getpass()
+    elif args.password:
+        passwd = args.password
     bw.connect_session(password=passwd, ping_timeout=args.ping_timeout)
     passwd = None
     return bw
@@ -640,7 +644,8 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("address", help="Address (hostname or IP) of the device.")
     parser.add_argument("-u", "--username", default=BenetelWrapper.DEF_SSH_USER, help="Username to supply when logging in to device.")
-    parser.add_argument("-p", "--password", action="store_true", help="Read password from command line.")
+    parser.add_argument("-R", "--read-password", action="store_true", help="Read password from command line. Note: This argument overrides the `password` argument")
+    parser.add_argument("-p", "--password", help="Password for authenticating.")
     parser.add_argument("-g", "--get-config", action="store_true", help="Get configuration from device and print to stdout in JSON format.")
     parser.add_argument("-j", "--json-config", help="Apply configuration, specified in a JSON file, to the device (specify '-' to read config from stdin). Does NOT imply the `reboot` argument.")
     parser.add_argument("-P", "--ping-timeout", type=int, default=BenetelWrapper.DEF_PING_TIMEOUT, help="Number of seconds to wait for the device to respond to pings when connecting initially before timing out.")

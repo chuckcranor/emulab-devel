@@ -2883,7 +2883,18 @@ sub LightUpNodes($@)
 	# bringup complete" vs. just responding to pings.
 	my $json_config = to_json(\%ru_params);
 	tbnotice("Configuring Benetel COTS RU $node_id\n");
-	system("echo '$json_config' | $BENESHELL $node_id -j - -r");
+	# Grab any required auth params from the DB
+	my ($admin_user, $admin_pass);
+	$node->NodeAttribute("admin_user", \$admin_user);
+	$node->NodeAttribute("admin_password", \$admin_pass);
+	my $auth_args = "";
+	if ($admin_user) {
+	    $auth_args .= "-u $admin_user";
+	    if ($admin_pass) {
+		$auth_args .= "-p $admin_pass";
+	    }
+	}
+	system("echo '$json_config' | $BENESHELL $node_id $auth_args -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
 	    goto bad;
