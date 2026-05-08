@@ -106,7 +106,18 @@ sub launchEventSender($) {
     # Wait for a while for the RU to ping, after which we consider it up.
     # Takes about a minute.
     $self->log("Waiting for device to become responsive.");
-    system("$BENESHELL $node_id -q -P $waittime");
+    # Grab username and password, if they are set.
+    my ($admin_user, $admin_pass);
+    $node->NodeAttribute("admin_user", \$admin_user);
+    $node->NodeAttribute("admin_password", \$admin_pass);
+    my $auth_args = "";
+    if ($admin_user) {
+	$auth_args .= "-u $admin_user";
+	if ($admin_pass) {
+	    $auth_args .= " -p '$admin_pass'";
+	}
+    }
+    system("$BENESHELL $node_id $auth_args -q -P $waittime");
     if (! $?) {
 	$self->log("Device is up. Sending `ISUP` event.");
 	$node->SetEventState(TBDB_NODESTATE_ISUP());

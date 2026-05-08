@@ -2774,6 +2774,19 @@ sub AddNode($$)
     $node->_doevents(1);   # DO have `power` send events in base class.
     $node->_pingwait(60);  # Higher initial ping wait time (account for boot).
 
+    # Grab any required auth params from the DB
+    my ($admin_user, $admin_pass);
+    $node->NodeAttribute("admin_user", \$admin_user);
+    $node->NodeAttribute("admin_password", \$admin_pass);
+    my $auth_args = "";
+    if ($admin_user) {
+	$auth_args .= "-u $admin_user";
+	if ($admin_pass) {
+	    $auth_args .= " -p '$admin_pass'";
+	}
+    }
+    $node->_authargs($auth_args);
+
     return 0;
 }
 
@@ -2820,9 +2833,11 @@ sub LightUpNodes($@)
 	# Extract parameters set for node in profile script.
 	my $attr;
 	$experiment->GetVirtNodeAttribute($vname, 'center_frequency', \$attr);
-	$ru_params{'center_frequency'} = $attr + 0; # store as number for JSON
+	$ru_params{'center_frequency'} = $attr + 0
+	    if defined($attr);
 	$experiment->GetVirtNodeAttribute($vname, 'bandwidth', \$attr);
-	$ru_params{'bandwidth'} = $attr + 0; # store as number for JSON
+	$ru_params{'bandwidth'} = $attr + 0
+	    if defined($attr);
 	$experiment->GetVirtNodeAttribute($vname, 'mimo_mode', \$attr);
 	$ru_params{'mimo_mode'} = $attr
 	    if defined($attr);
@@ -2882,18 +2897,8 @@ sub LightUpNodes($@)
 	# experiment; we want the device to get all the way to "Radio
 	# bringup complete" vs. just responding to pings.
 	my $json_config = to_json(\%ru_params);
+	my $auth_args = $node->_authargs();
 	tbnotice("Configuring Benetel COTS RU $node_id\n");
-	# Grab any required auth params from the DB
-	my ($admin_user, $admin_pass);
-	$node->NodeAttribute("admin_user", \$admin_user);
-	$node->NodeAttribute("admin_password", \$admin_pass);
-	my $auth_args = "";
-	if ($admin_user) {
-	    $auth_args .= "-u $admin_user";
-	    if ($admin_pass) {
-		$auth_args .= "-p $admin_pass";
-	    }
-	}
 	system("echo '$json_config' | $BENESHELL $node_id $auth_args -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
@@ -2933,7 +2938,8 @@ sub WaitForNode($$)
 
     # See if the radio has made it to the "Radio Bringup Complete" state.
     my $pingwait = $node->_pingwait();
-    system("$BENESHELL $node_id -q -P $pingwait -w 0");
+    my $auth_args = $node->_authargs();
+    system("$BENESHELL $node_id $auth_args -q -P $pingwait -w 0");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
