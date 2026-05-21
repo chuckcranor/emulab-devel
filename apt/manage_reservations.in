@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -451,7 +451,7 @@ sub DoReserve()
 	      "A reservation request was made by $this_uid, but it needs ".
 	      "approval.".
 	      "\n\n".
-	      "See: $url", $this_email);
+	      "See: $url", $brand->OpsEmailAddress());
 	}
     }
     if ($approved) {

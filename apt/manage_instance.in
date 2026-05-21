@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1800,7 +1800,7 @@ sub DoExtend($)
                 "Granting the request would set the expiration to $new_expires\n".
                 "It is running on $clusters\n".
                 "\n\n". $url . "\n\n",
-                $creator->email()) if (!$noemail);
+		$brand->OpsEmailAddress()) if (!$noemail);
 
 	# Flag for the dashboard page. 
 	$instance->ExtensionRequested($reason, $granted);

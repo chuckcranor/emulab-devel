@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1411,7 +1411,7 @@ sub DoGroupReserve()
 			  $resgroup->InfoString() . "\n" .
 			  ($resgroup->reason() ne "" ?
 			   "Reason:\n" . $resgroup->reason() . "\n\n" : "") .
-			  "See: $url", $this_email);
+			  "See: $url", $brand->ReservationEmailAddress());
 	    }
 	    else {
 		$resgroup->AddAnnouncement($update);
@@ -1630,9 +1630,9 @@ sub DoDelete()
 				  $brand->ReservationsEmailAddress());
 
 		# This email is not intended to go to the user.
-		$body .= "Resources removed by $this_uid\n";
+		$body .= "Resources requested by $email removed by $this_user\n";
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
-				  $subj, $body, $email);
+				  $subj, $body, $this_user->email());
 	    }
 	}
     }
@@ -1678,9 +1678,9 @@ sub DoDelete()
 				  $brand->ReservationsEmailAddress());
 		
 		# This email is not intended to go to the user.
-		$body .= "Reservation deleted by $this_uid\n";
+		$body .= "Reservation requested by $email deleted by $this_uid\n";
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
-				  $subj, $body, $email);
+				  $subj, $body, $this_user->email());
 	    }
 	}
     }
