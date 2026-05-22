@@ -34,7 +34,7 @@ SUBDIRS		=
 INSTALL_RESTDIR = $(TBROOT)/portal-rest/app
 
 FILES		= config.py database.py __init__.py dependencies.py main.py \
-		  pyproject.toml
+		  pyproject.toml AccessCheck.py WebTask.py
 MODELFILE       = api/models.py
 ROUTERS         = version.py experiments.py resgroups.py profiles.py tokens.py
 

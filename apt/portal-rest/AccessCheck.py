@@ -25,7 +25,7 @@ import sys
 import re
 
 from sqlalchemy import text
-from database import get_current_db
+from database import get_current_db, DBQuery
 
 if __name__ == "__main__":
     sys.path.append("/usr/testbed/devel/stoller/lib")
@@ -126,25 +126,29 @@ class UserAccess:
         DB = get_current_db()
         if type(user) == str:
             if re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", user):
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select uid,uid_idx,admin from users " +
                          "where uid_uuid=:user and status!='archived'"
                     ),
-                    {"user" : user}).all()
+                    {"user" : user}, fatal=False)
+                qres = qres.all() if result is not None else None
 
             elif re.match("^[\w]*$", user):
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select uid,uid_idx,admin from users " +
                                 "where uid=:user and status!='archived'"),
-                                {"user" : user}
-                    ).all()
+                                {"user" : user}, fatal=False
+                    )
+                qres = qres.all() if result is not None else None
                 pass
             pass
         elif type(user) == int:
-            qres = DB.execute(
+            result = DBQuery(
                 text("select uid,uid_idx,admin from users " +
-                            "where uid_idx=:user"), {"user" : str(user)}
+                            "where uid_idx=:user"), {"user" : str(user)},
+                            fatal=False
                     ).all()
+            qres = qres.all() if result is not None else None
         else:
             raise NoSuchUser("No such user: %s" % (user,))
 
@@ -169,9 +173,11 @@ class UserAccess:
                 scope = None
                 pass
             if scope == "experiment":
-                qres = DB.execute(text("select uuid from apt_instances " +
-                                "where uuid=:scope_value"), {"scope_value" : scope_value}
-                            ).all()
+                result = DBQuery(DB, text("select uuid from apt_instances " +
+                                "where uuid=:scope_value"), {"scope_value" : scope_value},
+                                fatal=False
+                            )
+                qres = result.all() if result is not None else None
                 if not qres or len(qres) != 1:
                     raise NoSuchExperiment(
                         "No such scoped experiment: %s" % (scope_value,))
@@ -180,12 +186,13 @@ class UserAccess:
         self.scope = scope
         self.scope_value = scope_value
 
-        qresult = DB.execute(
+        result = DBQuery(DB,
             text("select * from group_membership as g " +
-                            "where g.uid_idx=:uid"), {"uid" : self.uid_idx}
-                ).mappings().all()
-
-        if not len(qresult):
+                            "where g.uid_idx=:uid"), {"uid" : self.uid_idx},
+                            fatal=False
+                )
+        qresult = result.mappings().all() if result is not None else None
+        if not qresult or not len(qresult):
             raise NoSuchUser("No such user: %s" % (user,))
 
         for row in qresult:
@@ -349,17 +356,21 @@ class ProjectGroup:
         DB = get_current_db()
         if type(project) == str:
             if re.match("^[\-\w]+$", project):
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select pid,pid_idx,disabled from projects " +
                                 "where pid=:project"),
-                                {"project" : project}
-                    ).all()
+                                {"project" : project},
+                                fatal=False
+                    )
+                qres = result.all() if result is not None else None
                 pass
         elif type(project) == int:
-            qres = DB.execute(
+            result = DBQuery(
                 text("select pid,pid_idx,disabled from projects " +
-                            "where pid_idx=:project"), {"project" : project}
-                    ).all()
+                            "where pid_idx=:project"), {"project" : project},
+                            fatal=False
+                    )
+            qres = result.all() if result is not None else None
         else:
             raise NoSuchProject("No such project: %s" % (project,))
 
@@ -372,20 +383,24 @@ class ProjectGroup:
 
         if type(group) == str:
             if re.match("^[\-\w]+$", group):
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select gid,gid_idx,leader_idx,unix_gid " +
                                 "  from groups " +
                                 "where pid_idx=:pid and gid=:group"),
-                                {"pid" : self.pid_idx, "group" : group}
-                    ).all()
+                                {"pid" : self.pid_idx, "group" : group},
+                                fatal=False
+                    )
+                qres = result.all() if result is not None else None
                 pass
         elif type(group) == int:
-            qres = DB.execute(
+            result = DBQuery(DB,
                 text("select gid,gid_idx,leader_idx,unix_gid " +
                             "  from groups " +
                             "where pid_idx=:pid and gid_idx=:group"),
-                            {"pid" : self.pid_idx, "group" : group}
-                ).all()
+                            {"pid" : self.pid_idx, "group" : group},
+                            fatal=False
+                )
+            qres = result.all() if result is not None else None
         else:
             raise NoSuchProject("No such group: %s:%s" % (project,group))
 
@@ -543,34 +558,38 @@ class Experiment:
         DB = get_current_db()
         if type(arg1) == str:
             if re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", arg1):
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select uuid,pid,pid_idx,gid,gid_idx," +
                                 "    creator,creator_idx,name " +
                                 " from apt_instances " +
-                                "where uuid=:arg1"), {"arg1" : arg1}
-                ).mappings().all()
+                                "where uuid=:arg1"), {"arg1" : arg1},
+                                fatal=False
+                )
+                qres = result.mappings().all() if result is not None else None
             elif matched := re.match("^([\-\w]+),([\-\w]+)$", arg1):
-                qres = DB.execute(
+                result = DB.execute(
                     text("select uuid,pid,pid_idx,gid,gid_idx," +
                                 "    creator,creator_idx,name " +
                                 "    from apt_instances " +
                                 "    where pid=:pid and name=:name"),
                                 {"pid" : matched[1], "name" : matched[2]}
-                    ).mappings().all()
+                    )
+                qres = result.mappings().all() if result is not None else None
             elif (arg2 and re.match("^[\-\w]+$", arg1) and
                 re.match("^[\-\w]+$", arg2)):
-                qres = DB.execute(
+                result = DB.execute(
                     text("select uuid,pid,pid_idx,gid,gid_idx," +
                                 "    creator,creator_idx,name " +
                                 "    from apt_instances " +
                                 "    where pid=:arg1 and name=:arg2"),
                     {"arg1" : arg1, "arg2" : arg2},
-                ).mappings().all()
+                )
+                qres = result.mappings().all() if result is not None else None
             pass
         else:
             raise NoSuchExperiment("No such experiment: %s:%s" % (arg1,arg2))
 
-        if len(qres) != 1:
+        if not qres or len(qres) != 1:
             raise NoSuchExperiment("No such experiment: %s:%s" % (arg1,arg2))
 
         row = qres[0]
@@ -643,18 +662,20 @@ class ResGroup:
         DB = get_current_db()
         if type(arg1) == str:
             if re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", arg1):
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select uuid,pid,pid_idx,gid,gid_idx," +
                                 "    creator_uid,creator_idx " +
                                 " from apt_reservation_groups " +
-                                "where uuid=:arg1"), {"arg1" : arg1}
-                    ).mappings().all()
+                                "where uuid=:arg1"), {"arg1" : arg1},
+                                fatal=False
+                    )
+                qres = result.mappings().all() if result is not None else None
                 pass
             pass
         else:
             raise NoSuchResGroup("No such resgroup: %s" % (arg1,))
 
-        if len(qres) != 1:
+        if not qres or len(qres) != 1:
             raise NoSuchResGroup("No such resgroup: %s" % (arg1,))
 
         row = qres[0]
@@ -734,7 +755,7 @@ class Profile:
         # uuid can refer to current version or a specific version.
         #
         if matched := re.match("^([\-\w]+),([\-\w]+)$", arg1):
-            qres = DB.execute(
+            result = DBQuery(DB,
                 text("select i.pid,i.pid_idx,i.gid,i.gid_idx," +
                             "   v.creator,v.creator_idx, " +
                             "   i.public,i.project_write, " +
@@ -744,15 +765,17 @@ class Profile:
                             "   v.profileid=i.profileid and " +
                             "   v.version=i.version " +
                             "   where i.pid=:pid and i.name=:name"),
-                            {"pid" : matched[1], "name" : matched[2]}
-                ).mappings().all()
+                            {"pid" : matched[1], "name" : matched[2]},
+                            fatal=False
+                )
+            qres = result.mappings().all() if result is not None else None
         elif re.match("^\w+\-\w+\-\w+\-\w+\-\w+$", arg1):
             #
             # First look to see if the uuid is for the profile itself,
             # which means current version. Otherwise look for a
             # version with the uuid.
             #
-            qres = DB.execute(
+            result = DBQuery(DB,
                 text("select i.pid,i.pid_idx,i.gid,i.gid_idx," +
                             "   v.creator,v.creator_idx, " +
                             "   i.public,i.project_write, " +
@@ -761,11 +784,12 @@ class Profile:
                             "   left join apt_profile_versions as v on " +
                             "   v.profileid=i.profileid and " +
                             "   v.version=i.version " +
-                            "where i.uuid=:arg1"), {"arg1" : arg1}
-                ).mappings().all()
-
+                            "where i.uuid=:arg1"), {"arg1" : arg1},
+                            fatal=False
+                )
+            qres = result.mappings().all() if result is not None else None
             if len(qres) == 0:
-                qres = DB.execute(
+                result = DBQuery(DB,
                     text("select i.pid,i.pid_idx,i.gid,i.gid_idx," +
                                 "   v.creator,v.creator_idx, " +
                                 "   i.public,i.project_write, " +
@@ -774,13 +798,15 @@ class Profile:
                                 "   left join apt_profiles as i on " +
                                 "   v.profileid=i.profileid " +
                                 "   where v.uuid=:arg1 and v.deleted is null"),
-                                {"arg1" : arg1}).mappings().all()
+                                {"arg1" : arg1}, fatal=False
+                                )
+                qres = result.mappings().all() if result is not None else None
                 pass
             pass
         else:
             raise NoSuchProfile("No such profile: %s" % (arg1,))
 
-        if len(qres) != 1:
+        if not qres or len(qres) != 1:
             raise NoSuchProfile("No such profile: %s" % (arg1,))
 
         row = qres[0]

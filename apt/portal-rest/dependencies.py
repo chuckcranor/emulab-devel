@@ -42,12 +42,11 @@ from cryptography.hazmat.primitives import serialization
 # Emulab
 import AccessCheck
 import emutil
-from libdb import DBQueryWarn, DBQuoteSpecial
 
 #sqlalchemy
 from sqlalchemy.orm import Session
 from sqlalchemy import text 
-from .database import get_DB
+from .database import get_DB, DBQuery
 
 LOG = logging.getLogger("uvicorn.error")
 
@@ -92,13 +91,14 @@ def get_current_user(x_api_token: Annotated[str, Header()], DB : Session = Depen
     # We store the token data in the DB, so for now we actually
     # do not bother with what is in the token.
     #
-    qres = DB.execute(
+    result = DBQuery(DB,
         text("select *,UNIX_TIMESTAMP(expires) as unixexp " +
                        "  from user_jwt_tokens " +
                        "  where uuid= :jti"),
-                       {"jti" : claims["jti"]}
-                    ).mappings().all()
-    
+                       {"jti" : claims["jti"]},
+                       fatal=False
+                    )
+    qres = result.mappings().all() if result is not None else None
     if not qres or len(qres) != 1:
         raise HTTPException(status_code=401,
                             detail="Token has been revoked")

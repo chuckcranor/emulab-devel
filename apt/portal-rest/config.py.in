@@ -33,3 +33,4 @@ if TBPATH not in sys.path:
 EMULAB_CERT   = os.path.join(TBROOT, "etc", "emulab.pem")
 TBSUEXEC_PATH = os.path.join(TBROOT, "libexec", "suexec")
 DATABASE_URL  = "mysql+mysqldb://localhost/@TBDBNAME@"
+DB_FAIL_MAIL_ADDR = "@TBOPSEMAIL@".replace("\\","")

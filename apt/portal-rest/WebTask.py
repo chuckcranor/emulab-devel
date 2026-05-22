@@ -27,7 +27,7 @@ import json
 import time
 
 from sqlalchemy import text
-from database import get_current_db
+from database import get_current_db, DBQuery
 
 class WebTask:
     def __init__(self, task_id):
@@ -35,13 +35,15 @@ class WebTask:
         self.task_id = task_id
         self.DB  = get_current_db()
 
-        qres = \
-            self.DB.execute(
+        result = \
+            DBQuery(self.DB,
                 text("select * from web_tasks where task_id=:task_id"),
-                        {"task_id" : task_id}
-            ).mappings().all()
+                        {"task_id" : task_id},
+                        fatal=False
+            )
+        qres = result.mappings().all() if result is not None else None
         
-        if not len(qres):
+        if not qres or not len(qres):
             raise RuntimeError("WebTask %s unknown!" % (task_id))
 
         self.dbrow = qres[0]
@@ -89,10 +91,10 @@ class WebTask:
     def CreateAnonymous(cls):
         task_id = uuid.uuid4().hex
         DB = get_current_db()
-        DB.execute(
+        DBQuery(DB,
             text("insert into web_tasks set "
                  "  task_id=:task_id, created=now(), object_uuid=:task_id"),
-            {"task_id": task_id})
+            {"task_id": task_id}, fatal=True)
         DB.commit()
         return cls(task_id)
 
@@ -102,15 +104,16 @@ class WebTask:
         return False
 
     def Delete(self):
-        self.DB.execute(text("delete from web_tasks where task_id=:task_id"), {"task_id" : self.task_id})
+        DBQuery(self.DB,text("delete from web_tasks where task_id=:task_id"), {"task_id" : self.task_id}, fatal=False)
         self.DB.commit()
         return 0
 
     def Reset(self):
-        self.DB.execute(
+        DBQuery(self.DB,
             text("update web_tasks set " +
 	            "  exited=null,process_id=0,exitcode=0,task_data='' " +
-                    "where task_id=:task_id"), {"task_id" : self.task_id})
+                    "where task_id=:task_id"), {"task_id" : self.task_id},
+                    fatal=True)
         self.DB.commit()
         return self.Refresh()
 
@@ -121,19 +124,21 @@ class WebTask:
             print(str(exc))
             return -1
 
-        self.DB.execute(
+        DBQuery(self.DB,
             text("update web_tasks set modified=now(),task_data=:jsonstr " +
-		    "where task_id=:task_id"), {"jsonstr" : jsonstr, "task_id" : self.task_id})
+		    "where task_id=:task_id"), {"jsonstr" : jsonstr, "task_id" : self.task_id},
+            fatal=True)
         self.DB.commit()
         return 0
 
     def Refresh(self):
-        qres = \
-            self.DB.execute(
+        result = \
+            DBQuery(self.DB,
                 text("select * from web_tasks where task_id=:task_id"),
-                        {"task_id" : self.task_id}).mappings().all()
+                        {"task_id" : self.task_id}, fatal=False)
+        qres = result.mappings().all() if result is not None else None
         
-        if not len(qres):
+        if not qres or not len(qres):
             raise RuntimeError("WebTask %s unknown!" % (self.task_id))
 
         self.dbrow = qres[0]
@@ -145,9 +150,10 @@ class WebTask:
         return 0
 
     def Exited(self, exitcode):
-        self.DB.execute(
+        DBQuery(self.DB,
             text("update web_tasks set exited=now(),exitcode=:exitcode " +
-		    "where task_id=:task_id"), {"exitcode" : exitcode, "task_id" : self.task_id})
+		    "where task_id=:task_id"), {"exitcode" : exitcode, "task_id" : self.task_id},
+            fatal=True)
         self.DB.commit()
 
         self.dbrow["exitcode"] = exitcode
