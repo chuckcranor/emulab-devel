@@ -1800,7 +1800,7 @@ sub DoExtend($)
                 "Granting the request would set the expiration to $new_expires\n".
                 "It is running on $clusters\n".
                 "\n\n". $url . "\n\n",
-		$brand->OpsEmailAddress()) if (!$noemail);
+		$instance->Brand()->OpsEmailAddress()) if (!$noemail);
 
 	# Flag for the dashboard page. 
 	$instance->ExtensionRequested($reason, $granted);

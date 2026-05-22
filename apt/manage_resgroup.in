@@ -1411,7 +1411,7 @@ sub DoGroupReserve()
 			  $resgroup->InfoString() . "\n" .
 			  ($resgroup->reason() ne "" ?
 			   "Reason:\n" . $resgroup->reason() . "\n\n" : "") .
-			  "See: $url", $brand->ReservationEmailAddress());
+			  "See: $url", $brand->ReservationsEmailAddress());
 	    }
 	    else {
 		$resgroup->AddAnnouncement($update);
