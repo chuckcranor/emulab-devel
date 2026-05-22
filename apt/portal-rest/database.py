@@ -29,7 +29,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from contextvars import ContextVar
 
-from libtestbed import *
+from libtestbed import SENDMAIL
 
 LOG = logging.getLogger("uvicorn.error")
 

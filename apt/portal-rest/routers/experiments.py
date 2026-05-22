@@ -77,7 +77,6 @@ from ..api.models import (
 LOG = logging.getLogger("uvicorn.error")
 
 # Testbed DB access lib
-from libdb import *
 from WebTask import WebTask
 from APT_ORM import AptInstances
 import AccessCheck
