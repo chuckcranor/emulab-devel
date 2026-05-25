@@ -1630,9 +1630,9 @@ sub DoDelete()
 				  $brand->ReservationsEmailAddress());
 
 		# This email is not intended to go to the user.
-		$body .= "Resources requested by $email removed by $this_user\n";
+		$body .= "Resources requested by $email removed by $this_uid\n";
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
-				  $subj, $body, $this_user->email());
+				  $subj, $body, $brand->OpsEmailAddress());
 	    }
 	}
     }
@@ -1680,7 +1680,7 @@ sub DoDelete()
 		# This email is not intended to go to the user.
 		$body .= "Reservation requested by $email deleted by $this_uid\n";
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
-				  $subj, $body, $this_user->email());
+				  $subj, $body, $brand->OpsEmailAddress());
 	    }
 	}
     }
