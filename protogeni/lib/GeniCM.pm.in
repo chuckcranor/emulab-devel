@@ -2230,7 +2230,8 @@ sub GetTicketAuxAux($)
 	my %ru_param_checks = (
 	    'center_frequency' => qr/^\d{1,12}(\.\d{1,6})?$/,
 	    'bandwidth' => qr/^\d{1,12}(\.\d{1,6})?$/,
-	    'mimo_mode' => qr/^\w{1,16}$/
+	    'mimo_mode' => qr/^\w{1,16}$/,
+	    'du_mac' => qr/^[0-9a-f]{12}$/
 	    );
 	my $ru_params = GeniXML::GetCOTSRUParameters( $ref );
 	if ( defined( $ru_params ) ) {

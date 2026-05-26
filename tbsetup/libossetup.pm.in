@@ -2841,6 +2841,9 @@ sub LightUpNodes($@)
 	$experiment->GetVirtNodeAttribute($vname, 'mimo_mode', \$attr);
 	$ru_params{'mimo_mode'} = $attr
 	    if defined($attr);
+	$experiment->GetVirtNodeAttribute($vname, 'du_mac', \$attr);
+	$ru_params{'du_mac'} = $attr
+	    if defined($attr);
 
 	# We assume that the RU connects to its DU via its 'eth0' interface.
 	my $iface;
@@ -2885,10 +2888,16 @@ sub LightUpNodes($@)
 	}
 
 	# Add info about the vlan and DU interface to the RU parameters
+	# Override allowed using 'du_mac' attribute via COTSRU profile obj.
 	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
 	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
-	$ru_params{'du_cplane_mac'} = $du_iface->mac();
-	$ru_params{'du_uplane_mac'} = $du_iface->mac();
+	if (exists $ru_params{'du_mac'}) {
+	    $ru_params{'du_cplane_mac'} = $ru_params{'du_mac'};
+	    $ru_params{'du_uplane_mac'} = $ru_params{'du_mac'};
+	} else {
+	    $ru_params{'du_cplane_mac'} = $du_iface->mac();
+	    $ru_params{'du_uplane_mac'} = $du_iface->mac();
+	}
 
 	# Apply the configuration for the RU and reboot it. Note that
 	# we are rebooting the RU "on the sly" here, so must handle
