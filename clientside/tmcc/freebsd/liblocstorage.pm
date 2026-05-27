@@ -221,8 +221,8 @@ sub find_serial($)
     if (-x "$SMARTCTL") {
 	# XXX for NVMe devices we have to use a control device
 	# XXX assumes namespace 1
-	if ($dev =~ /^nvd(\d+)/) {
-	    my $nvmedev = "nvme" . $1 . "ns1";
+	if ($dev =~ /^(nvd|nda)(\d+)/) {
+	    my $nvmedev = "nvme" . $2 . "ns1";
 	    if (-e "/dev/$nvmedev") {
 		$dev = $nvmedev;
 	    }
@@ -247,8 +247,9 @@ sub find_serial($)
 #
 # Do a one-time initialization of a serial number -> /dev/sd? map.
 #
-sub init_serial_map()
+sub init_serial_map($)
 {
+    my ($usenvd) = @_;
     my %snmap = ();
     my $compatnames = 1;
     my @lines;
@@ -259,14 +260,21 @@ sub init_serial_map()
 	$compatnames = 0;
     }
 
-    @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>/dev/null`;
+    my $filelist = "/dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd*";
+    if ($usenvd) {
+	$filelist .= " /dev/nvd*";
+    } else {
+	$filelist .= " /dev/nda*";
+    }
+
+    @lines = `ls $filelist 2>/dev/null`;
   again:
     foreach (@lines) {
 	# XXX just use the /dev/ad? traditional names for now
 	if ($compatnames && m#^/dev/ada\d+$#) {
 	    next;
 	}
-	if (m#^/dev/((?:da|ad|ada|mfid|mfisyspd|nvd)\d+)$#) {
+	if (m#^/dev/((?:da|ad|ada|mfid|mfisyspd|nvd|nda)\d+)$#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
 	    if ($sn) {
@@ -425,7 +433,7 @@ sub get_disktype($)
     # Assume NVMe is SSSD.
     # Older smartctl doesn't seem to handle NVMe
     #
-    if ($dev =~ /^nvd\d+/) {
+    if ($dev =~ /^(nvd|nda)\d+/) {
 	return "SSD";
     }
 
@@ -479,8 +487,9 @@ sub get_disktype($)
 # XXX a bit of hackary to the name matching. Our boot images are either
 # MBR (...s1a) or GPT (...p3).
 #
-sub get_bootdisk()
+sub get_bootdisk($)
 {
+    my ($usenvd) = @_;
     my $disk = undef;
     my $ptype = undef;
     my $line = `$MOUNT | grep ' on / '`;
@@ -500,6 +509,19 @@ sub get_bootdisk()
 	    $line = `ls -l /dev/$disk`;
 	    if ($line =~ /${disk} -> (\S+)/) {
 		$disk = $1;
+	    }
+	}
+	#
+	# FreeBSD 14.x changed the naming convention for NVMe!
+	# We always put "nvd" in the fstab, but if use_nvd==0 then all the
+	# geom commands will use "nda".
+	#
+	if ($disk =~ /^(nvd|nda)(\d+)$/) {
+	    my $unit = $2;
+	    if ($usenvd) {
+		$disk = "nvd$unit";
+	    } else {
+		$disk = "nda$unit";
 	    }
 	}
     }
@@ -834,7 +856,7 @@ sub get_diskinfo($)
 	    $geominfo{$dev}{'inuse'} = -1;
 	}
 	elsif ($type eq "PART" && $geominfo{$dev}{'level'} == 1 &&
-	    $dev =~ /^(.*)[sp]\d+$/) {
+	    $dev =~ /^(\D+\d+)[sp]\d+$/) {
 	    if (exists($geominfo{$1})) {
 		$geominfo{$1}{'inuse'} = 1;
 	    }
@@ -1130,6 +1152,14 @@ sub os_init_storage($)
 	return undef;
     }
 
+    # determine whether "nvd" or "nda" names are in use
+    my $usenvd = `sysctl -n hw.nvme.use_nvd 2>/dev/null`;
+    if ($? == 0 && $usenvd == 0) {
+	$so{'USE_NVD'} = 0;
+    } else {
+	$so{'USE_NVD'} = 1;
+    }
+
     foreach my $href (@{$lref}) {
 	if ($href->{'CMD'} eq "ELEMENT") {
 	    $gotelement++;
@@ -1163,7 +1193,7 @@ sub os_init_storage($)
 	
     # initialize mapping of serial numbers to devices
     if ($gotlocal && $gotelement) {
-	$so{'LOCAL_SNMAP'} = init_serial_map();
+	$so{'LOCAL_SNMAP'} = init_serial_map($so{'USE_NVD'});
     }
 
     # initialize volume manage if needed for local slices
@@ -1233,7 +1263,7 @@ sub os_init_storage($)
 	#
 	# Grab the bootdisk and current GEOM state
 	#
-	my ($bdisk, $bdtype) = get_bootdisk();
+	my ($bdisk, $bdtype) = get_bootdisk($so{'USE_NVD'});
 	my $dinfo = get_diskinfo($usezfs);
 	if (!exists($dinfo->{$bdisk}) || $dinfo->{$bdisk}->{'inuse'} == 0) {
 	    warn("*** storage: bootdisk '$bdisk' marked as not in use!?\n");
