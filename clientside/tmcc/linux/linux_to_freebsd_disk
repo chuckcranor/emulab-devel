@@ -2,25 +2,47 @@
 
 ldisk=$1
 if [ -z "$ldisk" ]; then
-	echo "Usage: ${0##*/} linux_disk_name"
+	echo "Usage: ${0##*/} linux_disk_name [orig_bsddisk_name]"
 	exit 1
 fi
+bsddisk=$2
 
-# figure out the freebsd device name
-# XXX we cannot do this unambiguously since Linux "sd" could map to a lot
+#
+# Figure out the freebsd device name.
+#
+# The mapping is ambiguous for Linux "sd" since it could map to a lot
 # of different BSD names (e.g., "da", "ada", various raid controllers).
 # However, it is almost always the case that "nvme" is "nvd" and "sd" is "da".
-# So we do that.
+# If we have the original BSD disk name, we can use that to disambiguate the
+# "sd" case.
+#
 case $ldisk in
     nvme*)
 	dunit=`echo $ldisk | sed -e 's/nvme\([0-9][0-9]*\)n1/\1/'`
 	dtype="nvd"
+	if [ -n "$bsddisk" ]; then
+	    case $bsddisk in
+	    nda*)
+		dtype="nda"
+		;;
+	    esac
+	fi
 	;;
-
     # XXX we only handle the first 26 units
     sd[a-z])
-	dlet=`echo $ldisk | sed -e 's/sd\([a-z]\)/\1/'`
+	# XXX and we only handle the most common names
 	dtype="da"
+	if [ -n "$bsddisk" ]; then
+	    case $bsddisk in
+	    ada*)
+		dtype="ada"
+		;;
+	    da*)
+		dtype="da"
+		;;
+	    esac
+	fi
+	dlet=`echo $ldisk | sed -e 's/sd\([a-z]\)/\1/'`
 	case $dlet in
 	    [a-j])
 		dunit=`echo $dlet | sed -e 'y/abcdefghij/0123456789/'`

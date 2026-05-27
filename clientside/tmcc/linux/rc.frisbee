@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -773,6 +773,8 @@ fixone() {
     export SLICEFIX_DOM0MEM=`getvar DOM0MEM "$iline" unknown`
     export SLICEFIX_DISABLEIF=`getvar DISABLEIF "$iline"`
     export SLICEFIX_CLOUDINIT=`getvar CLOUDINIT "$iline"`
+    export SLICEFIX_BOSSIP=$BOSSIP
+    export SLICEFIX_LDISK=`getvar LDISK "$iline"`
 
     $BINDIR/slicefix $PART $DISK
     return $?

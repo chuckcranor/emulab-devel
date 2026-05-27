@@ -80,6 +80,9 @@ chomp @lines;
 
 my %disks = ();
 my $prefix = exists($hints{'prefix'}) ? $hints{'prefix'} : "";
+if ($prefix) {
+    print STDERR "Looking at only '$prefix' disks to ID boot disk.\n";
+}
 
 foreach my $line (@lines) {
     my ($size,$unit,$pstr,$pnum,$disk);
@@ -122,12 +125,19 @@ if (exists($hints{'serial'}) && $hints{'serial'} ne "none") {
     my $match = ($sn eq "lowest" || $sn eq "highest") ? 0 : 1;
     my %snlist = ();
 
+    if ($match) {
+	print STDERR "Looking for serial number '$sn' as boot disk.\n";
+    } else {
+	print STDERR "Looking for $sn serial number as boot disk.\n";
+    }
+
     foreach my $disk (keys(%disks)) {
 	my $dsn = "";
 
 	if (-r "/sys/class/block/$disk/device/serial") {
 	    $dsn = `cat /sys/class/block/$disk/device/serial`;
 	    chomp $dsn;
+	    $dsn =~ s/\s*$//;
 	} elsif (-x "$SMARTCTL") {
 	    @lines = `$SMARTCTL -i /dev/$disk`;
 	    foreach my $line (@lines) {
@@ -138,6 +148,8 @@ if (exists($hints{'serial'}) && $hints{'serial'} ne "none") {
 	    }
 	}
 	if ($dsn) {
+	    print STDERR "Got serial '$dsn', looking for '$sn'\n"
+		if ($debug);
 	    if ($match && $dsn eq $sn) {
 		push @bdisk, $disk;
 		# XXX there should only be one
@@ -160,6 +172,8 @@ if (exists($hints{'serial'}) && $hints{'serial'} ne "none") {
 }
 
 if (exists($hints{'parts'})) {
+    print STDERR "Looking for existence of partitions " . $hints{'parts'} .
+	" to ID boot disk.\n";
     @plist = split(',', $hints{'parts'});
     DISK: foreach my $disk (keys(%disks)) {
 	foreach my $part (@plist) {

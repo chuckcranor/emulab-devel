@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,9 +59,17 @@ case $# in
 	exit 1
 esac
 
-linux_disk=`$BINDIR/freebsd_to_linux_disk $freebsd_disk`
-old_linux_disk=${linux_disk#* }
-linux_disk=${linux_disk%% *}
+#
+# See if Linux disk is already known. If not, attempt to figure it out.
+#
+if [ -n "$SLICEFIX_LDISK" ]; then
+    linux_disk=$SLICEFIX_LDISK
+    old_linux_disk=$linux_disk
+else
+    linux_disk=`$BINDIR/freebsd_to_linux_disk $freebsd_disk`
+    old_linux_disk=${linux_disk#* }
+    linux_disk=${linux_disk%% *}
+fi
 
 isgpt=0
 freebsd_pchar=s

@@ -33,7 +33,7 @@ case $disk in
 		dunit=`echo $disk | sed -e 's/ada\([0-9][0-9]*\)$/\1/'`
 		;;
 	# NVM disks
-	nvd[0-9])
+	nvd[0-9]|nda[0-9])
 		dtype="nvme"
 		old_dtype="nvme"
 		dunit=`echo $disk | sed -e 's/nvd\([0-9][0-9]*\)$/\1/'`
