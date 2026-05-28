@@ -1077,7 +1077,12 @@ sub AnnotateManifest($)
     $experiment->GetVirtNodeAttribute( $vname, "mimo_mode", \$ru_mimom );
     GeniXML::SetText( "mimo_mode", $rspec, $ru_mimom )
 	if( defined( $ru_mimom ) );
-    
+
+    my $du_mac;
+    $experiment->GetVirtNodeAttribute( $vname, "du_mac", \$du_mac );
+    GeniXML::SetText( "du_mac", $rspec, $du_mac )
+	if( defined( $du_mac ) );
+
     #
     # Add Emulab extension that says which virtnodes are instantiated
     # on this physical host.

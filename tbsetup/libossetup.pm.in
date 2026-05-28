@@ -2790,6 +2790,46 @@ sub AddNode($$)
     return 0;
 }
 
+sub _getDUMac($$$$)
+{
+    my ($self, $vlanobj, $ru_node_id, $du_mac) = @_;
+
+    # There should only be two members of the Vlan. This RU and its DU...
+    my @members;
+    if ($vlanobj->MemberList(\@members)) {
+	print STDERR "Lan $vlanobj has no members?!\n";
+	goto bad;
+    }
+
+    # Get handle on the adjacent DU node.
+    my ($du_member, $du_node_id);
+    foreach my $m (@members) {
+	if ($m->GetAttribute("node_id", \$du_node_id) == 0 &&
+	    $du_node_id ne $ru_node_id) {
+	    $du_member = $m;
+	    last;
+	}
+    }
+    if (!$du_member) {
+	print STDERR "No suitable adjacent DU node?!\n";
+	goto bad;
+    }
+
+    # Grab interface object for the DU node.
+    my $du_iface = $du_member->GetInterface();
+    if (!$du_iface) {
+	print STDERR "Could not find adjacent interface of DU node!\n";
+	goto bad;
+    }
+
+    $$du_mac = $du_iface->mac();
+    return 0;
+
+  bad:
+    $$du_mac = undef;
+    return -1;
+}
+
 #
 # Light up nodes as with SDRs, and then conjure and send the
 # configuration to the RU devices. Reboot them as well afterward.
@@ -2799,7 +2839,8 @@ sub LightUpNodes($@)
     my ($self, @nodelist)  = @_;
     my $parent     = $self->parent();
     my $experiment = $parent->experiment();
-    my @pfields = ('center_frequency', 'bandwidth', 'mimo_mode');
+    my @nattrs = ('center_frequency', 'bandwidth');
+    my @sattrs = ('mimo_mode', 'du_mac');
 
     my @cycles     = ();
     my @ons        = ();
@@ -2830,17 +2871,19 @@ sub LightUpNodes($@)
 	my $vname   = $node->vname();
 	my %ru_params = ();
 
-	# Extract parameters set for node in profile script.
+	# Extract parameters set for this RU set via the profile script.
 	my $attr;
-	$experiment->GetVirtNodeAttribute($vname, 'center_frequency', \$attr);
-	$ru_params{'center_frequency'} = $attr + 0
-	    if defined($attr);
-	$experiment->GetVirtNodeAttribute($vname, 'bandwidth', \$attr);
-	$ru_params{'bandwidth'} = $attr + 0
-	    if defined($attr);
-	$experiment->GetVirtNodeAttribute($vname, 'mimo_mode', \$attr);
-	$ru_params{'mimo_mode'} = $attr
-	    if defined($attr);
+	foreach my $key (@nattrs) {
+	    $experiment->GetVirtNodeAttribute($vname, $key, \$attr);
+	    # Convert to number before assignment.
+	    $ru_params{$key} = $attr + 0
+		if defined($attr);
+	}
+	foreach my $key (@sattrs) {
+	    $experiment->GetVirtNodeAttribute($vname, $key, \$attr);
+	    $ru_params{$key} = $attr
+		if defined($attr);
+	}
 
 	# We assume that the RU connects to its DU via its 'eth0' interface.
 	my $iface;
@@ -2856,39 +2899,25 @@ sub LightUpNodes($@)
 	    goto bad;
 	}
 
-	# There should only be two members of the Vlan. This RU and its DU...
-	my @members;
-	if ($vlan->MemberList(\@members)) {
-	    print STDERR "Lan $vlan has no members?!\n";
-	    goto bad;
-	}
-
-	# Get handle on the adjacent DU node.
-	my ($du_member, $du_node_id);
-	foreach my $m (@members) {
-	    if ($m->GetAttribute("node_id", \$du_node_id) == 0 &&
-		$du_node_id ne $node_id) {
-		$du_member = $m;
-		last;
+	# Set the DU mac address to the attribute baseed in via the profile,
+	# if present, otherwise look it up via adjacent node interface.
+	my $du_mac;
+	if (exists $ru_params{'du_mac'}) {
+	    $du_mac = $ru_params{'du_mac'};
+	    delete $ru_params{'du_mac'};
+	} else {
+	    $self->_getDUMac($vlan, $node_id, \$du_mac);
+	    if (!$du_mac) {
+		print STDERR "Could not look up MAC address of DU node!\n";
+		goto bad;
 	    }
 	}
-	if (!$du_member) {
-	    print STDERR "No suitable adjacent DU node?!\n";
-	    goto bad;
-	}
+	$ru_params{'du_cplane_mac'} = $du_mac;
+	$ru_params{'du_uplane_mac'} = $du_mac;
 
-	# Grab interface object for the DU node.
-	my $du_iface = $du_member->GetInterface();
-	if (!$du_iface) {
-	    print STDERR "Could not find adjacent interface of DU node!\n";
-	    goto bad;
-	}
-
-	# Add info about the vlan and DU interface to the RU parameters
+	# Add vlan tag to the RU params structure.
 	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
 	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
-	$ru_params{'du_cplane_mac'} = $du_iface->mac();
-	$ru_params{'du_uplane_mac'} = $du_iface->mac();
 
 	# Apply the configuration for the RU and reboot it. Note that
 	# we are rebooting the RU "on the sly" here, so must handle
