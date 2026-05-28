@@ -434,7 +434,7 @@ def update_experiment(
     return ConstructExperiment(DB, experiment_id)
 
 
-@router.post("/experiments/{experiment_id}/vlan/{source_lan}/connect",
+@router.post("/{experiment_id}/vlan/{source_lan}/connect",
              status_code=FStatus.HTTP_204_NO_CONTENT)
 def connect_experiment_vlan(
         current_user: Annotated[str, Depends(get_current_user)],
@@ -462,7 +462,7 @@ def connect_experiment_vlan(
     pass
 
 
-@router.post("/experiments/{experiment_id}/vlan/{source_lan}/disconnect",
+@router.post("/{experiment_id}/vlan/{source_lan}/disconnect",
              status_code=FStatus.HTTP_204_NO_CONTENT)
 def disconnect_experiment_vlan(
         current_user: Annotated[str, Depends(get_current_user)],
