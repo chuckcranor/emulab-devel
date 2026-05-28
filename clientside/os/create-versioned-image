@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -185,7 +185,7 @@ sub map_diskname($)
     # it could break.
     if ($^O eq 'linux') {
 	# XXX hack for NVMe
-	if ($dtype eq "nvd") {
+	if ($dtype eq "nvd" || $dtype eq "nda") {
 	    $devname = "/dev/nvme${dunit}n1";
 	    goto verify;
 	}

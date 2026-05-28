@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2024 University of Utah and the Flux Group.
+# Copyright (c) 2024-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -216,7 +216,10 @@ if ($devtype eq "network") {
 	# Quick pass to see if we have a bootdev corresponding to cnet
 	foreach my $tdev (keys %bootdev) {
 	    if ($bootdev{$tdev}{'type'} eq "network" &&
-		$bootdev{$tdev}{'info'} eq $ctrlmac)
+		$bootdev{$tdev}{'info'} eq $ctrlmac) {
+		$newbootdev = $tdev;
+		goto cleanup;
+	    }
 	}
 	$needsfixing = 1;
 	goto fixit;
