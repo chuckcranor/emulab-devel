@@ -49,7 +49,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from ..database import get_DB
+from ..database import get_DB, DBQuery
 from ..dependencies import get_current_user, get_elaborate_header
 from ..dependencies import TBDatetimeGMT, SUEXEC, DecodeToken
 from ..dependencies import (
@@ -64,7 +64,6 @@ from ..api.models import (
 )
 
 # Testbed DB access lib
-from libdb import *
 from WebTask import WebTask
 from APT_ORM import UserJwtTokens
 import AccessCheck
@@ -82,10 +81,11 @@ def get_version(
         DB: Session = Depends(get_DB)) -> Version:
     LOG.info("get_version: %r", current_user)
 
-    qres = DBQueryWarn("select * from version_info", asDict=True)
+    result = DBQuery(DB, text("select * from version_info"), fatal=False)
+    qres = result.mappings().all() if result is not None else None
     if qres == None or len(qres) == 0:
         raise PortalException(
-            FStatus.HTTP_404_NOT_FOUND, "No version info available")
+            status.HTTP_404_NOT_FOUND, "No version info available")
 
     commit = None
     version = None

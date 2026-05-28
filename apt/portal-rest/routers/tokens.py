@@ -39,7 +39,8 @@ from enum import Enum
 from typing import Annotated, Text, Union
 from pydantic import BaseModel, Field, AnyUrl, HttpUrl
 from uuid import UUID, uuid4
-from datetime import datetime, time, timedelta
+import time
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Response, status
 from fastapi import Query, Path, Body
@@ -50,7 +51,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from ..database import get_DB
+from ..database import get_DB, DBQuery
 from ..dependencies import get_current_user, get_elaborate_header
 from ..dependencies import TBDatetimeGMT, SUEXEC, DecodeToken
 from ..dependencies import (
@@ -69,7 +70,6 @@ from ..api.models import (
 )
 
 # Testbed DB access lib
-from libdb import *
 from WebTask import WebTask
 from APT_ORM import UserJwtTokens, UserSsoCodes
 import AccessCheck
@@ -156,8 +156,9 @@ def get_redeem(
 
     # Validate the code here.
     stmt = select(UserSsoCodes).where(text("code = :id"))
-    row = DB.execute(stmt, {'id': code}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': code}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such code " + str(code)
         )
@@ -166,15 +167,17 @@ def get_redeem(
     LOG.info("row: %r", dbcode)
     LOG.info("expires: %r %r", expires, time.time())
     if time.time() > expires:
-        # This was easier the using sqlalchemy, bizzare errors
-        DBQueryFatal("delete from user_sso_codes where idx=%s",
-                     (dbcode.idx,))
+        DBQuery(DB, text(
+            "delete from user_sso_codes where idx=:dbcode"),
+                     {"dbcode" : dbcode.idx}, fatal=True
+            )
         raise PortalException(
             status.HTTP_400_BAD_REQUEST, "Code has expired")
 
     # Use once, no errors tolerated
-    DBQueryFatal("delete from user_sso_codes where idx=%s",
-                 (dbcode.idx,))
+    DBQuery(DB,
+        text("delete from user_sso_codes where idx=:dbcode"),
+                 {"dbcode" : dbcode.idx}, fatal=True)
 
     # Now create the auth0 token (which is not stored in the DB).
     webtask = WebTask.CreateAnonymous()
@@ -196,12 +199,12 @@ def get_redeem(
 #
 def ConstructToken(DB: Session, token_uuid):
     stmt = select(UserJwtTokens).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': token_uuid}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': token_uuid}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such token " + str(token_uuid)
         )            
-    print(str(row))
     dbtoken = row.UserJwtTokens
     newtoken = Token(
         id = dbtoken.uuid,

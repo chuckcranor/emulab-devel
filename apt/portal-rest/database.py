@@ -21,18 +21,53 @@
 # 
 # }}}
 #
+import logging
+import traceback, sys
 from . import config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from contextvars import ContextVar
+
+from libtestbed import SENDMAIL
+
+LOG = logging.getLogger("uvicorn.error")
+
+__dbQueryMaxtries = 2
+__dbMailOnFail = True
+__dbFailMailAddr = config.DB_FAIL_MAIL_ADDR
 
 engine = create_engine(config.DATABASE_URL, echo=False, pool_recycle=3600)
 SessionLocal = sessionmaker(autoflush=True, bind=engine)
 
+db_session : ContextVar = ContextVar('db_session', default=None)
+
+def get_current_db():
+    return db_session.get()
+
 def get_DB():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        pass
-    pass
+    yield db_session.get()
+
+def DBQuery(DB, stmt, params=None, *, fatal=False):
+    params = params or {}
+    last_exc = None
+    tries = __dbQueryMaxtries
+    for _ in range(tries):
+        try:
+            return DB.execute(stmt, params)
+        except OperationalError as e:
+            last_exc = e
+            LOG.warning("Error: could not reconnect to mysqld!, %s", e)
+            DB.rollback()
+        except SQLAlchemyError as e:
+            last_exc = e
+            tbmsg = f"{stmt}\n{params}\n\n{traceback.format_exc()}"
+            if __dbMailOnFail:
+                SENDMAIL(__dbFailMailAddr, "DB query failed", f"DB query failed:\n\n{tbmsg}",
+                         __dbFailMailAddr)
+            break
+            
+    if fatal:
+        raise RuntimeError("DBQuery failed") from last_exc
+    return None
+

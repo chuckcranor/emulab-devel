@@ -39,6 +39,8 @@ from .routers import version
 from .dependencies import PortalException, get_current_user
 from .api.models import Error
 
+from .database import SessionLocal, db_session
+
 origins = [
     "http://localhost",
     "http://gitlab.flux.utah.edu"
@@ -49,6 +51,17 @@ LOG.setLevel(logging.INFO)
 
 app = FastAPI(
 )
+
+@app.middleware("http")
+async def db_session_middleware(request: Request, next):
+    session = SessionLocal()
+    token = db_session.set(session)
+    try:
+        response = await next(request)
+    finally:
+        session.close()
+        db_session.reset(token)
+    return response
 
 @app.exception_handler(PortalException)
 def portal_exception_handler(request: Request, exc: PortalException):

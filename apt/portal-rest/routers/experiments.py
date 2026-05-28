@@ -40,7 +40,7 @@ from enum import Enum
 from typing import Annotated, Text, Union
 from pydantic import BaseModel, Field, AnyUrl
 from uuid import UUID
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Response, status
 from fastapi import status as FStatus
@@ -51,6 +51,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database import get_DB
+from ..database import get_current_db, DBQuery
 from ..dependencies import get_current_user, TBDatetimeGMT, SUEXEC
 from ..dependencies import (
     PortalException,
@@ -76,7 +77,6 @@ from ..api.models import (
 LOG = logging.getLogger("uvicorn.error")
 
 # Testbed DB access lib
-from libdb import *
 from WebTask import WebTask
 from APT_ORM import AptInstances
 import AccessCheck
@@ -127,11 +127,15 @@ def get_experiment_access(experiment_id):
 #
 def check_experiment_id(experiment_id):
     LOG.info("check_experiment_id %r", str(experiment_id))
-
+    DB = get_current_db()
     if match := re.match("^([\-\w]+),([\-\w]+)$", experiment_id):
-        qres = DBQueryWarn("select uuid from apt_instances "+
-                           "where pid=%s and name=%s",
-                           (match[1], match[2]))
+        result = DBQuery(DB,
+            text("select uuid from apt_instances "+
+                           "where pid= :pid and name= :name"),
+                           {"pid" : match[1], "name" : match[2]},
+                           fatal=False
+            )
+        qres = result.all() if result is not None else None
         if qres == None or len(qres) != 1:
             raise PortalException(
                 FStatus.HTTP_404_NOT_FOUND, "No such experiment")
@@ -144,8 +148,12 @@ def check_experiment_id(experiment_id):
         raise RequestValidationError(
             "Validation error for experiment_id, not a valid UUID")
 
-    qres = DBQueryWarn("select uuid from apt_instances "+
-                       "where uuid=%s",(experiment_id,))
+    result = DBQuery(DB,
+        text("select uuid from apt_instances "+
+            " where uuid=:experiment_id"),{"experiment_id" : experiment_id},
+            fatal=False
+        )
+    qres = result.all() if result is not None else None
     if qres == None or len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No such experiment")
@@ -158,8 +166,9 @@ def check_experiment_id(experiment_id):
 #
 def check_experiment_node(DB: Session, experiment_id, client_id):
     stmt = select(AptInstances).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': experiment_id}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': experiment_id}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise PortalException(FStatus.HTTP_404_NOT_FOUND,
                               "%r is not a node in this experiment" % client_id)
     instance = row.AptInstances
@@ -178,15 +187,18 @@ def check_experiment_node(DB: Session, experiment_id, client_id):
 # Check admission control (load average, too many waiting)
 #
 def checkAdmissionControl():
+    DB = get_current_db()
     load1,load5,load15 = os.getloadavg()
     if load1 > 15:
         raise PortalException(
             FStatus.HTTP_429_TOO_MANY_REQUESTS,
             "Load average to high: " + str(load1))
 
-    qres = DBQueryFatal("select value from emulab_locks " +
-                        "where name='create_instance_lock'");
-
+    result = DBQuery(DB,
+        text("select value from emulab_locks where name='create_instance_lock'"),
+        fatal=False
+    )
+    qres = result.all() if result is not None else None
     if qres == None or len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
@@ -203,8 +215,13 @@ def checkAdmissionControl():
 # Grab the webtask for an instance
 #
 def get_apt_instance_webtask(experiment_id):
-    qres = DBQueryWarn("select webtask_id from apt_instances "+
-                       "where uuid=%s",(experiment_id,))
+    DB = get_current_db()
+    result = DBQuery(DB,
+        text("select webtask_id from apt_instances "+
+                       "where uuid=:experiment_id"), {"experiment_id" : experiment_id},
+                       fatal=False
+        )
+    qres = result.all() if result is not None else None
     if qres == None or len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No such experiment")
@@ -265,11 +282,15 @@ def get_apt_instance_snapshot_status(experiment_id):
     return status
 
 def get_experiment_expiration(experiment_id):
-    qres = DBQueryWarn("select s.expires from apt_instances as i "+
+    DB = get_current_db()
+    result = DBQuery(DB,
+        text("select s.expires from apt_instances as i "+
                        "join geni.geni_slices as s on "+
                        "  s.uuid=i.slice_uuid "+
-                       "where i.uuid=%s",(experiment_id,))
-
+                       "where i.uuid= :experiment_id"),{"experiment_id" : experiment_id},
+                       fatal=False
+    )
+    qres = result.all() if result is not None else None
     if qres == None or len(qres) != 1:
         raise PortalException(
             FStatus.HTTP_404_NOT_FOUND, "No such experiment")
@@ -301,7 +322,7 @@ def get_experiments(
         DB: Session = Depends(get_DB)) -> ExperimentList:
     LOG.info("get_experiments: current_user: %r", current_user)
     LOG.info("get_experiments: args: %r, %r, %r", experiment_id, creator, project)
-    result = []
+    experiments = []
     clause = "";
 
     #
@@ -310,29 +331,32 @@ def get_experiments(
     #
     # At the moment, just the current user experiments.
     #
-    qres = DBQueryWarn("select uuid,pid from apt_instances "+
-                       "where creator_idx=%s", (current_user.uid_idx,))
-
+    result = DBQuery(DB,
+        text("select uuid,pid from apt_instances "+
+                       "where creator_idx= :current_user"), {"current_user" : current_user.uid_idx},
+                       fatal=False
+        )
+    qres = result.all() if result is not None else []
     for row in qres:
         uuid = row[0]
         pid  = row[1]
 
         if project:
             if pid == project:
-                result.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
+                experiments.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
                 pass
             pass
         elif experiment_id:
             if str(uuid) == str(experiment_id):
-                result.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
+                experiments.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
                 pass
             pass
         else:
-            result.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
+            experiments.append(ConstructExperiment(DB, uuid, elaborate=elaborate))
             pass
         pass
     
-    return ExperimentList(experiments = result)
+    return ExperimentList(experiments = experiments)
 
 @router.get("/{experiment_id}")
 def get_experiment(
@@ -570,10 +594,14 @@ def create_experiment(
     if completed.returncode != 0:
         return HandleShellError(completed)
 
-    qres = DBQueryWarn("select uuid from apt_instances "+
-                       "where pid=%s and name=%s",
-                       (create.project, create.name))
-    if not qres or len(qres) != 1:
+    result = DBQuery(DB,
+        text("select uuid from apt_instances "+
+                       "where pid=:pid and name=:name"),
+                       {"pid" : create.project, "name" : create.name},
+                       fatal=False
+        )
+    qres = result.all() if result is not None else None
+    if qres == None or len(qres) != 1:
         raise PortalException(FStatus.HTTP_404_NOT_FOUND,
                               "Experiment not found after creating")
     uuid = qres[0][0]
@@ -788,7 +816,8 @@ def update_experiment_node(
 def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
     if True:
         stmt = select(AptInstances).where(text("uuid = :id"))
-        row = DB.execute(stmt, {'id': experiment_id}).first()
+        result = DBQuery(DB, stmt, {'id': experiment_id}, fatal=False)
+        row = result.first() if result is not None else None
         if not row:
             raise HTTPException(
                 status_code=404, detail="No such experiment"
@@ -885,7 +914,8 @@ def ConstructExperiment(DB: Session, experiment_id, elaborate=True):
 def ConstructExperimentNode(DB: Session,
                             experiment_id, client_id, elaborate=True):
     stmt = select(AptInstances).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': experiment_id}).first()
+    result = DBQuery(DB, stmt, {'id': experiment_id}, fatal=False)
+    row = result.first() if result is not None else None
     if not row:
         raise HTTPException(
             status_code=404, detail="No such experiment"
@@ -927,7 +957,8 @@ def ConstructExperimentNode(DB: Session,
 def ConstructExperimentManifests(DB: Session, experiment_id):
     if True:
         stmt = select(AptInstances).where(text("uuid = :id"))
-        row = DB.execute(stmt, {'id': experiment_id}).first()
+        result = DBQuery(DB, stmt, {'id': experiment_id}, fatal=False)
+        row = result.first() if result is not None else None
         if not row:
             raise HTTPException(
                 status_code=404, detail="No such experiment"

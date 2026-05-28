@@ -50,6 +50,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database import get_DB
+from ..database import get_current_db, DBQuery
 from ..dependencies import get_current_user, get_elaborate_header
 from ..dependencies import TBDatetimeGMT, SUEXEC
 from ..dependencies import (
@@ -68,10 +69,11 @@ from ..api.models import (
 )
 
 # Testbed DB access lib
-from libdb import *
 from WebTask import WebTask
 from APT_ORM import AptProfiles
 import AccessCheck
+
+LOG = logging.getLogger("uvicorn.error")
 
 # pydantic handles uuid,datetime,integer validation
 ProfileValidation = {
@@ -104,12 +106,17 @@ def get_profile_access(profile_id):
 #
 def check_profile_id(profile_id):
     LOG.info("check_profile_id %r", str(profile_id))
-
+    
+    DB = get_current_db()
     if match := re.match("^([\-\w]+),([\-\w]+)$", profile_id):
-        qres = DBQueryWarn("select uuid from apt_profiles "+
-                           "where pid=%s and name=%s",
-                           (match[1], match[2]))
-        if qres == None or len(qres) != 1:
+        result = DBQuery(DB,
+            text("select uuid from apt_profiles "+
+                           "where pid=:pid and name=:name"),
+                           {"pid" : match[1], "name" : match[2]},
+                           fatal=False
+            )
+        qres = result.all() if result is not None else None
+        if not qres or len(qres) != 1:
             raise PortalException(
                 status.HTTP_404_NOT_FOUND, "No such profile")
         row = qres[0]
@@ -123,14 +130,22 @@ def check_profile_id(profile_id):
     #
     # UUID of the profile or of a version?
     #
-    qres = DBQueryWarn("select uuid from apt_profiles "+
-                       "where uuid=%s", (str(profile_id),))
+    result = DBQuery(DB,
+        text("select uuid from apt_profiles "+
+                       "where uuid=:profile_id"), {"profile_id" : str(profile_id)},
+                       fatal=False
+        )
+    qres = result.all() if result is not None else None
     if qres and len(qres) == 1:
         row = qres[0]
         return row[0]
 
-    qres = DBQueryWarn("select uuid from apt_profile_versions "+
-                       "where uuid=%s", (str(profile_id),))
+    result = DBQuery(DB,
+        text("select uuid from apt_profile_versions "+
+                       "where uuid=:profile_id"), {"profile_id" : str(profile_id)},
+                       fatal=False
+        )
+    qres = result.all() if result is not None else []
     if qres and len(qres) == 1:
         row = qres[0]
         return row[0]
@@ -143,11 +158,17 @@ def check_profile_id(profile_id):
 #
 def check_profile_version(profile_id, version_id):
     LOG.info("check_profile_version %r %r", str(profile_id), str(version_id))
-    qres = DBQueryWarn("select i.uuid,v.uuid from apt_profiles as i " +
-                       "join apt_profile_versions as v on " +
+
+    DB = get_current_db()
+    result = DBQuery(DB,
+        text("select i.uuid,v.uuid from apt_profiles as i " +
+               "   join apt_profile_versions as v on " +
 		       "   v.profileid=i.profileid " +
-                       "where i.uuid=%s and v.uuid=%s",
-                       (str(profile_id), str(version_id)))
+               "   where i.uuid=:profile_id and v.uuid=:version_id"),
+                       {"profile_id" : str(profile_id), "version_id" : str(version_id)},
+                fatal=False
+        )
+    qres = result.all() if result is not None else []
     if qres == None or len(qres) != 1:
         raise PortalException(
             status.HTTP_404_NOT_FOUND, "No such profile version")
@@ -160,8 +181,6 @@ def check_profile_name(profile_name):
     # This will raise an error
     PortalValidateOne("profile_name", profile_name, "apt_profiles", "name")
     return profile_name
-
-LOG = logging.getLogger("uvicorn.error")
 
 router = APIRouter(
     prefix="/profiles",
@@ -181,7 +200,7 @@ def get_profiles(
         elaborate: bool = Depends(get_elaborate_header),
         DB: Session = Depends(get_DB)) -> ProfileList:
     LOG.info("get_profiles: args: %r", profile_name)
-    result = []
+    profiles = []
     clause = "";
 
     #
@@ -190,11 +209,15 @@ def get_profiles(
     #
     # At the moment, just the current user profiles
     #
-    qres = DBQueryFatal("select p.uuid,p.pid,p.name from apt_profiles as p " +
+    result = DBQuery(DB,
+        text("select p.uuid,p.pid,p.name from apt_profiles as p " +
                         "left join apt_profile_versions as v on " +
                         "   v.profileid=p.profileid and " +
                         "   v.version=p.version " +
-                        "where v.creator_idx=%s", (current_user.uid_idx,))
+                        "where v.creator_idx=:current_user"), {"current_user" : current_user.uid_idx},
+                        fatal=True
+        )
+    qres = result.all() if result is not None else []
 
     for row in qres:
         uuid = row[0];
@@ -203,25 +226,25 @@ def get_profiles(
         
         if project:
             if pid == project:
-                result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+                profiles.append(ConstructProfile(DB, uuid, elaborate=elaborate))
                 pass
             pass
         elif profile_name:
             if name == profile_name:
-                result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+                profiles.append(ConstructProfile(DB, uuid, elaborate=elaborate))
                 pass
             pass
         elif profile_id:
             if str(uuid) == str(profile_id):
-                result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+                profiles.append(ConstructProfile(DB, uuid, elaborate=elaborate))
                 pass
             pass
         else:
-            result.append(ConstructProfile(DB, uuid, elaborate=elaborate))
+            profiles.append(ConstructProfile(DB, uuid, elaborate=elaborate))
             pass
         pass
     
-    return ProfileList(profiles = result)
+    return ProfileList(profiles = profiles)
 
 
 @router.get("/{profile_id}")
@@ -490,8 +513,9 @@ def update_profile(
     # Lets make sure its a repo backed profile.
     #
     stmt = select(AptProfiles).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': profile_id}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': profile_id}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such profile"
         )            
@@ -506,8 +530,6 @@ def update_profile(
 
     completed = SUEXEC(current_user, profile_access.group, command);
     if completed.returncode != 0:
-        webtask.Delete()
-        os.unlink(xmlFile)
         return HandleShellError(completed)
 
     return ConstructProfile(DB, profile_id)
@@ -532,11 +554,15 @@ def delete_profile(
     if str(profile_id) == profile_access.version_uuid:
         profile_id = profile_access.uuid
 
-        qres = DBQueryWarn("select v.uuid from apt_profiles as p "+
+        result = DBQuery(DB,
+            text("select v.uuid from apt_profiles as p "+
                            "join apt_profile_versions as v on "+
                            "  v.profileid=p.profileid "+
-                           "where p.uuid=%s and v.deleted is null",
-                           (str(profile_id),))
+                           "where p.uuid=:profile_id and v.deleted is null"),
+                           {"profile_id" : str(profile_id)},
+                           fatal=False
+            )
+        qres = result.all() if result is not None else None
         if qres == None or len(qres) == 0:
             raise PortalException(status.HTTP_500_INTERNAL_SERVER_ERROR,
                                   "No such profile ID")
@@ -562,7 +588,7 @@ def delete_profile_version(
         version_id: UUID,
         profile_access = Depends(get_profile_access),
         DB: Session = Depends(get_DB)):
-    LOG.info("delete_profile_version: args: %r ^r", profile_id, version_id)
+    LOG.info("delete_profile_version: args: %r %r", profile_id, version_id)
     
     if not profile_access.AccessCheck(
             current_user, AccessCheck.TB_PROFILE_MODIFY):
@@ -584,8 +610,9 @@ def delete_profile_version(
 #
 def ConstructProfile(DB: Session, profile_id, version_id=None, elaborate=False):
     stmt = select(AptProfiles).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': profile_id}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': profile_id}, fatal=True)
+    row = result.first()
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such profile " + str(profile_id)
         )            

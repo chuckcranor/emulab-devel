@@ -33,7 +33,7 @@ import time
 from datetime import datetime, timezone
 import logging
 from typing import Annotated
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Depends
 from fastapi.exceptions import RequestValidationError
 import jwt
 from cryptography.x509 import load_pem_x509_certificate
@@ -42,7 +42,11 @@ from cryptography.hazmat.primitives import serialization
 # Emulab
 import AccessCheck
 import emutil
-from libdb import DBQueryWarn, DBQuoteSpecial
+
+#sqlalchemy
+from sqlalchemy.orm import Session
+from sqlalchemy import text 
+from .database import get_DB, DBQuery
 
 LOG = logging.getLogger("uvicorn.error")
 
@@ -73,7 +77,7 @@ def get_elaborate_header(x_api_elaborate: Annotated[str, Header()] = None):
 #
 # Convert the api_token to a user access object
 #
-def get_current_user(x_api_token: Annotated[str, Header()]):
+def get_current_user(x_api_token: Annotated[str, Header()], DB : Session = Depends(get_DB)):
     if not x_api_token or x_api_token == "":
         raise HTTPException(status_code=400, detail="X-API-Token header invalid")
     try:
@@ -87,13 +91,18 @@ def get_current_user(x_api_token: Annotated[str, Header()]):
     # We store the token data in the DB, so for now we actually
     # do not bother with what is in the token.
     #
-    qres = DBQueryWarn("select *,UNIX_TIMESTAMP(expires) as unixexp " +
+    result = DBQuery(DB,
+        text("select *,UNIX_TIMESTAMP(expires) as unixexp " +
                        "  from user_jwt_tokens " +
-                       "where uuid=%s",
-                       (DBQuoteSpecial(claims["jti"]),), asDict=True)
+                       "  where uuid= :jti"),
+                       {"jti" : claims["jti"]},
+                       fatal=False
+                    )
+    qres = result.mappings().all() if result is not None else None
     if not qres or len(qres) != 1:
         raise HTTPException(status_code=401,
                             detail="Token has been revoked")
+    
     token = qres[0]
     expires = token["unixexp"]
     if expires < time.time():

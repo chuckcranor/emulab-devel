@@ -38,7 +38,8 @@ from enum import Enum
 from typing import Annotated, Text, Union
 from pydantic import BaseModel, Field
 from uuid import UUID, uuid4
-from datetime import datetime, time, timedelta
+import time
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Response, status
 from fastapi import Query, Path, Body
@@ -49,6 +50,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..database import get_DB
+from ..database import get_current_db, DBQuery
 from ..dependencies import get_current_user, get_elaborate_header
 from ..dependencies import TBDatetimeGMT, SUEXEC
 from ..dependencies import PortalException, PortalValidate, HandleShellError
@@ -69,10 +71,11 @@ from ..api.models import (
 )
 
 # Testbed DB access lib
-from libdb import *
 from WebTask import WebTask
 from APT_ORM import AptReservationGroups
 import AccessCheck
+
+LOG = logging.getLogger("uvicorn.error")
 
 # pydantic handles uuid,datetime,integer validation
 ResGroupValidation = {
@@ -105,27 +108,27 @@ def get_resgroup_access(resgroup_id):
 # Verify that a supplied resgroup reservation UUID is valid
 #
 def check_resgroup_reservation(which, resgroup_id, reservation_id):
+    DB = get_current_db()
     query = "select r.uuid from apt_reservation_groups as g "
 
     if which == "nodetype":
         query += "join apt_reservation_group_reservations as r "
-        query += "on r.uuid=g.uuid and r.remote_uuid=%s "
+        query += "on r.uuid=g.uuid and r.remote_uuid=:reservation_id "
     elif which == "range":
         query += "join apt_reservation_group_rf_reservations as r "
-        query += "on r.uuid=g.uuid and r.freq_uuid=%s "
+        query += "on r.uuid=g.uuid and r.freq_uuid=:reservation_id "
     else:
-        raise PortalExceptio(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
-    query += "where r.uuid=%s"
+        raise PortalException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+    query += "where r.uuid=:resgroup_id"
 
-    qres = DBQueryWarn(query, (str(reservation_id), str(resgroup_id)))
+    result = DBQuery(DB, text(query), {"reservation_id" : str(reservation_id), "resgroup_id" :str(resgroup_id)}, fatal=False)
+    qres = result.all() if result is not None else None
     if qres == None or len(qres) != 1:
         raise PortalException(
             status.HTTP_404_NOT_FOUND,
             "No such resgroup reservation_id: " + str(reservation_id))
 
     return True
-
-LOG = logging.getLogger("uvicorn.error")
 
 router = APIRouter(
     prefix="/resgroups",
@@ -144,7 +147,7 @@ def get_resgroups(
         elaborate: bool = Depends(get_elaborate_header),
         DB: Session = Depends(get_DB)) -> ResGroupList:
     LOG.info("get_resgroups: args: %r", resgroup_id)
-    result = []
+    resgroups = []
     clause = "";
 
     #
@@ -153,8 +156,12 @@ def get_resgroups(
     #
     # At the moment, just the current user experiments.
     #
-    qres = DBQueryWarn("select uuid,pid from apt_reservation_groups "+
-                       "where creator_idx=%s", (current_user.uid_idx,))
+    result = DBQuery(DB,
+        text("select uuid,pid from apt_reservation_groups where creator_idx=:current_user"),
+        {"current_user": current_user.uid_idx},
+        fatal=False
+    )
+    qres = result.all() if result is not None else []
 
     for row in qres:
         uuid = row[0]
@@ -162,20 +169,20 @@ def get_resgroups(
 
         if project:
             if pid == project:
-                result.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
+                resgroups.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
                 pass
             pass
         elif resgroup_id:
             if str(uuid) == str(resgroup_id):
-                result.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
+                resgroups.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
                 pass
             pass
         else:
-            result.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
+            resgroups.append(ConstructResGroup(DB, uuid, elaborate=elaborate))
             pass
         pass
     
-    return ResGroupList(resgroups = result)
+    return ResGroupList(resgroups = resgroups)
 
 
 @router.get("/{resgroup_id}")
@@ -347,8 +354,9 @@ def create_resgroup_shared(DB, user, group, resgroup,
     current = None
     if resgroup_id:
         stmt = select(AptReservationGroups).where(text("uuid = :id"))
-        row = DB.execute(stmt, {'id': resgroup_id}).first()
-        if not row:
+        result = DBQuery(DB, stmt, {'id': resgroup_id}, fatal=False)
+        row = result.first() if result is not None else None
+        if row == None:
             raise HTTPException(
                 status_code=404, detail="No such resgroup"
             )            
@@ -655,8 +663,9 @@ def add_resgroup_reservation(
             "reservation_id should not be set when adding a NEW reservation")
 
     stmt = select(AptReservationGroups).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': resgroup_id}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': resgroup_id}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such resgroup")
     aptresgroup = row.AptReservationGroups
@@ -778,8 +787,9 @@ def delete_resgroup(
 #
 def getResgroupReservation(DB: Session, resgroup_id, reservation_id):
     stmt = select(AptReservationGroups).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': resgroup_id}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': resgroup_id}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such resgroup"
         )            
@@ -804,8 +814,9 @@ def getResgroupReservation(DB: Session, resgroup_id, reservation_id):
 #
 def ConstructResGroup(DB: Session, resgroup_id, elaborate=True):
     stmt = select(AptReservationGroups).where(text("uuid = :id"))
-    row = DB.execute(stmt, {'id': resgroup_id}).first()
-    if not row:
+    result = DBQuery(DB, stmt, {'id': resgroup_id}, fatal=False)
+    row = result.first() if result is not None else None
+    if row == None:
         raise HTTPException(
             status_code=404, detail="No such resgroup"
         )            
