@@ -1180,14 +1180,10 @@ sub fix_console
 
 sub generate_cloudinit_network_config
 {
-	my ($cnetmacaddr) = @_;
+	my ($cnetmacaddr, $bossaddr) = @_;
 	my $cloudinitcfg = "";
 
-	# XXX do this in a cluster independent way
-	my $bossaddr = "155.98.32.70";
-	my $bossport = "8000";
-
-	print STDERR "Using cloud-init to configure the node\n";
+	print STDERR "Using cloud-init to configure via $bossaddr:$bossport\n";
 
 	# Fetch the network config from the metadata server running on boss.
 	# XXX needs to be generalized to "boss", but can we resolve here?
@@ -1910,11 +1906,18 @@ sub main
 	if ($iscloudimage) {
 		my $ismounted;
 
+		my $bossaddr = $ENV{"SLICEFIX_BOSSIP"};
+		if (!$bossaddr) {
+			print STDERR "Cannot determine cloud-init server (boss) IP\n";
+			return 1;
+		}
+
 		my $fstype = mount_image($root, $imageroot);
 		if (!$fstype) {
 			print STDERR "no root FS or FS type unsupported\n";
 			return 1;
 		}
+
 		($grub_config, $ismounted) =
 		    find_grub_configfile($root, $imageroot);
 		if (!$grub_config) {
@@ -1933,7 +1936,7 @@ sub main
 		fix_grub_console($imageroot, $grub_config, $console, $sunit, $sspeed, $sport, $arch);
 
 		my ($cnetmacaddr) = get_cnet_mac_addr();
-		$cinetconfig = generate_cloudinit_network_config($cnetmacaddr);
+		$cinetconfig = generate_cloudinit_network_config($cnetmacaddr, $bossaddr);
 		fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr, $cinetconfig);
 		fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch, $cinetconfig);
 
