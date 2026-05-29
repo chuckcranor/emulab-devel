@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2025 University of Utah and the Flux Group.
+# Copyright (c) 2003-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -173,7 +173,7 @@ $SELFLOAD_PATCH		= "$main::TOP_SRCDIR/patches/SelfLoader.patch";
 $PYM2_PKG = "py25-m2crypto-0.19.1";
 $PY_VER   = "python2.5";
 $PY_PKGPREFIX = "py27";
-if ($FBSD_MAJOR > 13 || ($FBSD_MAJOR == 13 && $FBSD_MINOR > 2)) {
+if ($FBSD_MAJOR > 13 || ($FBSD_MAJOR == 13 && $FBSD_MINOR > 3)) {
     $PYM2_PKG = "";
     $PY_VER = "python3.11";
     $PY_PKGPREFIX = "py311";

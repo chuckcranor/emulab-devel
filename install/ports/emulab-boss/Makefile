@@ -162,7 +162,8 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
-	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban
+	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban \
+	${PYTHON_PKGNAMEPREFIX}fastapi>0:${PORTSDIR}/www/py-fastapi
 
 # apache related ports
 RUN_DEPENDS+=	\

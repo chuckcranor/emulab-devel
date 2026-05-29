@@ -31,7 +31,6 @@ sub Install($$$)
 	    } else {
 		PhaseFail("$PORT_PYTHON_PATH does not exist!");
 	    }
-
 	};
 	Phase "rsync", "Looking for rsync and installing", sub {
 	    DoneIfPackageInstalled("rsync");

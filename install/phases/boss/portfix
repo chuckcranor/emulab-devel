@@ -135,6 +135,15 @@ sub Install($$$)
 		ExecQuietFatal("ln -sf /usr/local/etc/namedb /etc/namedb");
 	    };
 	}
+	if ($FBSD_MAJOR >= 13) {
+	    #
+	    # Crypt-JWT was a late addition, maybe not in the dependencies
+	    # for boss.
+	    #
+	    DoneIfPackageInstalled("p5-Crypt-JWT");
+	    my $pname = GetPackage("p5-Crypt-JWT", $packagedir);
+	    AddPackage($pname, $packagedir);
+	}
 	if ($PGENISUPPORT) {
 	    Phase "mod_wsgi3", "Looking for mod_wsgi3 and installing", sub {
 		if ($FBSD_MAJOR >= 11) {
@@ -149,8 +158,8 @@ sub Install($$$)
 		}
 	    };
 	    Phase "py-flask", "Looking for py-flask and installing", sub {
-		DoneIfPackageInstalled("${PY_PKGPREFIX}-Flask");
-		my $pname = GetPackage("${PY_PKGPREFIX}-Flask", $packagedir);
+		DoneIfPackageInstalled("${PY_PKGPREFIX}-flask");
+		my $pname = GetPackage("${PY_PKGPREFIX}-flask", $packagedir);
 		AddPackage($pname, $packagedir);
 	    };
 	    Phase "mod_fcgid", "Looking for mod_fcgid and installing", sub {

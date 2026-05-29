@@ -67,12 +67,14 @@ sub Install($$$)
 		foreach my $mfs ("admin_linux_kernel", "frisbee_linux_kernel",
 				 "newnode_linux_kernel") {
 		    Phase "symlink", "Symlinking $mfs", sub {
+			DoneIfExists("$TFTP_DIR/$mfs");
 			ExecQuietFatal("cd $TFTP_DIR; ln -s $file $mfs");
 		    };
 		}
 	    }
 	    elsif ($name eq "buildroot-full") {
 		Phase "symlink", "Symlinking recovery_linux_kernel", sub {
+		    DoneIfExists("$TFTP_DIR/recovery_linux_kernel");
 		    ExecQuietFatal("cd $TFTP_DIR; ".
 				   "  ln -s $file recovery_linux_kernel");
 		};
