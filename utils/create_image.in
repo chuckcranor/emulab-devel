@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1175,6 +1175,24 @@ else {
 	    if ($zipperopts);
 	$zipperopts .= "A=$maximagedata";
 	$zipperoptsneeded{'A'} = 1;
+    }
+    #
+    # People who still use older MBR-based images with a 16GB root filesystem
+    # have a habit now of growing the root *partition* as large as it can be
+    # and then growing the root *filesystem* to around 64-100GB. Keeping the
+    # filesystem smaller may be there attempt to be able to capture an image
+    # that stays inside our size limit. Little do they know that it actually
+    # makes things worse as now the space outside the FS is by default saved
+    # with just raw compression. Had the extra space been *in* the filesystem,
+    # we would have known to skip it as free space. So let's start always
+    # using the "-x" option to ensure space outside a filesystem but in the
+    # partition is skipped rather than saved.
+    #
+    if (1) {
+	$zipperopts .= ","
+	    if ($zipperopts);
+	$zipperopts .= "x";
+	$zipperoptsneeded{'x'} = 1;
     }
     if (!$needrelocs) {
 	$zipperopts .= ","
