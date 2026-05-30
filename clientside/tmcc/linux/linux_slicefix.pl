@@ -1182,6 +1182,7 @@ sub generate_cloudinit_network_config
 {
 	my ($cnetmacaddr, $bossaddr) = @_;
 	my $cloudinitcfg = "";
+	my $bossport = 8000;
 
 	print STDERR "Using cloud-init to configure via $bossaddr:$bossport\n";
 
