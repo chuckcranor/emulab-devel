@@ -1,0 +1,11 @@
+# Transfer Images
+
+Simple tool for transferring images from the mothership to cloudlab, apt, and fixed endpoints after releasing and testing them.
+
+## Usage
+
+   python transfer-images.py [-i] <image-id>
+
+Use `-i` to run in impotent mode to see which commands it will run via SSH without actually invoking them.
+
+The `image-id` is the image to be transferred to all sites.
