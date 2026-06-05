@@ -2145,7 +2145,8 @@ sub GetCOTSRUParameters($)
     my ($ref) = @_;
     my %result = ();
 
-    my @fields = ("center_frequency", "bandwidth", "mimo_mode", "du_mac");
+    my @fields = ("center_frequency", "bandwidth", "mimo_mode", "du_mac",
+		  "ofh_compression_mode");
 
     my $params = FindNodesNS( "n:cotsru_params", $ref, $EMULAB_NS )->pop();
     if (defined($params)) {

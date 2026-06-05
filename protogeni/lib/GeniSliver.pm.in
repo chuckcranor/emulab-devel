@@ -1083,6 +1083,11 @@ sub AnnotateManifest($)
     GeniXML::SetText( "du_mac", $rspec, $du_mac )
 	if( defined( $du_mac ) );
 
+    my $ofh_cmpmd;
+    $experiment->GetVirtNodeAttribute( $vname, "ofh_compression_mode", \$ofh_cmpmd );
+    GeniXML::SetText( "ofh_compression_mode", $rspec, $ofh_cmpmd )
+	if( defined( $ofh_cmpmd ) );
+
     #
     # Add Emulab extension that says which virtnodes are instantiated
     # on this physical host.
