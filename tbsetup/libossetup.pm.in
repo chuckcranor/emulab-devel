@@ -2811,14 +2811,14 @@ sub _getDUMac($$$$)
 	}
     }
     if (!$du_member) {
-	print STDERR "No suitable adjacent DU node?!\n";
+	print STDERR "No suitable adjacent DU node for $ru_node_id?!\n";
 	goto bad;
     }
 
     # Grab interface object for the DU node.
     my $du_iface = $du_member->GetInterface();
     if (!$du_iface) {
-	print STDERR "Could not find adjacent interface of DU node!\n";
+	print STDERR "Could not find adjacent interface of DU node $du_node_id!\n";
 	goto bad;
     }
 
@@ -2840,7 +2840,7 @@ sub LightUpNodes($@)
     my $parent     = $self->parent();
     my $experiment = $parent->experiment();
     my @nattrs = ('center_frequency', 'bandwidth');
-    my @sattrs = ('mimo_mode', 'du_mac');
+    my @sattrs = ('mimo_mode', 'du_mac', 'ofh_compression_mode');
 
     my @cycles     = ();
     my @ons        = ();
@@ -2898,6 +2898,8 @@ sub LightUpNodes($@)
 	    print STDERR "No vlan exists for $node_id, 'eth0'!\n";
 	    goto bad;
 	}
+	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
+	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
 
 	# Set the DU mac address to the attribute baseed in via the profile,
 	# if present, otherwise look it up via adjacent node interface.
@@ -2908,16 +2910,26 @@ sub LightUpNodes($@)
 	} else {
 	    $self->_getDUMac($vlan, $node_id, \$du_mac);
 	    if (!$du_mac) {
-		print STDERR "Could not look up MAC address of DU node!\n";
+		print STDERR "Could not look up MAC address of DU node adjacent to $node_id!\n";
 		goto bad;
 	    }
 	}
 	$ru_params{'du_cplane_mac'} = $du_mac;
 	$ru_params{'du_uplane_mac'} = $du_mac;
 
-	# Add vlan tag to the RU params structure.
-	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
-	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
+	# Add OFH compression mode setting, if defined
+	if (exists $ru_params{'ofh_compression_mode'}) {
+	    my $ofhcm = $ru_params{'ofh_compression_mode'};
+	    if ($ofhcm eq "static") {
+		$ru_params{'compression'} = 'static_compressed';
+	    } elsif ($ofhcm eq "dynamic") {
+		$ru_params{'compression'} = 'dynamic_compressed';
+	    } else {
+		print STDERR "Unsupported compression mode for RU $node_id: $ofhcm\n";
+		goto bad;
+	    }
+	    delete $ru_params{'ofh_compression_mode'};
+	}
 
 	# Apply the configuration for the RU and reboot it. Note that
 	# we are rebooting the RU "on the sly" here, so must handle
