@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -245,7 +245,7 @@ function SHOWFREENODES()
 	$output .= "<td class=usagefreenodes align=right>
                      <a target=_parent href=shownodetype.php3?node_type=$key>
                         $key</a></td>
-                    <td class=usagefreenodes align=left>${freecount}</td>\n";
+                    <td class=usagefreenodes align=left>{$freecount}</td>\n";
 
 	$cols++;
 	$newrow = 0;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -103,7 +103,7 @@ if ($source || $rspec) {
         $filename = $profile->name() . ".py";
     }
     header("Content-Type: text/plain");
-    header("Content-Disposition: attachment; filename='${filename}'");
+    header("Content-Disposition: attachment; filename='{$filename}'");
     echo $stuff;
     return;
 }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,7 @@ $slice_idx = $slice->idx();
 #
 if (ISADMIN()) {
     header("Location: ".
-           "$TBBASE/showslice.php?slice_idx=${slice_idx}&showtype=cm");
+           "$TBBASE/showslice.php?slice_idx={$slice_idx}&showtype=cm");
     return;
 }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2025 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,6 +79,7 @@ define("GENIRESPONSE_SETUPFAILURE_BOOTFAILED", 151);
 class Instance
 {
     var	$instance;
+    var $slivers;
     
     #
     # Constructor by lookup on unique index.
@@ -1060,8 +1061,8 @@ class Instance
             $instance_uuid  = $row["expuuid"];
             $instance_name  = $row["expname"];
             $repohash       = $row["repohash"];
-            $rerun_url = "instantiate.php?profile=${profile_uuid}" .
-                       "&rerun_instance=${instance_uuid}";
+            $rerun_url = "instantiate.php?profile={$profile_uuid}" .
+                       "&rerun_instance={$instance_uuid}";
             $result[] = array("profile_uuid"  => $profile_uuid,
                               "profile_name"  => $profile_name,
                               "instance_uuid" => $instance_uuid,
@@ -1453,16 +1454,16 @@ class ExtensionInfo
         $gdays  = intval($this->info["granted"] / 24.0);
         $ghours = $this->info["granted"] % 24;
         if ($wdays) {
-            $wantstring = "${wdays}D" . "${whours}H";
+            $wantstring = "{$wdays}D" . "{$whours}H";
         }
         else {
-            $wantstring = "${whours}H";
+            $wantstring = "{$whours}H";
         }
         if ($gdays) {
-            $grantstring = "${gdays}D" . "${ghours}H";
+            $grantstring = "{$gdays}D" . "{$ghours}H";
         }
         elseif ($ghours) {
-            $grantstring = "${ghours}H";
+            $grantstring = "{$ghours}H";
         }
         else {
             $grantstring = "0";

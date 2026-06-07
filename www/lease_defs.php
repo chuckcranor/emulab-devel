@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -267,11 +267,11 @@ class Lease
         $id     = $this->id();
         $type   = $this->type();
         $domain = $OURDOMAIN;
-        $domain .= ":${pid}";
+        $domain .= ":{$pid}";
         if ($pid != $gid)
-            $domain .= ":${gid}";
+            $domain .= ":{$gid}";
 	
-	return "urn:publicid:IDN+${domain}+${type}+${id}";
+	return "urn:publicid:IDN+{$domain}+{$type}+{$id}";
     }
 
     # We ignore webtasks for classic UI
@@ -480,11 +480,11 @@ class ImageDataset
         $id     = $this->id();
         $type   = $this->type();
         $domain = $OURDOMAIN;
-        $domain .= ":${pid}";
+        $domain .= ":{$pid}";
         if ($pid != $gid)
-            $domain .= ":${gid}";
+            $domain .= ":{$gid}";
 	
-	return "urn:publicid:IDN+${domain}+${type}+${id}";
+	return "urn:publicid:IDN+{$domain}+{$type}+{$id}";
     }
     function URL() {
         global $TBBASE;

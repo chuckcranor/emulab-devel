@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2016-2018, 2025 University of Utah and the Flux Group.
+# Copyright (c) 2016-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,7 +62,7 @@ if (file_exists($sitefile)) {
 } else {
     $matter    = file_get_contents("frontpage.html");
 }
-$json      = @file_get_contents("${APTBASE}/stats-ajax.php", false, $sslcontext);
+$json      = @file_get_contents("{$APTBASE}/stats-ajax.php", false, $sslcontext);
 if ($json === false) {
     PAGEERROR("Could not continue. Please contact $TBMAILADDR");
 }
@@ -75,7 +75,7 @@ foreach ($stats["typeinfo"] as $type => $totals) {
     $free    = $totals["free"];
     $pctfull = round(100.0 * ($total - $free) / $total);
     if ($TBMAINSITE) {
-        $type = "<a href='https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Utah%20Cluster#${type}s' target=_blank>$type</a>";
+        $type = "<a href='https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Utah%20Cluster#{$type}s' target=_blank>$type</a>";
     }
     $counts .=
             "<tr>
@@ -84,8 +84,8 @@ foreach ($stats["typeinfo"] as $type => $totals) {
 	        <span class='badge badge-light'>$free</span></small></td>
 	          <td style='width: 8em'>
 	            <div class='progress' style='margin-bottom: 0px'>
-	              <div class='progress-bar' style='width: ${pctfull}%;'
-                           role='progressbar'>${pctfull}% inuse</div>
+	              <div class='progress-bar' style='width: {$pctfull}%;'
+                           role='progressbar'>{$pctfull}% inuse</div>
     	            </div>
 	          </td>
              </tr>\n";

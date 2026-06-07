@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,7 +70,7 @@ if ($this_user) {
             $TUTORIALPROFILE != "") {
         # For TUTORIALPID
         header("Location: show-profile.php".
-               "?project=${TUTORIALPID}&profile=${TUTORIALPROFILE}");
+               "?project={$TUTORIALPID}&profile={$TUTORIALPROFILE}");
     }
     elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php");

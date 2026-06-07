@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -199,11 +199,11 @@ function STARTSIDEBARMENU($id, $title, $visible = true) {
 	$png   = ($visible ? 'menu-expanded.png' : 'menu-collapsed.png');
 	$class = ($visible ? 'navmenu' : 'navmenu-collapsed');
 	$arrow = "<img class=menuarrow src='$png' ".
-	    "onclick=\"return toggle_menu('${id}_list', '${id}_arrow');\" ".
-	    "id='${id}_arrow'>";
+	    "onclick=\"return toggle_menu('{$id}_list', '{$id}_arrow');\" ".
+	    "id='{$id}_arrow'>";
     }
-    echo "<h3 class='menuheader' id='${id}_header'>$arrow $title</h3>";
-    echo "<ul class='$class' id='${id}_list'>\n";
+    echo "<h3 class='menuheader' id='{$id}_header'>$arrow $title</h3>";
+    echo "<ul class='$class' id='{$id}_list'>\n";
 }
 
 #
@@ -979,13 +979,13 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
     # This needs to stay first! It defines things that might get used by
     # later scripts
     echo "<script type='text/javascript'
-                  src='${BASEPATH}/onload.js'></script>\n";
+                  src='{$BASEPATH}/onload.js'></script>\n";
     if ($extra_headers) {
         echo $extra_headers;
     }
     if ($javascript_debug) {
 	echo "<script type='text/javascript'
-                      src='${BASEPATH}/js/inline-console.js'></script>\n";
+                      src='{$BASEPATH}/js/inline-console.js'></script>\n";
     }
     echo "</head><body>\n";
 
@@ -1002,11 +1002,11 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 	echo "<meta HTTP-EQUIV=\"Refresh\" content=\"$autorefresh\">\n";
     }
     echo "<script type='text/javascript' language='javascript'
-                  src='${BASEPATH}/emulab_sup.js'></script>\n";
+                  src='{$BASEPATH}/emulab_sup.js'></script>\n";
     echo "<script type='text/javascript' language='javascript'
-                  src='${BASEPATH}/sorttable.js'></script>\n";
+                  src='{$BASEPATH}/sorttable.js'></script>\n";
     echo "<script type='text/javascript' language='javascript'
-                  src='${BASEPATH}/textbox.js'></script>\n";
+                  src='{$BASEPATH}/textbox.js'></script>\n";
 
     if (!$nobanner) {
         #
@@ -1466,7 +1466,7 @@ $PAGEFOOTER_FUNCTION = function($view = NULL) {
     }
 
     # This has to be after all the tooltip definitions.
-    echo "<script type='text/javascript' src='${TBBASE}/js/wz_tooltip.js'>".
+    echo "<script type='text/javascript' src='{$TBBASE}/js/wz_tooltip.js'>".
 	"</script>";
     echo $bodyclosestring;
     echo "\n";

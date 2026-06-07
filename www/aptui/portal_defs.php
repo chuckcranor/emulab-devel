@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019, 2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ $PORTAL_PASSWORD_HELP   = "Emulab Username or Email";
 $PORTAL_NSFNUMBER       = "1513121";
 $PORTAL_GENESIS         = "emulab";
 $DEFAULT_AGGREGATE      = "Emulab";
-$DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+$DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+{$OURDOMAIN}+authority+cm";
 $PORTAL_NAME            = "Emulab";
 
 #

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -128,7 +128,7 @@ class Aggregate
 
     function isLocalCluster() {
         global $OURDOMAIN;
-        $myurn = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+        $myurn = "urn:publicid:IDN+{$OURDOMAIN}+authority+cm";
 
         if ($this->urn() == $myurn) {
             return 1;
@@ -182,7 +182,7 @@ class Aggregate
         }
         $query_result =
             DBQueryWarn("select urn from apt_aggregates ".
-                        "where urn like 'urn:publicid:IDN+${domain}+%'");
+                        "where urn like 'urn:publicid:IDN+{$domain}+%'");
 	if (!$query_result || !mysql_num_rows($query_result)) {
             return null;
         }
@@ -628,7 +628,7 @@ class Aggregate
 
             # URN for node
             list ($auth,$type,$id) = Instance::ParseURN($urn);
-            $row["component_urn"] = "urn:publicid:IDN+${auth}+node+${node_id}";
+            $row["component_urn"] = "urn:publicid:IDN+{$auth}+node+{$node_id}";
 
             #
             # Grab the aggregate. We use the status info to determine if the

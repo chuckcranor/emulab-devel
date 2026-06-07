@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -980,7 +980,7 @@ class Project
 	    echo "<tr>
                       <td>Project Mailing List:</td>
                       <td class=\"left\">
-                          <a href='$mmurl'>${pid}-users</a> ";
+                          <a href='$mmurl'>{$pid}-users</a> ";
 	    if (ISADMIN()) {
 		$mmurl .= "&wantadmin=1";
 		echo "<a href='$mmurl'>(admin access)</a>";
@@ -989,13 +989,13 @@ class Project
                   </tr>\n";
 
 	    if (ISADMIN()) {
-		$mmurl   = "gotommlist.php3?listname=${pid}-admin&asadmin=1";
+		$mmurl   = "gotommlist.php3?listname={$pid}-admin&asadmin=1";
 
 		echo "<tr>
                          <td>Project Admin Mailing List:</td>
                          <td class=\"left\">
-                             <a href='$mmurl'>${pid}-admin</a> ";
-		$mmurl   = "gotommlist.php3?listname=${pid}-admin&wantadmin=1";
+                             <a href='$mmurl'>{$pid}-admin</a> ";
+		$mmurl   = "gotommlist.php3?listname={$pid}-admin&wantadmin=1";
 		echo "<a href='$mmurl'>(admin access)</a>";
 		echo "    </td>
                      </tr>\n";
@@ -1219,7 +1219,7 @@ class Project
         global $APTBASE;
         $pid = $this->pid();
         
-        return $APTBASE . "/show-project.php?pid=${pid}";
+        return $APTBASE . "/show-project.php?pid={$pid}";
     }
 
     function SignupURL()
@@ -1227,7 +1227,7 @@ class Project
         global $APTBASE;
         $pid = $this->pid();
         
-        return $APTBASE . "/signup.php?pid=${pid}";
+        return $APTBASE . "/signup.php?pid={$pid}";
     }
 
     #

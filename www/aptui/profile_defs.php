@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2025 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -814,7 +814,7 @@ class Profile
 	    if ($type == "boolean") {
 		$form .=
 		    "<input name='$name' ".
-		    "      <%- formfields.${name} %> ".
+		    "      <%- formfields.{$name} %> ".
 		    "      style='margin: 0px; height: 34px;' ".
 		    "      class='format-me' ".
 		    "      data-key='$name' ".
@@ -848,7 +848,7 @@ class Profile
 		    $form .= "<option";
 		    $form .= 
 			"<% if (_.has(formfields, '$name') && ".
-			"       formfields.${name} == '$oval') { %> ".
+			"       formfields.{$name} == '$oval') { %> ".
 			"   selected ".
 			"<% } %> ".
 			"value='$oval'>$okey</option>";
@@ -868,7 +868,7 @@ class Profile
 		    "<input id='image-display' ".
 		    "type='text' readonly ".
 		    "class='form-control' ".
-		    "value='<% var label = formfields.${name}; var sp = label.split('+'); var image_display; if (sp.length >= 4){ if (sp[3].substr(0, 12) == 'emulab-ops//') { image_display = sp[3].substr(12) } else { image_display = sp[3] } } else { image_display = formfields.${name} } %><%- image_display %>' >".
+		    "value='<% var label = formfields.{$name}; var sp = label.split('+'); var image_display; if (sp.length >= 4){ if (sp[3].substr(0, 12) == 'emulab-ops//') { image_display = sp[3].substr(12) } else { image_display = sp[3] } } else { image_display = formfields.{$name} } %><%- image_display %>' >".
 
 
 		    "<span class='input-group-btn'><button class='btn btn-success' id='image-select' ".
@@ -881,14 +881,14 @@ class Profile
 		    
 		    "<input id='image-value' ".
 		    "name='$name' type='hidden' ".
-		    "value='<%- formfields.${name} %>' >".
+		    "value='<%- formfields.{$name} %>' >".
 
 		    "</div>";
 	    }
 	    else {
 		$form .=
 		    "<input name='$name' ".
-		    "value='<%- formfields.${name} %>' ".
+		    "value='<%- formfields.{$name} %>' ".
 		    "class='form-control format-me' ".
 		    "data-key='$name' ".
 		    "data-label='$prompt' ".

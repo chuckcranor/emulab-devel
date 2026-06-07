@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2025 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -352,7 +352,7 @@ function CreateURL($page_id)
             # Use whatever it was we got.
 	    ;
 	}
-	$url_args[] = "${key}=${val}";
+	$url_args[] = "{$key}={$val}";
     }
     $newurl .= "?" . implode("&", $url_args);
     return $newurl;

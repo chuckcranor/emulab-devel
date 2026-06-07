@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -508,7 +508,7 @@ function Do_FreezeOrThaw()
     }    
     TBMAIL("$target_name '$target_uid' <$target_email>",
            "Your account has been $tag",
-           "Your account has been ${tag}.\n\n" .
+           "Your account has been {$tag}.\n\n" .
            $message . "\n\n" .
            "User: $target_url \n",
            "From: $adminemail\n".
@@ -555,7 +555,7 @@ function Do_SendPasswordReset()
            "link within the next 10 minutes, and you will be allowed to\n".
            "reset your password.\n".
            "\n".
-           "    ${APTBASE}/changepswd.php?user=$target_uid&reset=$key\n".
+           "    {$APTBASE}/changepswd.php?user=$target_uid&reset=$key\n".
            "\n".
            "\n".
            "Thanks!\n",

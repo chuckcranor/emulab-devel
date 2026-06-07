@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ $TBDIR          = "@prefix@/";
 $OURDOMAIN      = "@OURDOMAIN@";
 $BOSSNODE       = "@BOSSNODE@";
 $USERNODE       = "@USERNODE@";
-$CVSNODE	= "cvs.${OURDOMAIN}";
+$CVSNODE	= "cvs.{$OURDOMAIN}";
 $WIKINODE	= $USERNODE;
 $TBADMINGROUP   = "@TBADMINGROUP@";
 $WWWHOST	= "@WWWHOST@";
@@ -59,16 +59,16 @@ $EXP_VIS        = @EXP_VIS_SUPPORT@;
 $ISOLATEADMINS  = @ISOLATEADMINS@;
 $CONTROL_NETWORK= "@CONTROL_NETWORK@";
 $CONTROL_NETMASK= "@CONTROL_NETMASK@";
-$WIKIHOME       = "https://${USERNODE}/twiki";
-$WIKIURL        = "${WIKIHOME}/bin/newlogon";
+$WIKIHOME       = "https://{$USERNODE}/twiki";
+$WIKIURL        = "{$WIKIHOME}/bin/newlogon";
 $WIKICOOKIENAME = "WikiCookie";
-$BUGDBURL       = "https://${USERNODE}/flyspray";
+$BUGDBURL       = "https://{$USERNODE}/flyspray";
 $BUGDBCOOKIENAME= "FlysprayCookie";
 $TRACCOOKIENAME = "TracCookie";
-$MAILMANURL     = "http://${USERNODE}/mailman";
-$OPSCVSURL      = "http://${USERNODE}/cvsweb/cvsweb.cgi";
-$OPSJETIURL     = "http://${USERNODE}/jabber/jeti.php";
-$WIKIDOCURL     = "http://${WIKINODE}/wikidocs/wiki";
+$MAILMANURL     = "http://{$USERNODE}/mailman";
+$OPSCVSURL      = "http://{$USERNODE}/cvsweb/cvsweb.cgi";
+$OPSJETIURL     = "http://{$USERNODE}/jabber/jeti.php";
+$WIKIDOCURL     = "http://{$WIKINODE}/wikidocs/wiki";
 $FORUMURL       = "http://groups.google.com/group/emulab-users";
 $MIN_UNIX_UID   = @MIN_UNIX_UID@;
 $MIN_UNIX_GID   = @MIN_UNIX_GID@;
@@ -144,7 +144,7 @@ if ($WWWHOST != "www.emulab.net") {
 # they are redirected back to Utah's emulab.
 #
 if ($TBMAINSITE) {
-    $WIKIDOCURL  = "https://${WIKINODE}/wikidocs/wiki";
+    $WIKIDOCURL  = "https://{$WIKINODE}/wikidocs/wiki";
 }
 elseif ($REMOTEWIKIDOCS) {
     $WIKIDOCURL  = "https://wiki.emulab.net/wikidocs/wiki";
@@ -215,7 +215,7 @@ $RSS_HEADER_PNNEWS =
 $ALTERNATE_DOMAINS = array();
 $ISALTDOMAIN       = 0;
 $DOMVIEW           = NULL;
-$altdomfile = strtolower("alternate_domains_${OURDOMAIN}.php");
+$altdomfile = strtolower("alternate_domains_{$OURDOMAIN}.php");
 if (file_exists($altdomfile)) {
     include($altdomfile);
 }
@@ -830,7 +830,7 @@ function SetDomainDefs()
 	    if (isset($ovr['WIKIDOCURL'])) {
 		$WIKIDOCURL   = $ovr['WIKIDOCURL'];
 	    } else {
-		$WIKIDOCURL   = "http://${WIKINODE}/wikidocs/wiki";
+		$WIKIDOCURL   = "http://{$WIKINODE}/wikidocs/wiki";
 	    }
 	    if (isset($ovr['FORUMURL'])) {
 	        $FORUMURL     = $ovr['FORUMURL'];
@@ -888,7 +888,7 @@ function TutorialStat($msg)
     $loadavg = sys_getloadavg();
     $load = sprintf("%.2f", $loadavg[0]);
 
-    openlog("tutorial-stats", LOG_CONS, constant("${LOG_TESTBED}"));
+    openlog("tutorial-stats", LOG_CONS, constant("{$LOG_TESTBED}"));
     syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " . $msg . " (load $load)");
     closelog();
 }
@@ -940,13 +940,13 @@ function UnusedSSHAuthObject($uid)
 #
 function RedirectToPortal($portalpage, $query_args = null)
 {
-    $redirect_url = "portal/${portalpage}";
+    $redirect_url = "portal/{$portalpage}";
     
     if (!$query_args) {
         $query_args  = parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY);
     }
     if ($query_args) {
-        $redirect_url .= "?${query_args}";
+        $redirect_url .= "?{$query_args}";
     }
     header("Location: $redirect_url");
     exit(0);

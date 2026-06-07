@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2025 University of Utah and the Flux Group.
+# Copyright (c) 2008-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -368,7 +368,7 @@ my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
     $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
     $reporef, $repohash, $duration, $webinfo, $noresokay, $brand, $errcode,
-    $rdzenabled, $resources, $isprivate);
+    $rdzenabled, $resources);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -572,7 +572,7 @@ function Do_GetImageInfo()
             $safe_urn = addslashes($urn);
             if (is_null($version)) {
                 if ($proj == "emulab-ops") {
-                    $safe_urn = addslashes("urn:publicid:IDN+%+image+${id}");
+                    $safe_urn = addslashes("urn:publicid:IDN+%+image+{$id}");
                     $innerclause = "innerclause.urn like '$safe_urn'";
                 }
                 else {
@@ -1235,7 +1235,7 @@ function Do_Submit()
     }
     elseif (count($sitemap)) {
         foreach ($sitemap as $siteid => $urn) {
-            $options .= "--site 'site:${siteid}=${urn}' ";
+            $options .= "--site 'site:{$siteid}={$urn}' ";
         }
     }
     # Scheduled start time if set.
@@ -1385,7 +1385,7 @@ function Do_MaxDuration()
         }
         if (count($sitemap)) {
 	    foreach ($sitemap as $siteid => $urn) {
-                $options .= " --site 'site:${siteid}=${urn}' ";
+                $options .= " --site 'site:{$siteid}={$urn}' ";
             }
         }
         else {
@@ -1518,7 +1518,7 @@ function Do_RequestLicenses()
             SPITAJAX_ERROR(-1, "Bad data in licenses");
             return;
         }
-        $body .= "License ${lname}: ";
+        $body .= "License {$lname}: ";
         if ($type == "node") {
             $body .= "Node $target";
         }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,7 +95,7 @@ function SpitGlobals()
     echo "    window.APTMAIL   = \"$APTMAIL\"\n";
     echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "    window.HELPFORUM = " .
-        "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
+        "'https://groups.google.com/d/forum/{$PORTAL_HELPFORUM}';\n";
     echo "    window.CLASSIC  = '$TBBASE';\n";
     echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
     if ($PORTAL_WIKI) {
@@ -328,7 +328,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 
         if (array_key_exists($PORTAL_GENESIS, $ids)) {
             $gua = $ids[$PORTAL_GENESIS];
-            $gaurl = "https://www.googletagmanager.com/gtag/js?id=${gua}";
+            $gaurl = "https://www.googletagmanager.com/gtag/js?id={$gua}";
 
             echo "<script async src='$gaurl'></script>
                   <script>
@@ -372,7 +372,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         $addHeaderVariable("anyNews", $login_user->APTAnyNews() ? 1 : 0);
         $addHeaderVariable("login_idx", $login_user->uid_idx());
     }
-    $addHeaderVariable("APTLOGO", "${APTBASE}/images/${APTLOGO}");
+    $addHeaderVariable("APTLOGO", "{$APTBASE}/images/{$APTLOGO}");
     $addHeaderVariable("THISHOMEBASE", $THISHOMEBASE);
     if (NOLOGINS()) {
         $message = TBGetSiteVar("web/message");
@@ -398,11 +398,11 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                 $mailto = $unproj->ApprovalEmailAddress() .
                         "?Subject=Pending Project $unpid";
                 
-                $addHeaderVariable("NAGUS", "${mailto}");
+                $addHeaderVariable("NAGUS", "{$mailto}");
             }
             else {
                 # Nag the PI.
-                $addHeaderVariable("NAGPI", "${unpid}");
+                $addHeaderVariable("NAGPI", "{$unpid}");
                 #
                 # Lets not nag the PI for at least a day.
                 #
@@ -722,10 +722,10 @@ function SSHAuthObject($uid, $hostport)
     global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
 	
     if ($BROWSER_CONSOLE_PROXIED) {
-        $baseurl = "https://${WWWHOST}";
+        $baseurl = "https://{$WWWHOST}";
     }
     else {
-        $baseurl = "https://${USERNODE}";
+        $baseurl = "https://{$USERNODE}";
     }
     if ($BROWSER_CONSOLE_WEBSSH) {
         # See httpd.conf
@@ -752,10 +752,10 @@ function VNCAuthObject($uid, $hostport)
     }
 	
     if ($BROWSER_CONSOLE_PROXIED) {
-        $baseurl = "https://${WWWHOST}";
+        $baseurl = "https://{$WWWHOST}";
     }
     else {
-        $baseurl = "https://${USERNODE}";
+        $baseurl = "https://{$USERNODE}";
     }
     $authobj = array('uid'       => $uid,
 		     'nodeid'    => $hostport,

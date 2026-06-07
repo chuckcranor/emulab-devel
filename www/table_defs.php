@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,9 +63,9 @@ function TableRender($attributes, $rows)
 	$checked  = "";
     }
 
-    $button = "<input type=checkbox $checked id=\"${id}_checkbox\" ".
-	"onclick='return toggle_table(\"${id}\", ".
-	"\"${id}_checkbox\", \"${id}_title\", \"${id}_footnotes\");'>";
+    $button = "<input type=checkbox $checked id=\"{$id}_checkbox\" ".
+	"onclick='return toggle_table(\"{$id}\", ".
+	"\"{$id}_checkbox\", \"{$id}_title\", \"{$id}_footnotes\");'>";
 
     if ($caption) {
 	$html .= "<table align=center class=stealth>";
@@ -75,7 +75,7 @@ function TableRender($attributes, $rows)
 	$html .= "</tr></table>";
     }
     else if ($title) {
-	$html .= "<span $visclass id='${id}_title'>";
+	$html .= "<span $visclass id='{$id}_title'>";
 	$html .= "<br><center><font size=+1><b>$title</b></font></center><br>";
 	$html .= "</span>\n";
     }
@@ -92,7 +92,7 @@ function TableRender($attributes, $rows)
 	$html .= "</tr>\n";
 	$html .= "</thead>\n";
     }
-    $html .= "<tbody id='${id}_body'>";
+    $html .= "<tbody id='{$id}_body'>";
     foreach ($rows as $i => $row) {
 	$html .= "<tr>";
 	#$key = $row[$attributes['#key']];
@@ -100,7 +100,7 @@ function TableRender($attributes, $rows)
 	if (!array_key_exists('#headings', $attributes) && count($row) == 1) {
 	    $key = key($row);
 	    $text = current($row);
-	    $html .= "<td>${key}:</td><td>$text</td>";
+	    $html .= "<td>{$key}:</td><td>$text</td>";
 	}
 	else {
 	    foreach ($row as $key => $text) {
@@ -113,7 +113,7 @@ function TableRender($attributes, $rows)
     $html .= "</table>\n";
     
     if (count($footnotes)) {
-	$html .= "<div $visclass id=\"${id}_footnotes\" ".
+	$html .= "<div $visclass id=\"{$id}_footnotes\" ".
 	    "align=center ><font size=-1><ol>\n";
 	foreach ($footnotes as $i => $note) {
 	    $html .= "<li align=left>$note\n";
@@ -150,9 +150,9 @@ function TableWrapUp($table_html, $asradio = FALSE, $checked = FALSE,
     $type          = ($asradio ? "radio" : "checkbox");
     $name          = ($asradio ? "name=\"$asradio\"" : "");
 
-    $button = "<input type=$type $checked_token id=\"${buttonid}\" $name ".
-	"onclick='return toggle_table(\"${tableid}\", \"${buttonid}\");'>";
-    $html = "<div $visclass id=\"${tableid}\">$table_html</div>";
+    $button = "<input type=$type $checked_token id=\"{$buttonid}\" $name ".
+	"onclick='return toggle_table(\"{$tableid}\", \"{$buttonid}\");'>";
+    $html = "<div $visclass id=\"{$tableid}\">$table_html</div>";
 
     return array($html, $button);
 }

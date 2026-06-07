@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2025 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -997,7 +997,7 @@ class Image
 		echo "<tr>
                         <td>Derived from: </td>
                         <td class=left><a href='$p_url'>
-                          ${p_imagename}:${p_version}</a></td>
+                          {$p_imagename}:{$p_version}</a></td>
                      </tr>\n";
 	    }
 	}
@@ -1011,7 +1011,7 @@ class Image
 	    echo "<tr>
                     <td>Previous Vers: </td>
                     <td class=left>
-                        <a href='$p_url'>${imagename}:${p_version}</a></td>
+                        <a href='$p_url'>{$imagename}:{$p_version}</a></td>
                   </tr>\n";
 	}
 
@@ -1024,7 +1024,7 @@ class Image
 	    echo "<tr>
                     <td>Unreleased Vers: </td>
                     <td class=left>
-                         <a href='$u_url'>${imagename}:${u_version}</a></td>
+                         <a href='$u_url'>{$imagename}:{$u_version}</a></td>
                   </tr>\n";
 	}
 	if ($DOPROVENANCE) {

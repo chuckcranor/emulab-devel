@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -960,7 +960,7 @@ if (! array_key_exists($ajax_method, $routing[$ajax_route]["methods"])) {
 }
 CheckLoginForAjax($routing[$ajax_route]);
 if (!$this_user) {
-    openlog("server-ajax", LOG_CONS, constant("${LOG_TESTBED}"));
+    openlog("server-ajax", LOG_CONS, constant("{$LOG_TESTBED}"));
     syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " .
            ($this_user ? "uid:" . $this_user->uid() . " " : "") .
            "$ajax_route:$ajax_method " .

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2025 University of Utah and the Flux Group.
+# Copyright (c) 2006-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1620,10 +1620,10 @@ class Node
 	    $pnode_id = $this->phys_nodeid();
 	    $sshdport = $this->sshdport();
 
-	    return "ssh://${uid}@${pnode_id}.${OURDOMAIN}:$sshdport";
+	    return "ssh://{$uid}@{$pnode_id}.{$OURDOMAIN}:$sshdport";
 	}
 	else {
-	    return "ssh://${uid}@${node_id}.${OURDOMAIN}";
+	    return "ssh://{$uid}@{$node_id}.{$OURDOMAIN}";
 	}
     }
     #
@@ -1657,10 +1657,10 @@ class Node
         $stuff = GENHASH();
         $now   = time();
         if ($BROWSER_CONSOLE_PROXIED) {
-            $baseurl = "https://${WWWHOST}";
+            $baseurl = "https://{$WWWHOST}";
         }
         else {
-            $baseurl = "https://${USERNODE}";
+            $baseurl = "https://{$USERNODE}";
         }
         if ($BROWSER_CONSOLE_WEBSSH) {
             # See httpd.conf
@@ -1823,7 +1823,7 @@ class Node
         if (!($this->role() == "testswitch" || $this->role() == "ctrlswitch")) {
             $query_result =
                 DBQueryFatal("select * from vlans ".
-                             "where members like '%${node_id}:%'".
+                             "where members like '%{$node_id}:%'".
                              "order by id");
 
             if (!mysql_num_rows($query_result)) {
@@ -2337,7 +2337,7 @@ function ShowFreeNodes($user, $group)
 	$output .= "<td class=usagefreenodes align=right>
                      <a target=_parent href=shownodetype.php3?node_type=$key>
                         $key</a></td>
-                    <td class=usagefreenodes align=left>${freecount}</td>\n";
+                    <td class=usagefreenodes align=left>{$freecount}</td>\n";
 
 	$cols++;
 	$newrow = 0;

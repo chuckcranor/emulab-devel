@@ -113,6 +113,8 @@ define('SERVICES_JSON_STRICT_TYPE', 11);
  */
 class Services_JSON
 {
+    var $use;
+
    /**
     * constructs a new JSON instance
     *

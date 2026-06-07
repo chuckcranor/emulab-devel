@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -97,14 +97,14 @@ function Do_Create()
     $required = array("pid", "name");
 
     foreach ($required as $key) {
-        if (!isset($formfields["profile_${key}"]) ||
-            strcmp($formfields["profile_${key}"], "") == 0) {
-            $errors["profile_${key}"] = "Missing Field";
+        if (!isset($formfields["profile_{$key}"]) ||
+            strcmp($formfields["profile_{$key}"], "") == 0) {
+            $errors["profile_{$key}"] = "Missing Field";
         }
-        elseif (! TBcheck_dbslot($formfields["profile_${key}"],
+        elseif (! TBcheck_dbslot($formfields["profile_{$key}"],
                                  "apt_profiles", $key,
                                 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-            $errors["profile_${key}"] = TBFieldErrorString();
+            $errors["profile_{$key}"] = TBFieldErrorString();
         }
     }
     if (isset($formfields["copy-profile"]) &&
@@ -1727,7 +1727,7 @@ function Do_SearchProfiles()
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }
-    $safe_text = addslashes("%${text}%");
+    $safe_text = addslashes("%{$text}%");
     
     $query_result
         = DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
