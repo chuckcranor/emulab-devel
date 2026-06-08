@@ -122,14 +122,6 @@ while( my ($idx, $pid, $gid, $count, $type, $end, $email) =
 	      "Please note that we make no guarantees about the\n" .
 	      "availability or suitability of these nodes for your\n" .
 	      "experiment(s).\n" .
-	      "\n" .
-	      "PLEASE NOTE: Reservations are an experimental\n" .
-	      "testbed feature under active development.  Until\n" .
-	      "further notice, you should expect reservation\n" .
-	      "system failures.  Please send reports about the\n" .
-	      "reservation system to $TBOPS.\n" .
-	      "Thank you for your assistance in debugging this\n" .
-	      "feature!\n",
 	      $TBOPS)
 	if (!$DISABLE_EMAIL);
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
@@ -170,14 +162,6 @@ while( my ($idx, $pid, $gid, $count, $type, $start, $end, $email) =
 	      "Please note that we make no guarantees about the\n" .
 	      "availability or suitability of these nodes for your\n" .
 	      "experiment(s).\n" .
-	      "\n" .
-	      "PLEASE NOTE: Reservations are an experimental\n" .
-	      "testbed feature under active development.  Until\n" .
-	      "further notice, you should expect reservation\n" .
-	      "system failures.  Please send reports about the\n" .
-	      "reservation system to $TBOPS.\n" .
-	      "Thank you for your assistance in debugging this\n" .
-	      "feature!\n",
 	      $TBOPS)
 	if (!$DISABLE_EMAIL);
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );

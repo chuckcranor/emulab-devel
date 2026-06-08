@@ -875,15 +875,7 @@ while( 1 ) {
 		  "\n" .
 		  "Please note that we make no guarantees about the\n" .
 		  "availability or suitability of these nodes for your\n" .
-		  "experiment(s).\n" .
-		  "\n" .
-		  "PLEASE NOTE: Reservations are an experimental\n" .
-		  "testbed feature under active development.  Until\n" .
-		  "further notice, you should expect reservation\n" .
-		  "system failures.  Please send reports about the\n" .
-		  "reservation system to $TBOPS.\n" .
-		  "Thank you for your assistance in debugging this\n" .
-		  "feature!\n" ) unless( $quiet || $DISABLE_EMAIL);
+		  "experiment(s).\n" ) unless( $quiet || $DISABLE_EMAIL);
 	if (defined($webtask)) {
 	    $webtask->Exited(0);
 	    $webtask->reservation($res->idx());
