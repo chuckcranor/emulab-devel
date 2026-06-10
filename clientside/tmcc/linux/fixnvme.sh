@@ -28,13 +28,15 @@ nvme ns-rescan $device
 
 # XXX "nvme list $device" will show namespaces on all nvme? devices so
 # we use "nvme list-ns" instead.
-spaces=`nvme list-ns $device -a | wc -l`
-if [ $? -ne 0 -o -z "$spaces" ]; then
-    echo "WARNING: could not figure out how man NVMe namespaces there are"
+output=`nvme list-ns $device`
+if [ $? -ne 0 ]; then
+    echo "WARNING: could not figure out how many NVMe namespaces there are"
     exit 1
 fi
+spaces=`echo $output | wc -l`
+
 # XXX I have seen a scenario in which there is a single namespace but
-# no corresponding "/dev/nvmeXn1" device. This will causet the format
+# no corresponding "/dev/nvmeXn1" device. This will cause the format
 # check below to fail. A reset seems to bring back the device.
 reset=0
 if [ $spaces -eq 1 -a ! -e "${device}n1" ]; then
