@@ -609,7 +609,7 @@ function SPITFOOTER($ignored = null)
 
 function SPITUSERERROR($msg)
 {
-    PAGEERROR($msg, 0);
+    PAGEERROR( htmlspecialchars( $msg ), 0);
 }
 
 function NoProjectMembershipError($this_user)
