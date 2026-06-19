@@ -1,0 +1,144 @@
+Setting up a dev tree, approximate instructions.
+
+0. Prepare.
+   You should have shell-on-boss, be in the tbadmin group, have an emulab-devel
+   tree (master branch) checked out, and be logged in to boss.emulab.net.
+
+   You should do all of the following as yourself, and NOT as root unless there
+   is an explicit "sudo" in the instructions below.
+
+1. Make the base directories.
+
+   user=<your-admin-user-name>
+
+   mkdir -p /usr/testbed/devel/$user
+   mkdir -p /usr/testbed/opsdir/devel/$user
+   cd /usr/testbed/www/dev
+   ln -s ../../devel/$user $user
+   cd /usr/testbed/www/apt/dev
+   ln -s ../../../devel/$user/www/apt $user
+
+2. Create a defs file
+
+   srcdir=<your-checked-out-emulab-devel-repo>
+   cd $srcdir
+   cp defs-mike-emulab defs-$user-emulab
+   <edit and change defs-$user-emulab in the obvious way>
+
+3. Build, and install the source.
+   The "--prefix=" is very important here so you won't be installing in
+   the main tree!
+
+   mkdir ~/obj/testbed-dev
+   cd ~/obj/testbed-dev
+   $srcdir/configure --prefix=/usr/testbed/devel/$user \
+       --with-TBDEFS=$srcdir/defs-$user-emulab
+   gmake
+   gmake boss-install
+
+4. Symlinks
+   Fix up references to "opsdir"
+
+   mv /usr/testbed/devel/$user/opsdir/* /usr/testbed/opsdir/devel/$user/
+   ln -sFn /usr/testbed/opsdir/devel/$user opsdir
+
+   There are a number of symlinks back to the base system install.
+
+   cd /usr/testbed/devel/$user
+
+   sudo ln -sFn /usr/testbed/data/slothd_rrd data/slothd_rrd
+   ln -sfn /usr/testbed/etc/capture.fingerprint etc/capture.fingerprint
+   ln -sfn /usr/testbed/etc/capture.pem etc/capture.pem
+   ln -sfn /usr/testbed/etc/capture.sha1fingerprint etc/capture.sha1fingerprint
+   ln -sfn /usr/testbed/etc/emulab.key etc/emulab.key
+   ln -sfn /usr/testbed/etc/emulab.pem etc/emulab.pem
+   ln -sfn /usr/testbed/etc/emulab.pub etc/emulab.pub
+   ln -sfn /usr/testbed/etc/genica.bundle etc/genica.bundle
+   ln -sfn /usr/testbed/etc/genicacerts etc/genicacerts
+   ln -sfn /usr/testbed/etc/genich.pem etc/genich.pem
+   ln -sfn /usr/testbed/etc/genicm.pem etc/genicm.pem
+   ln -sfn /usr/testbed/etc/genisa.pem etc/genisa.pem
+   ln -sfn /usr/testbed/etc/googleapi.key etc/googleapi.key
+   ln -sfn /usr/testbed/etc/node_usage.conf etc/node_usage.conf
+   ln -sfn /usr/testbed/etc/overwatch.pswd etc/overwatch.pswd
+   ln -sfn /usr/testbed/etc/plab etc/plab
+   ln -sfn /usr/testbed/etc/server.pem etc/server.pem
+   ln -sfn /usr/testbed/etc/sshauth.key etc/sshauth.key
+   ln -sfn /usr/testbed/etc/stitcher etc/stitcher
+   ln -sfn /usr/testbed/etc/switch_sshrsa etc/switch_sshrsa
+   ln -sfn /usr/testbed/etc/telegraf.pswd etc/telegraf.pswd
+   ln -sfn /usr/testbed/etc/ualloc_switch.pswd etc/ualloc_switch.pswd
+   ln -sfn /usr/testbed/etc/utah-apt.ca etc/utah-apt.ca
+   ln -sfn /usr/testbed/etc/utah-apt.sa etc/utah-apt.sa
+   ln -sFn /usr/testbed/images images
+   ln -sfn /usr/testbed/scopus scopus
+   ln -sfn ../../usersvar usersvar
+   ln -sfn /usr/testbed/venv venv
+   ln -sfn /usr/testbed/www/apt/cloudlab-fedonly.json www/apt/cloudlab-fedonly.json
+   ln -sfn /usr/testbed/www/apt/cloudlab-nofed.json www/apt/cloudlab-nofed.json
+
+   # XXX I am not sure how the portal-rest/venv stuff gets installed
+   # XXX This is probably wrong or incomplete
+   mkdir -p portal-rest/venv/bin portal-rest/venv/lib
+   ln -sfn /usr/local/bin/python portal-rest/venv/bin/python
+   ln -sfn python portal-rest/venv/bin/python3
+   ln -sfn python portal-rest/venv/bin/python3.9
+   ln -sfn lib portal-rest/venv/lib64
+
+5. Apache config files changes.
+
+5a. httpd-geni.conf needs:
+
+ScriptAlias /protogeni/$user/xmlrpc /usr/testbed/devel/$user/protogeni/xmlrpc/protogeni-wrapper.pl
+
+<Directory "/usr/testbed/devel/$user/protogeni/">
+        SSLRequireSSL
+        Order deny,allow
+        deny from all
+        allow from 155.98.60.
+        allow from 155.98.63.
+        allow from 155.98.32.
+        allow from 155.98.33.74
+
+	<add user-specific IP addresses>
+
+        SSLOptions +StdEnvVars +ExportCertData +LegacyDNStringFormat
+        Options +ExecCGI +FollowSymLinks
+        SetHandler cgi-script
+        SetEnv USER "nobody"
+</Directory>
+
+5b.. httpd-www.conf needs:
+   
+<Directory "/usr/testbed/devel/$user/protogeni/">
+        SSLRequireSSL
+        Order deny,allow
+        deny from all
+        allow from 155.98.60.
+        allow from 155.98.63.
+        allow from 155.98.32.
+        allow from 155.98.33.74
+
+	<add user-specific IP addresses>
+
+        SSLOptions +StdEnvVars +ExportCertData +LegacyDNStringFormat
+        Options +ExecCGI +FollowSymLinks
+        SetHandler cgi-script
+        SetEnv USER "nobody"
+</Directory>
+
+5c. Restart apache
+
+   sudo /usr/local/etc/rc.d/apache24 reload
+
+6. Other stuff to incorporate:
+
+   - Either symlink /usr/testbed/opsdir/lib/geni-lib into the devtree
+     or clone your own copy into /usr/testbed/devel/$user/opsdir/lib/geni-lib.
+
+   - Modify apt/APT_Instance.pm.in to fix up $usemydevtree code appropriately.
+     This would be better handled with a configure var like USE_DEVTREE=<user>
+     that can be put in the little defs-<user>-emulab fragment.
+
+Mike
+06/18/2026
