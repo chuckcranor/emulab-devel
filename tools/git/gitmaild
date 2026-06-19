@@ -52,7 +52,7 @@ my $DEFAULT_ARCHIVEMAIL = 'commits@emulab.net';
 
 # Unless specified, set the Sender header to this address; set to empty
 # to not set the header
-my $DEFAULT_SENDER = 'gitmail@gitlab.flux.utah.edu';
+my $DEFAULT_SENDER = 'gitmail@flux.utah.edu';
 
 # Path to gitmail - defaults to same directory as gmaild lives in
 my $GITMAIL = dirname(abs_path($0)) . "/gitmail";
@@ -252,7 +252,10 @@ sub run_gitmail($$) {
     }
 
     # Who the mail comes from - user doing the push
-    $options{'mailfrom'} = $userinfo->{name} . " <" . $userinfo->{email} . ">";
+    # Only use the user's name and not email address here to avoid DMARC issues
+    if (defined($DEFAULT_SENDER) && $DEFAULT_SENDER ne "") {
+        $options{'mailfrom'} = $userinfo->{name} . " <" . $DEFAULT_SENDER . ">";
+    }
 
     # Name of the repo
     $options{'reponame'} = $repoinfo->{path_with_namespace};
