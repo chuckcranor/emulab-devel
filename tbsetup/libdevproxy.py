@@ -19,17 +19,17 @@ from paramiko.client import SSHClient, AutoAddPolicy
 #
 class Utilities(object):
     @classmethod
-    def mk_logger(name, log_level = logging.INFO):
+    def mk_logger(klass, name, log_level = logging.INFO):
         lgr = logging.getLogger(name)
         lgr.setLevel(log_level)
         ch = logging.StreamHandler()
-        fmt = logging.Formatter('{asctime}: {name}.{funcName}: [{levelname}]: {message}', style='{')
+        fmt = logging.Formatter('{asctime}: {name}.{funcName}(): [{levelname}]: {message}', style='{')
         ch.setFormatter(fmt)
         lgr.addHandler(ch)
         return lgr
 
     @classmethod
-    def ping(host, count=1):
+    def ping(klass, host, count=1):
         #arg = "-n" if sys.platform.lower() in ('windows', 'cygwin') else "-c"
         ping = None
         ping_paths = ("/sbin/ping", "/bin/ping", "/usr/bin/ping")
@@ -37,12 +37,12 @@ class Utilities(object):
             if os.path.exists(path):
                 ping = path
         if not ping:
-            raise RuntimeError("Could not find ping binary!")
+            raise RuntimeError("Utilities.ping(): Could not find ping binary!")
         cmd = [ping, "-c", str(count), host]
         return subprocess.run(cmd, capture_output=True).returncode
 
     @classmethod
-    def whoami(obj):
+    def whoami(klass, obj):
         klass = obj.__class__.__name__
         func = sys._getframe(1).f_code.co_name
         return f"{klass}.{func}()"
@@ -316,7 +316,8 @@ class DeviceWrapper(object):
     DEF_BOOT_TIMEOUT = 120
     DEF_SHUTDOWN_TIME = 30
 
-    def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None, log_level=DEF_LOG_LEVEL):
+    def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
+                 log_level=DEF_LOG_LEVEL):
         self.addr = mgmt_addr
         self.lgr = Utilities.mk_logger(self.__class__.__name__, log_level)
         self._hardware = self.HW_MODEL_UNKNOWN
@@ -324,7 +325,8 @@ class DeviceWrapper(object):
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile, log_level = log_level)
 
-    def connect_session(self, password = DEF_PASSWD, retries = 0, ping_timeout = DEF_PING_TIMEOUT):
+    def connect_session(self, password = DEF_PASSWD, retries = 0,
+                        ping_timeout = DEF_PING_TIMEOUT):
         self.wait_for_ping(timeout = ping_timeout)
         self._ssh.connect(password = password)
         try:
@@ -350,15 +352,14 @@ class DeviceWrapper(object):
         return self._fwversion
 
     def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
-        ctime = time.time()
-        tmo = ctime + timeout
-        while ctime <= tmo:
+        stime = time.time()
+        while time.time() <= stime + timeout:
             res = Utilities.ping(self.addr)
             if (not invert and res == 0) or (invert and res > 0):
                 return
             time.sleep(self.WAIT_PING_SLEEP)
-            ctime = time.time()
-        raise TimeoutError(f"{Utilities.whoami(self)}: Timed out waiting for ping result.")
+        raise TimeoutError(
+            f"{Utilities.whoami(self)}: Timed out waiting for ping result.")
 
     def reboot(self, pingwait=True):
         self.get_session().exec("reboot")

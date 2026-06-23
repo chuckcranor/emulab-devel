@@ -35,6 +35,7 @@ import re
 import json
 from argparse import ArgumentParser
 from getpass import getpass
+sys.path.append("@prefix@/lib")
 from libdevproxy import Utilities, DeviceConfig, DeviceWrapper
 
 ##############################################################################
@@ -342,7 +343,7 @@ def update_config(args, bw):
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("address", help="Address (hostname or IP) of the device.")
-    parser.add_argument("-u", "--username", default=BenetelWrapper.DEF_USER,
+    parser.add_argument("-u", "--username", default=DeviceWrapper.DEF_USER,
                         help="Username to supply when logging in to device.")
     parser.add_argument("-R", "--read-password", action="store_true",
                         help="Read password from command line. "
@@ -356,7 +357,7 @@ def parse_args():
                         "(specify '-' to read config from stdin). "
                         "Does NOT imply the `reboot` argument.")
     parser.add_argument("-P", "--ping-timeout", type=int,
-                        default=BenetelWrapper.DEF_PING_TIMEOUT,
+                        default=DeviceWrapper.DEF_PING_TIMEOUT,
                         help="Number of seconds to wait for the device to "
                         "respond to pings when connecting initially before "
                         "timing out.")
