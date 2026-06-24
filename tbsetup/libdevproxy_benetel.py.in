@@ -1,22 +1,8 @@
 #!/usr/bin/env python
 
 #
-# This script manages Benetel O-RU devices. It does not (and should
-# not grow) any testbed-specific dependencies, so that it may be used
-# on any system that runs Python and has SSH binaries in the path.
-#
-# This script is able to perform various operations on Benetel RU devices:
-#
-# * Configuration management
-#     - Reset all managed configuration values to defaults
-#     - Update specific configuration settings
-#     - Get (all) current configuration settings
-#
-# * Device status
-#     - Check device up/down status (ping)
-#     - Check radio initialization status
-#     - Wait for radio initialization to complete
-#     - Get firmware version
+# This library contains the specific device proxy support for Bentel O-RU
+# devices, for device configuration, status, and management.
 #
 # Note: Power control and reboot are handled by the standard testbed
 #       `node_reboot` and `power` scripts. Modules specifically for
@@ -28,21 +14,19 @@
 #       this is insane, but true).
 #
 
-import sys
-import time
 import logging
 import re
-import json
-from argparse import ArgumentParser
-from getpass import getpass
+import sys
+import time
+
 sys.path.append("@prefix@/lib")
 from libdevproxy import Utilities, DeviceConfig, DeviceWrapper
 
 ##############################################################################
 #
-# BenetelConfig class definition
+# BenetelConfig class definitions. Defines configuration settings and defaults.
 #
-class BenetelConfig(DeviceConfig):
+class BenetelConfig_RAN650_b78(DeviceConfig):
     DEFAULT_SETTINGS = {
         'center_frequency': {
             'def': 3370.2,
@@ -55,6 +39,69 @@ class BenetelConfig(DeviceConfig):
         'gain': {
             'def': 37.0,
             'allowed_ranges': ((1.0,37.0),)
+        },
+        'fh_cplane_vlan': {
+            'def': 1,
+            'allowed_ranges': ((1,4096),)
+        },
+        'fh_uplane_vlan': {
+            'def': 1,
+            'allowed_ranges': ((1,4096),)
+        },
+        'du_cplane_mac': {
+            'def': '000000000000',
+            'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
+        },
+        'du_uplane_mac': {
+            'def': '000000000000',
+            'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
+        },
+        'mimo_mode': {
+            'def': '2_4',
+            'allowed_values': ('1_3','2_4','1_2_3_4_4x2','1_2_3_4_4x4')
+        },
+        'downlink_scaling': {
+            'def': 0,
+            'allowed_values': (0, 6, 12, 18)
+        },
+        'prach_format': {
+            'def': 'short',
+            'allowed_values': ('short', 'long')
+        },
+        'compression': {
+            'def': 'dynamic_compressed',
+            'allowed_values': ('static_uncompressed', 'static_compressed',
+                               'dynamic_uncompressed', 'dynamic_compressed')
+        },
+        'lf_prach_compression_enable': {
+            'def': 'false',
+            'allowed_values': ('true', 'false')
+        },
+        'flexran_prach_workaround': {
+            'def': 'disabled',
+            'allowed_values': ('enabled', 'disabled')
+        },
+# TDD setting needs special attention...
+#        'TDD_mode': {
+#            'def': 'DDDDDDDSUU',
+#            'allowed_values': ('DDDDDDDSUU', 'DDDSUUDDDD', 'DDDSUUDSUU',
+#                               'DDSUUUDSUU', 'DDDSU')
+#        }
+    }
+
+class BenetelConfig_RAN550_b78(DeviceConfig):
+    DEFAULT_SETTINGS = {
+        'center_frequency': {
+            'def': 3370.2,
+            'allowed_ranges': ((3358.0,3800.0),)
+        },
+        'bandwidth': {
+            'def': 20.0,
+            'allowed_values': (20.0, 40.0, 60.0, 80.0, 100.0)
+        },
+        'gain': {
+            'def': 27.0,
+            'allowed_ranges': ((1.0,27.0),)
         },
         'fh_cplane_vlan': {
             'def': 1,
@@ -150,7 +197,11 @@ class BenetelWrapper(DeviceWrapper):
         'u_plane_du_vlan_downlink': 'fh_uplane_vlan',
         'u_plane_du_vlan_uplink': 'fh_uplane_vlan'
     }
-
+    DEVCONF_MAP = {
+        'RAN650': BenetelConfig_RAN650_b78,
+        'RAN550': BenetelConfig_RAN550_b78
+    }
+    
     def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
                  log_level = DEF_LOG_LEVEL):
         super().__init__(mgmt_addr, username, keyfile, log_level)
@@ -292,7 +343,7 @@ class BenetelWrapper(DeviceWrapper):
             write_remote_file(self.RADIO_CONFIG_FILE, outlines, overwrite=True)
 
     def fetch_settings(self):
-        settings = BenetelConfig()
+        settings = self.DEVCONF_MAP[self._hardware]()
         if self._fwversion['major'] == 0 \
            or self._fwversion['major'] == 1 and self._fwversion['minor'] < 4:
             for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
@@ -302,124 +353,12 @@ class BenetelWrapper(DeviceWrapper):
         return settings
 
     def push_settings(self, settings):
-        if not type(settings) == BenetelConfig:
+        if not isinstance(settings, DeviceConfig):
             raise ValueError(f"{Utilities.whoami(self)}: 'settings' argument "
-                             "must be a BenetelConfig object!")
+                             "must be a device configuration object instance!")
         if self._fwversion['major'] == 0 \
            or self._fwversion['major'] == 1 and self._fwversion['minor'] < 4:
             for stg in self.SINGLE_FILE_SETTINGS_MAP.keys():
                 self._push_single_file_setting(stg, settings[stg])
             self._push_radio_setup_script_settings(settings)
         self._push_radio_config_file_settings(settings)
-
-##############################################################################
-#
-# Top-level code (main script entry point and helpers)
-#
-def connect(args, loglvl):
-    bw = BenetelWrapper(args.address, args.username, log_level = loglvl)
-    passwd = ""
-    if args.read_password:
-        passwd = getpass()
-    elif args.password:
-        passwd = args.password
-    bw.connect_session(password=passwd, ping_timeout=args.ping_timeout)
-    passwd = None
-    return bw
-
-def update_config(args, bw):
-    cfg = []
-    json_data = None
-    if args.json_config == "-":
-        json_data = sys.stdin.read()
-    else:
-        with open(args.json_config, "r") as cfg_f:
-            json_data = cfg_f.read()
-    cfg = json.loads(json_data)
-    dcfg = bw.fetch_settings()
-    dcfg.update(cfg)
-    bw.push_settings(dcfg)
-
-def parse_args():
-    parser = ArgumentParser()
-    parser.add_argument("address", help="Address (hostname or IP) of the device.")
-    parser.add_argument("-u", "--username", default=DeviceWrapper.DEF_USER,
-                        help="Username to supply when logging in to device.")
-    parser.add_argument("-R", "--read-password", action="store_true",
-                        help="Read password from command line. "
-                        "Note: This argument overrides the `password` argument")
-    parser.add_argument("-p", "--password", help="Password for authenticating.")
-    parser.add_argument("-g", "--get-config", action="store_true",
-                        help="Get configuration from device and print to "
-                        "stdout in JSON format.")
-    parser.add_argument("-j", "--json-config", help="Apply configuration, "
-                        "specified in a JSON file, to the device "
-                        "(specify '-' to read config from stdin). "
-                        "Does NOT imply the `reboot` argument.")
-    parser.add_argument("-P", "--ping-timeout", type=int,
-                        default=DeviceWrapper.DEF_PING_TIMEOUT,
-                        help="Number of seconds to wait for the device to "
-                        "respond to pings when connecting initially before "
-                        "timing out.")
-    parser.add_argument("-q", "--quiet", action="store_true",
-                        help="Quiet operation. Do not print informational "
-                        "messages.")
-    parser.add_argument("-r", "--reboot", action="store_true",
-                        help="Reboot the RU (via `reboot` over SSH session). "
-                        "Performed after most other actions "
-                        "(see `--wait` argument).")
-    parser.add_argument("-w", "--wait", type=int, default=-1,
-                        help="Wait for the radio on the device to become "
-                        "active, timing out after WAIT seconds. Does NOT imply "
-                        "the `reboot` argument. This action is performed last "
-                        "(after all other actions complete).")
-    return parser.parse_args()
-   
-def main():
-    args = parse_args()
-    loglvl = logging.ERROR if args.quiet else logging.INFO
-    lgr = Utilities.mk_logger("beneshell", loglvl)
-    bw = None
-    try:
-        bw = connect(args, loglvl)
-        if not args.get_config:
-            lgr.info(f"Connected to {args.address}. Firmware: {bw.get_firmware_string()}")
-    except:
-        lgr.exception("Failed to connect to the device:")
-        return 1
-    if args.json_config:
-        try:
-            update_config(args, bw)
-        except:
-            lgr.exception("Failed to update configuration on device:")
-            return 1
-        else:
-            lgr.info("Device settings updated successfully.")
-    if args.get_config:
-        try:
-            dcfg = bw.fetch_settings()
-            print(json.dumps(dict(dcfg), sort_keys=True, indent=4))
-        except:
-            lgr.exception("Failed to fetch or print device configuration:")
-            return 1
-    if args.reboot:
-        lgr.info("Rebooting device.")
-        try:
-            bw.reboot()
-        except:
-            lgr.exception("Failure encountered while trying to reboot device:")
-            return 1
-    if args.wait >= 0:
-        res = False
-        try:
-            res = bw.wait_for_radio_online(args.wait)
-        except:
-            lgr.exception("Failed while waiting for radio to come online:")
-            return 1
-        if not res:
-            lgr.warning("Timed out while waiting for radio to come online.")
-            return 1
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -1,0 +1,155 @@
+#!/usr/bin/env python
+
+#
+# This script manages COTS O-RU devices. It does not (and should not
+# grow) any testbed-specific dependencies, aside from library path
+# autoconf variables, so that it may be used on any system that runs
+# Python and has SSH binaries in the path.
+#
+# This script is able to perform various operations on COTS O-RU devices:
+#
+# * Configuration management
+#     - Reset all managed configuration values to defaults
+#     - Update specific configuration settings
+#     - Get (all) current configuration settings
+#
+# * Device status
+#     - Check device up/down status (ping)
+#     - Check radio initialization status
+#     - Wait for radio initialization to complete
+#     - Get firmware version
+#
+
+import sys
+import time
+import logging
+import json
+from argparse import ArgumentParser
+from getpass import getpass
+sys.path.append("@prefix@/lib")
+from libdevproxy import Utilities, DeviceWrapper
+from libdevproxy_benetel import BenetelWrapper
+from libdevproxy_vvdn import VVDNWrapper
+
+#
+# Valid O-RU device types (manufacturers)
+#
+DEV_TYPE_MAP = {
+    'benetel': BenetelWrapper,
+    'vvdn':    VVDNWrapper,
+}
+
+##############################################################################
+#
+# Top-level code (main script entry point and helpers)
+#
+def get_wrapper(args, loglvl):
+    return DEV_TYPE_MAP[args.type](args.address, args.username, log_level = loglvl)
+
+def connect(args, wrapper):
+    passwd = ""
+    if args.read_password:
+        passwd = getpass()
+    elif args.password:
+        passwd = args.password
+    wrapper.connect_session(password=passwd, ping_timeout=args.ping_timeout)
+    passwd = None
+
+def update_config(args, wrapper):
+    cfg = []
+    json_data = None
+    if args.json_config == "-":
+        json_data = sys.stdin.read()
+    else:
+        with open(args.json_config, "r") as cfg_f:
+            json_data = cfg_f.read()
+    cfg = json.loads(json_data)
+    dcfg = wrapper.fetch_settings()
+    dcfg.update(cfg)
+    wrapper.push_settings(dcfg)
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("address", help="Address (hostname or IP) of the device.")
+    parser.add_argument("type", choices=DEV_TYPE_MAP.keys(),
+                        help=f"O-RU device type (required).")
+    parser.add_argument("-u", "--username", default=DeviceWrapper.DEF_USER,
+                        help="Username to supply when logging in to device.")
+    parser.add_argument("-R", "--read-password", action="store_true",
+                        help="Read password from command line. "
+                        "Note: This argument overrides the `password` argument")
+    parser.add_argument("-p", "--password", help="Password for authenticating.")
+    parser.add_argument("-g", "--get-config", action="store_true",
+                        help="Get configuration from device and print to "
+                        "stdout in JSON format.")
+    parser.add_argument("-j", "--json-config", help="Apply configuration, "
+                        "specified in a JSON file, to the device "
+                        "(specify '-' to read config from stdin). "
+                        "Does NOT imply the `reboot` argument.")
+    parser.add_argument("-P", "--ping-timeout", type=int,
+                        default=DeviceWrapper.DEF_PING_TIMEOUT,
+                        help="Number of seconds to wait for the device to "
+                        "respond to pings when connecting initially before "
+                        "timing out.")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="Quiet operation. Do not print informational "
+                        "messages.")
+    parser.add_argument("-r", "--reboot", action="store_true",
+                        help="Reboot the RU (via `reboot` over SSH session). "
+                        "Performed after most other actions "
+                        "(see `--wait` argument).")
+    parser.add_argument("-w", "--wait", type=int, default=-1,
+                        help="Wait for the radio on the device to become "
+                        "active, timing out after WAIT seconds. Does NOT imply "
+                        "the `reboot` argument. This action is performed last "
+                        "(after all other actions complete).")
+    return parser.parse_args()
+
+def main():
+    args = parse_args()
+    loglvl = logging.ERROR if args.quiet else logging.INFO
+    lgr = Utilities.mk_logger("beneshell", loglvl)
+    wrapper = get_wrapper(args, loglvl)
+    try:
+        connect(args, wrapper)
+        if not args.get_config:
+            lgr.info(f"Connected to {args.address}. Firmware: {wrapper.get_firmware_string()}")
+    except:
+        lgr.exception("Failed to connect to the device:")
+        return 1
+    if args.json_config:
+        try:
+            update_config(args, wrapper)
+        except:
+            lgr.exception("Failed to update configuration on device:")
+            return 1
+        else:
+            lgr.info("Device settings updated successfully.")
+    if args.get_config:
+        try:
+            dcfg = wrapper.fetch_settings()
+            print(json.dumps(dict(dcfg), sort_keys=True, indent=4))
+        except:
+            lgr.exception("Failed to fetch or print device configuration:")
+            return 1
+    if args.reboot:
+        lgr.info("Rebooting device.")
+        try:
+            wrapper.reboot()
+        except:
+            lgr.exception("Failure encountered while trying to reboot device:")
+            return 1
+    if args.wait >= 0:
+        res = False
+        try:
+            res = wrapper.wait_for_radio_online(args.wait)
+        except:
+            lgr.exception("Failed while waiting for radio to come online:")
+            return 1
+        if not res:
+            lgr.warning("Timed out while waiting for radio to come online.")
+            return 1
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

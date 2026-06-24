@@ -351,6 +351,9 @@ class DeviceWrapper(object):
     def get_firmware_string(self):
         return self._fwversion
 
+    def get_hardware_string(self):
+        return self._hardware
+
     def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
         stime = time.time()
         while time.time() <= stime + timeout:

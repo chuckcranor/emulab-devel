@@ -60,7 +60,7 @@ my $ELABINELAB  = "$TB/sbin/elabinelab";
 my $IMAGEINFO   = "$TB/sbin/imageinfo";
 my $TBADB       = "$TB/bin/tbadb";
 my $RFSWITCHER  = "$TB/sbin/powder-rfswitcher";
-my $BENESHELL   = "$TB/sbin/beneshell";
+my $ORUCLE   = "$TB/sbin/orucle";
 
 # Setup Operation Flags
 $NOSTATE    = 0x00;
@@ -2942,7 +2942,7 @@ sub LightUpNodes($@)
 	my $json_config = to_json(\%ru_params);
 	my $auth_args = $node->_authargs();
 	tbnotice("Configuring Benetel COTS RU $node_id\n");
-	system("echo '$json_config' | $BENESHELL $node_id $auth_args -j - -r");
+	system("echo '$json_config' | $ORUCLE $node_id benetel $auth_args -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
 	    goto bad;
@@ -2982,7 +2982,7 @@ sub WaitForNode($$)
     # See if the radio has made it to the "Radio Bringup Complete" state.
     my $pingwait = $node->_pingwait();
     my $auth_args = $node->_authargs();
-    system("$BENESHELL $node_id $auth_args -q -P $pingwait -w 0");
+    system("$ORUCLE $node_id benetel $auth_args -q -P $pingwait -w 0");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);

@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+
+#
+# This library contains the specific device proxy support for VVDN O-RU
+# devices, for device configuration, status, and management.
+#
+# Note: Power control and reboot are handled by the standard testbed
+#       `node_reboot` and `power` scripts. Modules specifically for
+#       handling VVDN RUs should be present in these scripts. They use
+#       this script to check device status and wait for initialization
+#       to complete.
+
+import logging
+import re
+import sys
+import time
+
+sys.path.append("@prefix@/lib")
+from libdevproxy import Utilities, DeviceConfig, DeviceWrapper
+
+##############################################################################
+#
+# VVDNConfig class definitions. Defines configuration settings and defaults.
+#
+class VVDNConfig_MPRU_b78(DeviceConfig):
+    DEFAULT_SETTINGS = {
+        'center_frequency': {
+            'def': 3370.2,
+            'allowed_ranges': ((3400.0,3700.0),)
+        },
+        'bandwidth': {
+            'def': 20.0,
+            'allowed_values': (20.0, 40.0, 60.0, 80.0, 100.0)
+        },
+        'gain': {
+            'def': 37.0,
+            'allowed_ranges': ((1.0,37.0),)
+        },
+        'fh_cplane_vlan': {
+            'def': 1,
+            'allowed_ranges': ((1,4096),)
+        },
+        'fh_uplane_vlan': {
+            'def': 1,
+            'allowed_ranges': ((1,4096),)
+        },
+        'du_cplane_mac': {
+            'def': '000000000000',
+            'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
+        },
+        'du_uplane_mac': {
+            'def': '000000000000',
+            'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
+        },
+        'mimo_mode': {
+            'def': '2_4',
+            'allowed_values': ('1_3','2_4','1_2_3_4_4x2','1_2_3_4_4x4')
+        },
+        'downlink_scaling': {
+            'def': 0,
+            'allowed_values': (0, 6, 12, 18)
+        },
+        'prach_format': {
+            'def': 'short',
+            'allowed_values': ('short', 'long')
+        },
+        'compression': {
+            'def': 'dynamic_compressed',
+            'allowed_values': ('static_uncompressed', 'static_compressed',
+                               'dynamic_uncompressed', 'dynamic_compressed')
+        },
+        'lf_prach_compression_enable': {
+            'def': 'false',
+            'allowed_values': ('true', 'false')
+        },
+    }
+
+##############################################################################
+#
+# VVDNWrapper class definition
+#
+class VVDNWrapper(DeviceWrapper):
+    DEF_LOG_LEVEL = logging.INFO
+    DEF_USER = "root"
+    DEF_PASSWD = ""
+    DEF_PING_TIMEOUT = 5
+    DEF_BOOT_TIMEOUT = 120
+    DEF_SHUTDOWN_TIME = 30
+    DEF_RADIO_ONLINE_TIMEOUT = 300
+    WAIT_LOG_SLEEP = 1
+    FW_VERSION_UNKNOWN = "YYYYMMDDHHMMSS"
+    FW_VERSION_FILE = "/etc/version"
+    RADIO_CONFIG_MAP = {
+        'mimo_mode': 'mimo_mode',
+        'downlink_scaling': 'downlink_scaling',
+        'prach_format': 'prach_format',
+        'compression': 'compression',
+        'lf_prach_compression_enable': 'lf_prach_compression_enable',
+        'flexran_prach_workaround': 'flexran_prach_workaround',
+        'bandwidth_hz': 'bandwidth',
+        'centre_frequency_hz': 'center_frequency',
+        'tx_power_dbm': 'gain',
+        'c_plane_du_mac': 'du_cplane_mac',
+        'u_plane_du_mac': 'du_uplane_mac',
+        'c_plane_du_vlan': 'fh_cplane_vlan',
+        'u_plane_du_vlan_downlink': 'fh_uplane_vlan',
+        'u_plane_du_vlan_uplink': 'fh_uplane_vlan'
+    }
+
+    def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
+                 log_level = DEF_LOG_LEVEL):
+        super().__init__(mgmt_addr, username, keyfile, log_level)

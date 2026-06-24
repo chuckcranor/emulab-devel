@@ -7338,6 +7338,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/checkup/GNUmakefile tbsetup/checkup/checkup_daemon \
 	tbsetup/libtblog.pm tbsetup/template_cvsroot/GNUmakefile \
 	tbsetup/mkatten \
+	tbsetup/libdevproxy_benetel.py tbsetup/libdevproxy_vvdn.py \
 	tmcd/GNUmakefile tmcd/tmcd.restart \
 	utils/GNUmakefile utils/vlandiff utils/vlansync utils/delay_config \
 	utils/sshtb utils/create_image utils/node_admin \
@@ -7356,7 +7357,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/mktestbedtest utils/pxelinux_makeconf \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
 	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
-	utils/setzfsquotas utils/checkipmi utils/beneshell \
+	utils/setzfsquotas utils/checkipmi utils/orucle \
 	wbstore/GNUmakefile \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \

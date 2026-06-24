@@ -42,7 +42,7 @@ use English;
 # Commands we run
 #
 my $TBROOT = '@prefix@';
-my $BENESHELL = "$TBROOT/sbin/beneshell";
+my $ORUCLE = "$TBROOT/sbin/orucle";
 
 # Turn off line buffering on output
 $| = 1;
@@ -117,7 +117,7 @@ sub launchEventSender($) {
 	    $auth_args .= " -p '$admin_pass'";
 	}
     }
-    system("$BENESHELL $node_id $auth_args -q -P $waittime");
+    system("$ORUCLE $node_id benetel $auth_args -q -P $waittime");
     if (! $?) {
 	$self->log("Device is up. Sending `ISUP` event.");
 	$node->SetEventState(TBDB_NODESTATE_ISUP());

@@ -127,7 +127,7 @@ LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
                   libosload_hp5406.pm libosload_edge_100bf.pm \
 		  libimageops.pm libimageops_ndz.pm libimageops_docker.pm \
 		  libimageops_ec2.pm libSignedURL.pm power_benetel.pm \
-		  libdevproxy.py
+		  libdevproxy.py libdevproxy_benetel.py libdevproxy_vvdn.py
 
 
 # These scripts installed setuid, with sudo. 
