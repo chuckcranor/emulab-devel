@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2025 University of Utah and the Flux Group.
+# Copyright (c) 2005-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -881,8 +881,18 @@ sub Delete($;$)
     # in which case it won't be allowed cause of directory permissions. Thats
     # okay since admin types should rarely end experiments in other projects.
     #
+    # XXX Note that we redirect errors from the "rm" command to /dev/null
+    # in case the user put a large directory of files under $userdir that
+    # we cannot remove as the invoking user. This prevents attempting to
+    # log potentially thousands of lines of "Permission denied" stderr
+    # messages into the DB "log" table. This lack of stderr output somewhat
+    # obscures what might have happened in the moment, if it was a transient
+    # error of some sort, but ideally the admin can just rerun the "rm"
+    # command without the redirect to see what failed and then rerun as
+    # root to get rid of the directory.
+    #
     print "Removing experiment directories ... \n";
-    if (defined($userdir) && system("/bin/rm -rf $userdir")) {
+    if (defined($userdir) && system("/bin/rm -rf $userdir 2>/dev/null")) {
 	print "*** WARNING: Not able to remove $userdir\n";
 	print "             Someone will need to do this by hand.\n";
 
@@ -896,7 +906,13 @@ sub Delete($;$)
 			     "Could not remove $userdir. ".
 			     ($moved ?
 			      "Renamed to ${userdir}.$$ ..." : "") . "\n" .
-			     "Someone will need to do this by hand.\n");
+			     "Someone will need to do this by hand. Run:\n" .
+			     "    sudo -u #$> rm -rf " .
+			     ($moved ? "${userdir}.$$" : $userdir) . "\n" .
+			     "to see what happened, and:\n" .
+			     "    sudo rm -rf " .
+			     ($moved ? "${userdir}.$$" : $userdir) . "\n" .
+			     "to then remove the directory.\n");
     }
     if (system("/bin/rm -rf $workdir")) {
 	print "*** WARNING: Not able to remove $workdir\n";
