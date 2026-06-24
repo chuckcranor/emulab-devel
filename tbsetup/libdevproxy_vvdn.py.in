@@ -14,9 +14,90 @@ import logging
 import re
 import sys
 import time
+import xml.etree.ElementTree as ET
+from functools import wraps
+from pexpect import fdpexpect
 
 sys.path.append("@prefix@/lib")
 from libdevproxy import Utilities, DeviceConfig, DeviceWrapper
+
+def run_once(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not wrapper.has_run:
+            wrapper.has_run = True
+            return f(*args, **kwargs)
+        # Optional: Add a print message or log here if needed
+    wrapper.has_run = False
+    return wrapper
+
+##############################################################################
+#
+# VVDN O-RU M-Plane session (over SSHWrapper connection)
+#
+class VVDNMPlaneSession(object):
+    DEF_MPLANE_USER = DEF_MPLANE_PASS = "oranuser"
+    DEF_LOG_LEVEL = logging.INFO
+    DEFAULT_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
+    PROCELT_NS = "urn:o-ran:processing-element:1.0"
+    UPCONF_NS  = "urn:o-ran:uplane-conf:1.0"
+    INTERFACES_NS = "urn:ietf:params:xml:ns:yang:ietf-interfaces"
+    INTFREF_NS = "urn:o-ran:interfaces:1.0"
+    INTFTYP_NS = "urn:ietf:params:xml:ns:yang:iana-if-type"
+    NETCONF_CLI = "/usr/bin/netopeer2-cli"
+
+    def __init__(self, ssh_obj, log_level = DEF_LOG_LEVEL):
+        self.lgr = Utilities.mk_logger(self.__class__.__name__, log_level)
+        self._ssh = ssh_obj
+        stdin, stdout, stderr = ssh_obj.exec(self.NETCONF_CLI,
+                                             interactive = True)
+        self._in = stdin
+        self._out = stdout
+        self._err = stderr
+        self._connected = False
+        self._init_xml()
+
+    @run_once
+    def _init_xml(self):
+        ET.register_namespace('', self.DEFAULT_NS)
+        ET.register_namespace('procelt', self.PROCELT_NS)
+        ET.register_namespace('upconf', self.UPCONF_NS)
+        ET.register_namespace('interfaces', self.INTERFACES_NS)
+        ET.register_namespace('intfref', self.INTFREF_NS)
+        ET.register_namespace('intftyp', self.INTFTYP_NS)
+
+    def connect_session(self, user=DEF_MPLANE_USER, password=DEF_MPLANE_PASS):
+        # Prototype code... Must rewrite! No error handling...
+        if not self._connected:
+            self._ex = fdpexpect.fdspawn(self._out.channel)
+            self._ex.sendline("")
+            self._ex.expect(">")
+            self._ex.sendline(f"connect --login {user}")
+            self._ex.expect("password:")
+            self._ex.sendline(password)
+            self._ex.expect(">")
+            self.lgr.info("M-Plane Netconf connection established.")
+            self._connected = True
+        return self._ex
+
+    def get_config(self):
+        # Prototype code... Must rewrite! No error handling...
+        TMPXMLPATH = "/tmp/tmprpc.xml"
+        OUTXMLPATH = "/tmp/rpcout.xml"
+        root = ET.Element(f"{{{self.DEFAULT_NS}}}get-config")
+        src = ET.SubElement(root, "source")
+        ET.SubElement(src, "running")
+        tree = ET.ElementTree(root)
+        self._ssh.write_remote_file(
+            TMPXMLPATH, ET.tostring(root, encoding="unicode"), overwrite=True)
+        ex = self.connect_session()
+        print("", file=self._in)
+        ex.expect(">")
+        print(f"usr-rpc --content {TMPXMLPATH} --out {OUTXMLPATH}",
+              file=self._in)
+        ex.expect(">")
+        return self._ssh.read_remote_file(OUTXMLPATH)
+
 
 ##############################################################################
 #
@@ -110,3 +191,10 @@ class VVDNWrapper(DeviceWrapper):
     def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
                  log_level = DEF_LOG_LEVEL):
         super().__init__(mgmt_addr, username, keyfile, log_level)
+        self._mpsess = None
+
+    def _get_mplane_session(self):
+        if not self._mpsess:
+            self._mpsess = VVDNMPlaneSession(
+                self.get_session(), log_level = self.lgr.level)
+        return self._mpsess

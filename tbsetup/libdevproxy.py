@@ -188,17 +188,21 @@ class SSHWrapper(object):
         self.pcli.close()
         self.connected = False
 
-    def exec(self, cmd, indata = None):
+    def exec(self, cmd, indata = None, interactive = False):
         stdin, stdout, stderr = self.pcli.exec_command(cmd)
         if indata:
             stdin.write(indata)
             stdin.flush()
-            stdin.close()
-        rstdout = list(stdout)
-        rstderr = list(stderr)
-        stdout.close()
-        stderr.close()
-        return rstdout, rstderr
+            if not interactive:
+                stdin.close()
+        if interactive:
+            return stdin, stdout, stderr
+        else:
+            rstdout = list(stdout)
+            rstderr = list(stderr)
+            stdout.close()
+            stderr.close()
+            return rstdout, rstderr
 
     def get_sftp(self):
         if not self.sftp or self.sftp.sock.closed:
