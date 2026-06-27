@@ -2772,7 +2772,7 @@ sub AddNode($$)
     $node->_retrycount(0); # no retries.
     $node->_doisup(0);     # Don't send compulsory ISUP in base class.
     $node->_doevents(1);   # DO have `power` send events in base class.
-    $node->_pingwait(60);  # Higher initial ping wait time (account for boot).
+    $node->_pingwait(90);  # Higher initial ping wait time (account for boot).
 
     # Grab any required auth params from the DB
     my ($admin_user, $admin_pass);
