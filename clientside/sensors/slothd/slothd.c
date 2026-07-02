@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016, 2021, 2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2026 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -1206,6 +1206,7 @@ int procpipe(char *const prog[], int (procfunc)(char*,void*), void* data) {
   }
   return retcode;
 }
+
 #ifdef __linux__
 int get_smi_stats(char *buf, void *data) {
 	SLOTHD_PACKET *pkt = (SLOTHD_PACKET*)data;
@@ -1241,22 +1242,73 @@ int get_smi_stats(char *buf, void *data) {
 	return 0;
 }
 
+/*
+ * Example rocm-smi output:
+ *
+ * GPU[0]          : GPU use (%): 0
+ * GPU[0]          : GPU Memory Allocated (VRAM%): 0
+ */ 
+int get_amdsmi_stats(char *buf, void *data) {
+	SLOTHD_PACKET *pkt = (SLOTHD_PACKET*)data;
+	int count, index, pid;
+	double sm, mem;
+
+	/* Fast filter: only care about lines that start with "GPU" */
+	if (buf[0] != 'G') {
+		return 0;
+	}
+
+	count = sscanf(buf, "GPU[%d] : GPU use (%%): %lf", &index, &sm);
+	if (count == 2) {
+		if (index >= MAXGPUS) {
+			lwarn("Too many GPUs");
+			return 0;
+		}
+		if (index > pkt->maxgpu)
+			pkt->maxgpu = index;
+		if (sm > pkt->gpus[index].sm) {
+			pkt->gpus[index].sm  = sm;
+			pkt->gpus[index].mem = 0.0;
+		}
+		return 0;
+	}
+
+	count = sscanf(buf, "GPU[%d] : GPU Memory Allocated (VRAM%%): %lf",
+		       &index, &mem);
+	if (count == 2) {
+		if (index > pkt->maxgpu) {
+			printf("Got memory info but not GPU usage for GPU %d.\n",
+			       index);
+			return -1;
+		}
+		pkt->gpus[index].mem = mem;
+		return 0;
+	}
+	return 0;
+}
+
 void get_gpu_stats(SLOTHD_PACKET *pkt) {
 	char *nvprog[] = {"nvidia-smi", "pmon", "-c", "1", NULL};
-	int i;
+	char *amdprog[] = {"rocm-smi", "--showuse", "--showmemuse", NULL};
+	int i, rv = -1;
 
 	// Marker for no data. 
 	pkt->maxgpu = -1;
 
-	if (access("/usr/bin/nvidia-smi", X_OK)) {
+	/* XXX Assumes only one of NVIDIA or AMD */
+	if (access("/usr/bin/nvidia-smi", X_OK) == 0) {
+		rv = procpipe(nvprog, &get_smi_stats, (void*)pkt);
+	} else if (access("/usr/bin/rocm-smi", X_OK) == 0) {
+		rv = procpipe(amdprog, &get_amdsmi_stats, (void*)pkt);
+	}
+
+	if (rv) {
+		/* No warning, this will happen a lot if drivers not installed */
+		pkt->maxgpu = -1;
 		return;
 	}
 
-	if (procpipe(nvprog, &get_smi_stats, (void*)pkt)) {
-		/* No warning, this will happen a lot if drivers not installed */
-		pkt->maxgpu = -1;
-	}
-	else if (opts->debug) {
+	if (opts->debug) {
 		for (i = 0; i <= pkt->maxgpu; ++i) {
 			printf("GPU: %d  sm: %.2f  mem: %.2f\n", i,
 			       pkt->gpus[i].sm,
