@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -377,6 +377,7 @@ sub InformTBopsFatal($)
     my ($self) = @_;
     my $pid    = $self->experiment()->pid();
     my $eid    = $self->experiment()->eid();
+    my $uid    = $self->user()->uid();
     my $name   = $self->user()->name();
     my $email  = $self->user()->email();
 
@@ -385,11 +386,11 @@ sub InformTBopsFatal($)
     my $count    = scalar(@nodelist);
     if ($count > 0) {
 	SENDMAIL($TBOPS, "$count nodes are down",
+		 "User: $uid ($name <$email>)\n".
 		 "Nodes:\n".
 		 "  " . join(" ", @nodelist) . "\n".
 		 "in pid/eid $pid/$eid appear to be dead.\n\n".
-		 "The nodes have been moved into hardware checkup.\n\n$logmsg",
-		 "$name <$email>");
+		 "The nodes have been moved into hardware checkup.\n\n$logmsg");
     }
 }
 
@@ -398,6 +399,7 @@ sub InformTBopsWarn($)
     my ($self) = @_;
     my $pid    = $self->experiment()->pid();
     my $eid    = $self->experiment()->eid();
+    my $uid    = $self->user()->uid();
     my $name   = $self->user()->name();
     my $email  = $self->user()->email();
 
@@ -406,11 +408,11 @@ sub InformTBopsWarn($)
     my $count    = scalar(@nodelist);
     if ($count > 0) {
 	SENDMAIL($TBOPS, "$count nodes are down",
+		 "User: $uid ($name <$email>)\n".
 		 "Nodes:\n".
 		 "  " . join(" ", @nodelist) . "\n".
 		 "in pid/eid $pid/$eid failed to boot after loading OS.\n\n".
-		 "The nodes have been freed.\n\n$logmsg",
-		 "$name <$email>");
+		 "The nodes have been freed.\n\n$logmsg");
     }
 }
 
