@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2025 University of Utah and the Flux Group.
+# Copyright (c) 2008-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -45,10 +45,15 @@ use JSON;
 #
 sub usage()
 {
-    print "Usage: rfmonitor_daemon [-d] [-n] [-p port]\n";
+    print "Usage: rfmonitor_daemon [-d] [-n] [-p port] [-P policy] [-R interval]\n";
+    print "    -d           turn on debug messages, do not background\n";
+    print "    -n           impotent mode\n";
+    print "    -p port      port to listen on for monitor node connections (default is 12237)\n";
+    print "    -P policy    copy back policy: always, never, on-violation (default is 'on-violation')\n";
+    print "    -R interval  periodic interval (minutes) at which to always write back a report (default is 60)\n";
     exit(1);
 }
-my $optlist   = "dnp:mtl:";
+my $optlist   = "dnp:mtl:P:R:";
 my $debug     = 0;
 my $impotent  = 0;
 my $mailonly  = 1;
@@ -74,7 +79,6 @@ my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
 my $POWDER_NICKNAME  = "@POWDER_NICKNAME@";
 my $PGENISUPPORT     = @PROTOGENI_SUPPORT@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
-my $RAWDATADIR       = "$TB/www/rfmonitor";
 my $POWER            = "$TB/bin/power";
 my $MANAGERDZ        = "$TB/bin/manage_rdz";
 my $GZIP             = "/usr/bin/gzip";
@@ -84,6 +88,50 @@ my $FORMAT2          = $FORMAT1 . ",center_freq";
 my $FORMAT3          = $FORMAT2 . ",incident";
 my $CSVHEADER        = "frequency,power";
 my $MAILDELAY        = 3600;
+
+#
+# There are two scan output data directories, one that is local only and one
+# that is transferred via syncthing back to the Mothership for further
+# processing (and greater persistence). Scan data that indicates a violation
+# is always transferred back so that it is logged and reported to the user.
+# All data for RDZ experiments is also transferred back so that it can be fed
+# into the RDZ system. All other scan data is logged locally for some time
+# period for auditing purposes. This is implemented as a flag that indicates
+# how to copyback data: always, never, or on_violation. The default value is
+# currently hardwired here (could be a sitevar?), but can be modified on a
+# per-node basis based on the experiment the node is in and whether a
+# violation is detected during the pass. When in "on-violation" mode, we do
+# still send back a periodic non-violation report so the mothership knows we
+# are still alive (and to prevent huge gaps in graphs).
+#
+# The motivation here is that, since (as of 7/1/2026) we generate about 45 CSV
+# scan files per hour at 24MB compressed. Transferring all such scan files
+# back consumes about 17GB/month of backhaul bandwidth. That was fine with a
+# free unlimited data plan, but now we are paying via a tiered plan.
+#
+my $DATATRANSFER     = "on-violation";	# XXX hardwired for now
+my $RAWDATADIR       = "$TB/www/rfmonitor.local";
+my $P_RAWDATADIR     = "$TB/www/rfmonitor";
+my $PERIODICREPORT   = 60;		# XXX let's try once an hour for now
+
+#
+# How long (in days) to keep local copies of CSV files.
+# We keep local only CSV files for longer as those we push back we keep "forever"
+# on the mothership.
+#
+my $KEEPCSVLIMIT     = 60;
+my $P_KEEPCSVLIMIT   = 14;
+
+#
+# Mothership boss, as well as being the collection point for all data, is also
+# a collector of monitor data from the rooftop and dense sites. But there is
+# no transfer of data to worry about.
+#
+if ($MAINSITE) {
+    $DATATRANSFER = "never";
+    $RAWDATADIR   = $P_RAWDATADIR;
+    $KEEPCSVLIMIT = 0;
+}
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -96,9 +144,9 @@ sub NodeNotify($$$);
 sub ShouldNotify($$);
 sub NodeNotified($$$);
 sub HandleChild($);
-sub LoadNodeData($);
+sub LoadNodeData($$);
 sub HandleViolations($$$);
-sub WriteRawData($$$);
+sub WriteRawData($$$$);
 sub measurement_consistent($$$$);
 
 #
@@ -147,6 +195,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"h"})) {
+    usage();
+}
 if (defined($options{"m"})) {
     $mailonly = 1;
 }
@@ -161,6 +212,24 @@ if (defined($options{"l"})) {
 }
 if (defined($options{"p"})) {
     $PORT = $options{"p"};
+}
+if (defined($options{"P"})) {
+    if ($options{"P"} =~ /^(always|never|on-violation)$/) {
+	$DATATRANSFER = $1
+	    if (!$MAINSITE);
+    } else {
+	print STDERR "Invalid policy '" . $options{"P"} . "', must be one of:".
+	    " 'always', 'never', 'on-violation' (default)\n";
+	exit(1);
+    }
+}
+if (defined($options{"R"})) {
+    if ($options{"R"} =~ /^(\d+)$/ && ($1 >= 0 && $1 <= 43200)) {
+	$PERIODICREPORT = $1;
+    } else {
+	print STDERR "Interval must between 0 and 43200 (minutes)\n";
+	exit(1);
+    }
 }
 
 # For Geni slices: do this early so that we talk to the right DB.
@@ -195,6 +264,17 @@ if (! $impotent) {
     if (MarkDaemonRunning("rfmonitor_daemon")) {
 	fatal("Could not mark rfmonitor_daemon as running!");
     }
+}
+
+print "==== rfmonitor_daemon started at " . localtime() . "\n";
+if ($MAINSITE) {
+    print "Running on mothership, keeping CSV files forever\n";
+} elsif ($DATATRANSFER eq "never") {
+    print "Keeping CSV files on local node and for only $KEEPCSVLIMIT days\n";
+} elsif ($DATATRANSFER eq "always") {
+    print "Always push CSV files back to mothership and keep a local copy for $KEEPCSVLIMIT days\n";
+} else {
+    print "Push CSV files back to mothership only when a violation is detected, otherwise keep local for $KEEPCSVLIMIT days\n";
 }
 
 #
@@ -440,6 +520,18 @@ sub HandleChild($)
     #
     my %nodes = ();
 
+    #
+    # Determine default disposition for remote logging.
+    # For "never" we set $localonly to non-zero (-1) unconditionally. I do not
+    # expect we will ever use this except on the mothership. For "always" we
+    # set it to zero unconditionally. This is the historic behavior of the
+    # monitor. For "on-violation" we set it to non-zero (1), but it can be
+    # overridden by a node that experiences a violation, a node that is part
+    # of an RDZ monitored experiment, or by the need for a periodic report.
+    #
+    my $localonly = ($DATATRANSFER eq "always" ? 0 :
+		     ($DATATRANSFER eq "never" ? -1 : 1));
+
     for (my $i = 0; $i < scalar(@lines); $i++) {
 	my $line = $lines[$i];
 	chomp($line);
@@ -485,7 +577,35 @@ sub HandleChild($)
 	    $csvdata{"${nodeid}:${iface}"} = [];
 	}
 	push(@{ $csvdata{"${nodeid}:${iface}"} }, $measurement);
-	
+
+	#
+	# If we have not loaded the node data, then grab it from the DB
+	# and stash locally. We will get back all the interfaces for the
+	# node in a hash.
+	#
+	# We do this now so that we can check for nodes that are in RDZ
+	# experiments. Any report that contains data from such a node is
+	# always passed back to the mothership.
+	#
+	if (!exists($rflimits{$nodeid})) {
+	    my $isrdz = 0;
+	    my $limits = LoadNodeData($nodeid, \$isrdz);
+	    if (!defined($limits)) {
+		# DB Error, we do not know anything. Hmm.
+		print STDERR "$nodeid: error reading RF limits\n"
+		    if ($debug);
+		next;
+	    }
+	    $rflimits{$nodeid} = $limits;
+
+	    # If this is an RDZ related node, make sure we return data
+	    if ($isrdz && $localonly > 0) {
+		print STDERR "$nodeid: in RDZ experiment, pushing back CSV\n"
+		    if ($debug);
+		$localonly = 0;
+	    }
+	}
+
 	#
 	# This is bogus, I was expecting the monitor to only send me
 	# messages for actual transmission, not 1000s of lines. So I
@@ -547,19 +667,6 @@ sub HandleChild($)
 	    next;
 	}
 	
-	#
-	# If we have not loaded the node data, then grab it from the DB
-	# and stash locally. We will get back all the interfaces for the
-	# node in a hash.
-	#
-	if (!exists($rflimits{$nodeid})) {
-	    my $limits = LoadNodeData($nodeid);
-	    if (!defined($limits)) {
-		# DB Error, we do not know anything. Hmm.
-		next;
-	    }
-	    $rflimits{$nodeid} = $limits;
-	}
 	my $limits;
 	if (exists($rflimits{$nodeid}->{$iface}) &&
 	    scalar(@{$rflimits{$nodeid}->{$iface}})) {
@@ -588,6 +695,13 @@ sub HandleChild($)
 
 		# Mark in the CSV file.
 		$measurement->{"violation"} = 1;
+
+		# Logging: make sure we transfer this CSV file back.
+		if ($localonly > 0) {
+		    print STDERR "$nodeid: violation (no limits), pushing back CSV\n"
+			if ($debug);
+		    $localonly = 0;
+		}
 	    }
 	    # Remember for next time
 	    $nextdata->{$key} = $measurement;
@@ -640,15 +754,28 @@ sub HandleChild($)
 
 		# Mark in the CSV file.
 		$measurement->{"violation"} = 1;
+
+		# Logging: make sure we transfer this CSV file back.
+		if ($localonly > 0) {
+		    print STDERR "$nodeid:$iface: out-of-range violation, pushing back CSV\n"
+			if ($debug);
+		    $localonly = 0;
+		}
+	    } else {
+		print STDERR "$nodeid:$iface: ignoring first time out-of-range violation\n"
+		    if ($debug);
+		# XXX should we push this back as context for any following
+		# violation? Lets see how often it happens.
 	    }
 	    # Remember for next time
 	    $nextdata->{$key} = $measurement;		    
 	}
     }
+
     #
     # Write the raw data file(s)
     #
-    WriteRawData(\%csvdata, $filestamp, \@abovefloor);
+    WriteRawData(\%csvdata, $filestamp, \@abovefloor, $localonly);
 
     #
     # On the mainsite, we can figure out the instance holding the
@@ -758,9 +885,9 @@ sub HandleChild($)
 #
 # Load data for a node from the rf limits table. 
 #
-sub LoadNodeData($)
+sub LoadNodeData($$)
 {
-    my ($nodeid) = @_;
+    my ($nodeid, $isrdzref) = @_;
     my %ifaces   = ();
 
     my $query_result =
@@ -769,20 +896,33 @@ sub LoadNodeData($)
     return undef
 	if (!$query_result);
 
-    if (!$query_result->numrows) {
-	print STDERR "No interface limit info for $nodeid\n";
-	return {};
-    }
-    #
-    # There can be multiple rows for an interface. 
-    #
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $iface = $row->{'iface'};
-	if (!exists($ifaces{$iface})) {
-	    $ifaces{$iface} = [];
+    $$isrdzref = 0;
+    if ($query_result->numrows) {
+	#
+	# There can be multiple rows for an interface. 
+	#
+	while (my $row = $query_result->fetchrow_hashref()) {
+	    if (!$$isrdzref &&
+		exists($row->{'isrdz'}) && $row->{'isrdz'} != 0) {
+		$$isrdzref = 1;
+	    }
+
+	    my $iface = $row->{'iface'};
+	    if (!$iface) {
+		print STDERR "No iface in info for $nodeid\n"
+		    if ($debug);
+		next;
+	    }
+	    if (!exists($ifaces{$iface})) {
+		$ifaces{$iface} = [];
+	    }
+	    push(@{$ifaces{$iface}}, $row);
 	}
-	push(@{$ifaces{$iface}}, $row);
+    } else {
+	print STDERR "No interface limit info for $nodeid\n"
+	    if ($debug);
     }
+
     return \%ifaces;
 }
 
@@ -1007,9 +1147,9 @@ sub NodeNotify($$$)
 #
 # Write RAW data to CSV files in /usr/testbed/www
 #
-sub WriteRawData($$$)
+sub WriteRawData($$$$)
 {
-    my ($data, $filestamp, $aboveref) = @_;
+    my ($data, $filestamp, $aboveref, $localonly) = @_;
     my $header = $CSVHEADER;
     my $abovefloor = scalar(@{$aboveref});
     my $violations = 0;
@@ -1019,22 +1159,51 @@ sub WriteRawData($$$)
 	    last;
 	}
     }
+
+    #
+    # Check periodic timer.
+    #
+    # XXX we just stat the persistent directory and use the mod time.
+    # The modtime will get updated automatically when we write the CSV file.
+    #
+    if ($localonly > 0 && $PERIODICREPORT > 0) {
+	my $lastpush = (stat($P_RAWDATADIR))[9];
+	if ((time() - $lastpush) > ($PERIODICREPORT * 60)) {
+	    print STDERR "More than $PERIODICREPORT minutes since last push, pushing back CSV\n"
+		if ($debug);
+	    $localonly = 0;
+	}
+    }
+
     $header .= ",abovefloor" if ($abovefloor);
     $header .= ",violation" if ($abovefloor && $violations);
 
     foreach my $portid (keys(%{$data})) {
 	my @samples   = @{$data->{$portid}};
 	my $filename  = "${portid}-${filestamp}.csv";	
+	my $datadir   = ($localonly ? $RAWDATADIR : $P_RAWDATADIR);
+	# XXX put tmpfile in unsynced directory so syncthing does not see it.
 	my $tmpname   = "$RAWDATADIR/${portid}.tmp";
-	my $csvname   = "$RAWDATADIR/${portid}.csv";
-	my $gzsymlink = "$RAWDATADIR/${portid}.csv.gz";
-	my $gzipname  = "$RAWDATADIR/${filename}.gz";
+	my $csvname   = "$datadir/${portid}.csv";
+	my $gzsymlink = "$datadir/${portid}.csv.gz";
+	my $gzipname  = "$datadir/${filename}.gz";
+	my $keeplimit = ($localonly ? $KEEPCSVLIMIT : $P_KEEPCSVLIMIT);
+
+	print STDERR "WriteRawData: lo=$localonly, csv=$csvname, kl=$keeplimit\n"
+	    if ($debug);
 
 	#
-	# Prune historical data older then 10 days.
+	# Prune historical data older than our limit.
+	# XXX There is no reason to do this more than once a day.
 	#
-	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
-	       "-mtime +14 -print " . ($impotent ? "" : "-delete"));
+	if ($keeplimit > 0) {
+	    print "==== Removing CSV files older than $keeplimit days\n"
+		if ($debug);
+	    system("$FIND -E $datadir -regex '^.*\-[0-9]+\.csv\.gz\$' ".
+		   "-mtime +$keeplimit -print " . ($impotent ? "" : "-delete"));
+	    print "==== Done removing old files\n"
+		if ($debug);
+	}
 
 	if (open(CSV, "> $tmpname")) {
 	    print CSV "$header\n";
@@ -1084,7 +1253,7 @@ sub WriteRawData($$$)
 		# Above the noise floor, symlink into the main directory
 		if ($abovefloor &&
 		    system("/bin/ln -sf ../${filename}.gz ".
-			   "    $RAWDATADIR/archive/${filename}.gz")) {
+			   "    $datadir/archive/${filename}.gz")) {
 		    print STDERR "Could not create archive symlink\n";
 		    return -1;
 		}

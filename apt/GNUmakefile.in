@@ -25,6 +25,7 @@ SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= apt
+ISMAINSITE	= @TBMAINSITE@
 
 include $(OBJDIR)/Makeconf
 
@@ -89,6 +90,11 @@ install: $(addprefix $(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
 
 boss-install: install install-subdirs
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
+ifeq ($(ISMAINSITE),0)
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor.local
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor.local/archive
+endif
 
 subboss-install: 
 

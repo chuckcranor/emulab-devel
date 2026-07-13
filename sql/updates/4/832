@@ -1,0 +1,22 @@
+#
+# Add isrdz to identify a node/interface engaged with RDZ
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("interfaces_rf_limit", "isrdz")) {
+	DBQueryFatal("ALTER TABLE interfaces_rf_limit ADD ".
+		     " `isrdz` tinyint(1) NOT NULL default '0'");
+    }
+    
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

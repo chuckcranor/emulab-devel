@@ -3614,6 +3614,7 @@ CREATE TABLE `interfaces_rf_limit` (
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `power` float(8,2) NOT NULL DEFAULT '0.00',
+  `isrdz` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`node_id`,`iface`(128),`freq_low`,`freq_high`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

@@ -5004,10 +5004,11 @@ sub NeedsAdminMFS($)
 #
 # Spectrum stuff.
 #
-sub AddSpectrum($$;$$)
+sub AddSpectrum($$;$$$)
 {
-    my ($self, $spectrum, $iface, $purge) = @_;
+    my ($self, $spectrum, $iface, $purge, $isrdz) = @_;
     $purge = 0 if (!defined($purge));
+    $isrdz = 0 if (!defined($isrdz));
     my $node_id = $self->node_id();
     my @ifaces = ();
     require EmulabConstants;
@@ -5050,7 +5051,7 @@ sub AddSpectrum($$;$$)
 				 "  node_id='$node_id', iface='$iface_id', ".
 				 "  freq_low=$frequency_low, ".
 				 "  freq_high=$frequency_high, ".
-				 "  power=$power"));
+				 "  power=$power, isrdz=$isrdz"));
 	}
     }
     return 0;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2025 University of Utah and the Flux Group.
+# Copyright (c) 2008-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -2919,8 +2919,11 @@ sub UpdateSpectrum($)
 	}
     }
     foreach my $node (@nodes) {
+	# XXX right now only RDZ experiment use this method
+	my $isrdz = 1;
+
 	# Purge existing limits
-	if ($node->AddSpectrum($spectrum, undef, 1)) {
+	if ($node->AddSpectrum($spectrum, undef, 1, $isrdz)) {
 	    print STDERR "Failed to update spectrum on $node\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Could not update spectrun on $node");

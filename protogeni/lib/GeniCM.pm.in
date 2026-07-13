@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2025 University of Utah and the Flux Group.
+# Copyright (c) 2008-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -5349,6 +5349,14 @@ sub SliverWorkAux($)
     }
 
     DebugTimeStamp("Creating node slivers");
+
+    #
+    # See if this is an RDZ experiment
+    #
+    my $ref = GeniXML::FindNodesNS("n:rdz-request", $rspec,
+				   $GeniXML::EMULAB_NS)->pop();
+    my $isrdz = defined($ref) ? 1 : 0;
+
     #
     # Now for each resource (okay, node) in the ticket create a sliver and
     # add it to the aggregate.
@@ -5444,7 +5452,7 @@ sub SliverWorkAux($)
 	# And the global spectrum
 	#
 	if (@$global_spectrum) {
-	    if ($node->AddSpectrum($global_spectrum)) {
+	    if ($node->AddSpectrum($global_spectrum, undef, 0, $isrdz)) {
 		$message = "Could not add global spectrum to $virtual_id";
 		goto bad;
 	    }
@@ -5454,7 +5462,7 @@ sub SliverWorkAux($)
 	#
 	my $spectrum = GeniXML::GetSpectrum($ref);
 	if (@$spectrum) {
-	    if ($node->AddSpectrum($spectrum)) {
+	    if ($node->AddSpectrum($spectrum, undef, 0, $isrdz)) {
 		$message = "Could not add spectrum to $virtual_id";
 		goto bad;
 	    }
@@ -5474,7 +5482,7 @@ sub SliverWorkAux($)
 			"spectrum on $virtual_id";
 		    goto bad;
 		}
-		if ($node->AddSpectrum($spectrum, $interface)) {
+		if ($node->AddSpectrum($spectrum, $interface, 0, $isrdz)) {
 		    $message = "Could not add interface spectrum to ".
 			"$virtual_id:$component_id";
 		    goto bad;
