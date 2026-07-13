@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,6 +87,10 @@ $(INSTALL_WWWDIR)/rfmonitor/listing.php: listing.php
 rfmonitor-subdir:
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
+ifeq ($(ISMAINSITE),0)
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor.local
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor.local/archive
+endif
 
 mainsite-install: $(INSTALL_DIR)/opsdir/sbin/rfbaseline
 	$(INSTALL_DATA) $(SRCDIR)/rfbaseline.json \
