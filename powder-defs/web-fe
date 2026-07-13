@@ -50,10 +50,10 @@ CVSSUPPORT=0
 NFSTRACESUPPORT=0
 ARCHIVESUPPORT=0
 NTPSERVER=ntp1.emulab.net
-EXTERNAL_NTPSERVER1=ntp1.emulab.net
-EXTERNAL_NTPSERVER2=ntp1.emulab.net
-EXTERNAL_NTPSERVER3=ntp1.emulab.net
-EXTERNAL_NTPSERVER4=ntp1.emulab.net
+#EXTERNAL_NTPSERVER1=ntp1.emulab.net
+#EXTERNAL_NTPSERVER2=ntp1.emulab.net
+#EXTERNAL_NTPSERVER3=ntp1.emulab.net
+#EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
@@ -123,7 +123,7 @@ ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=0
 # This will default to /.amd_mnt/ops in configure
-AMD_ROOT=""""
+AMD_ROOT=""
 
 # Which console to use in the MFS. We need to set this for GeniRacks.
 NODECONSOLE="sio"
@@ -166,5 +166,7 @@ POWDER_DEADMAN=1
 POWDER_WBSTORE=1
 
 ZFS_QUOTA_PROJECT="10G"
+
 POWDER_NICKNAME="WEB"
+
 # End of Emulab added section
