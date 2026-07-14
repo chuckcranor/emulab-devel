@@ -1,10 +1,14 @@
-#!/bin/sh
-
+#!/usr/local/bin/bash
 #
-# XXX this should be obsolete now, use portal-restapi-wrapper instead.
+# Bash wrapper script to start up the API server in a venv.
 #
 
-TBROOT="/usr/testbed"
+if [ -z "$BASH_VERSION" ]; then
+    echo "Must run with bash"
+    exit 1
+fi
+
+TBROOT=@prefix@
 APIPATH="$TBROOT/portal-rest"
 GUNICORN="$TBROOT/portal-rest/venv/bin/gunicorn"
 UVICORN="$TBROOT/portal-rest/venv/bin/uvicorn"
@@ -26,13 +30,26 @@ PORT=43794
 WORKERS=1
 LOGARGS="--log-file $LOGFILE --capture-output"
 
+if [ ! -d "$APIPATH/venv" ]; then
+    echo "portal-restapi: $APIPATH/ven does not exist!"
+    exit 1
+fi
+if [ -r $PIDFILE ]; then
+    echo "portal-restapi: Already running ($PIDFILE)"
+    exit 1
+fi
+
+cd $APIPATH
+source venv/bin/activate
+
 sudo $GUNICORN -w $WORKERS -b ${ADDRESS}:${PORT} --pid $PIDFILE \
 	  --worker-class uvicorn.workers.UvicornWorker \
 	  --user $USER --group $GROUP \
 	  --log-level debug --name portal-rest \
 	  --keyfile $KEYFILE --certfile $CERTFILE --ca-certs $CAFILE \
 	  $LOGARGS \
-	  app.main:app
+	  app.main:app &
 
-exit $?
+sleep 2
+exit 0
 

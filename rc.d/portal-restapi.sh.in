@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# Start up the Portal REST API server.
+#
+
+# PROVIDE: powder_restapi
+# REQUIRE: NETWORKING mysql-testbed testbed
+# KEYWORD: shutdown
+
+TBROOT="@prefix@"
+MAINSITE="@TBMAINSITE@"
+apiserver=$TBROOT/sbin/portal-restapi-wrapper
+pidfile=/var/run/portal-rest.pid
+
+if [ $MAINSITE == "0" ]; then
+    exit 0
+fi
+
+case "$1" in
+    start|faststart|quietstart|onestart|forcestart)
+	if [ -x $apiserver ]; then
+	    $apiserver
+	    echo -n " portal-restapi";
+	fi
+	;;
+    stop|faststop|quietstop|onestop|forcestop)
+	if [ -r $pidfile ]; then
+	    kill `cat $pidfile`
+	fi
+	;;
+    *)
+	echo ""
+	echo "Usage: `basename $0` { start | stop }"
+	echo ""
+	exit 64
+	;;
+esac
+exit 0

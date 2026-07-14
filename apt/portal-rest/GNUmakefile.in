@@ -37,12 +37,13 @@ FILES		= config.py database.py __init__.py dependencies.py main.py \
 		  pyproject.toml AccessCheck.py WebTask.py
 MODELFILE       = api/models.py
 ROUTERS         = version.py experiments.py resgroups.py profiles.py tokens.py
+SBIN_SCRIPTS	= portal-restapi-wrapper
 
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(FILES) $(MODELFILE) $(addprefix routers/, $(ROUTERS))
+all:	$(FILES) $(MODELFILE) $(addprefix routers/, $(ROUTERS)) $(SBIN_SCRIPTS)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -50,7 +51,8 @@ install: all install-mkdirs \
 	$(addprefix $(INSTALL_RESTDIR)/, $(FILES)) \
 	$(INSTALL_RESTDIR)/$(MODELFILE) \
 	$(INSTALL_RESTDIR)/routers/__init__.py \
-	$(addprefix $(INSTALL_RESTDIR)/routers/, $(ROUTERS))
+	$(addprefix $(INSTALL_RESTDIR)/routers/, $(ROUTERS)) \
+	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS))
 
 install-mkdirs:
 	-mkdir -p $(INSTALL_RESTDIR)
@@ -66,6 +68,15 @@ fs-install:
 tipserv-install:
 
 clrhouse-install:
+
+diff:
+	@for f in $(FILES); do \
+	    echo "$${f}: ====="; diff $(SRCDIR)/$$f $(INSTALL_RESTDIR)/; echo "====="; \
+	done
+	@echo "api/models.py: ====="; diff $(SRCDIR)/api/models.py $(INSTALL_RESTDIR)/api; echo "=====";
+	@for f in $(ROUTERS); do \
+	    echo "routers/$${f}: ====="; diff $(SRCDIR)/routers/$$f $(INSTALL_RESTDIR)/routers; echo "====="; \
+	done
 
 clean:
 
