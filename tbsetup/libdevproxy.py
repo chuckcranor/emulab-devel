@@ -11,6 +11,7 @@ import time
 import logging
 import re
 import subprocess
+from abc import ABC, abstractmethod
 from paramiko.client import SSHClient, AutoAddPolicy
 
 ##############################################################################
@@ -18,8 +19,10 @@ from paramiko.client import SSHClient, AutoAddPolicy
 # Class with various handy utility functions
 #
 class Utilities(object):
-    @classmethod
-    def mk_logger(klass, name, log_level = logging.INFO):
+    WAIT_PING_SLEEP=2
+
+    @staticmethod
+    def mk_logger(name, log_level = logging.INFO):
         lgr = logging.getLogger(name)
         lgr.setLevel(log_level)
         ch = logging.StreamHandler()
@@ -28,9 +31,8 @@ class Utilities(object):
         lgr.addHandler(ch)
         return lgr
 
-    @classmethod
-    def ping(klass, host, count=1):
-        #arg = "-n" if sys.platform.lower() in ('windows', 'cygwin') else "-c"
+    @staticmethod
+    def ping(host, count=2):
         ping = None
         ping_paths = ("/sbin/ping", "/bin/ping", "/usr/bin/ping")
         for path in ping_paths:
@@ -41,8 +43,19 @@ class Utilities(object):
         cmd = [ping, "-c", str(count), host]
         return subprocess.run(cmd, capture_output=True).returncode
 
-    @classmethod
-    def whoami(klass, obj):
+    @staticmethod
+    def wait_for_ping(host, timeout, invert = False):
+        stime = time.time()
+        while time.time() <= stime + timeout:
+            res = Utilities.ping(host)
+            if (not invert and res == 0) or (invert and res > 0):
+                return
+            time.sleep(Utilities.WAIT_PING_SLEEP)
+        raise TimeoutError(
+            "Utilities.wait_for_ping(): Timed out waiting for ping result!")
+
+    @staticmethod
+    def whoami(obj):
         klass = obj.__class__.__name__
         func = sys._getframe(1).f_code.co_name
         return f"{klass}.{func}()"
@@ -50,9 +63,9 @@ class Utilities(object):
 
 ##############################################################################
 #
-# Generic Device configuration class (meant to be inherited)
+# Generic Device configuration abstract class (must be inherited).
 #
-class DeviceConfig(object):
+class DeviceConfig(ABC):
     DEFAULT_SETTINGS = {
         'example_ranges': {
             'def': 100.3,
@@ -304,16 +317,15 @@ class SSHWrapper(object):
 
 ##############################################################################
 #
-# Generic SSH Device Wrapper class
+# Device Wrapper abstract class. Uses SSHWrapper functionality.
 #
-class DeviceWrapper(object):
+class DeviceWrapper(ABC):
     DEF_LOG_LEVEL = logging.INFO
     DEF_USER = "root"
     DEF_PASSWD = ""
     DEF_PING_TIMEOUT = 5
     DEF_SHUTDOWN_TIME = 30
     DEF_RADIO_ONLINE_TIMEOUT = 300
-    WAIT_PING_SLEEP = 1
     FW_VERSION_FILE = "/etc/version"
     FW_VERSION_UNKNOWN = "*UNKNOWN-FW-VERSION*"
     HW_MODEL_UNKNOWN = "*UNKNOWN-HW-TYPE*"
@@ -326,12 +338,14 @@ class DeviceWrapper(object):
         self.lgr = Utilities.mk_logger(self.__class__.__name__, log_level)
         self._hardware = self.HW_MODEL_UNKNOWN
         self._fwversion = self.FW_VERSION_UNKNOWN
+        self._username = username
+        self._keyfile = keyfile
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile, log_level = log_level)
 
-    def connect_session(self, password = DEF_PASSWD, retries = 0,
+    def connect_session(self, password = DEF_PASSWD,
                         ping_timeout = DEF_PING_TIMEOUT):
-        self.wait_for_ping(timeout = ping_timeout)
+        Utilities.wait_for_ping(self.addr, ping_timeout)
         self._ssh.connect(password = password)
         try:
             contents = self._ssh.read_remote_file(self.FW_VERSION_FILE)
@@ -358,30 +372,23 @@ class DeviceWrapper(object):
     def get_hardware_string(self):
         return self._hardware
 
-    def wait_for_ping(self, timeout = DEF_PING_TIMEOUT, invert = False):
-        stime = time.time()
-        while time.time() <= stime + timeout:
-            res = Utilities.ping(self.addr)
-            if (not invert and res == 0) or (invert and res > 0):
-                return
-            time.sleep(self.WAIT_PING_SLEEP)
-        raise TimeoutError(
-            f"{Utilities.whoami(self)}: Timed out waiting for ping result.")
-
     def reboot(self, pingwait=True):
         self.get_session().exec("reboot")
         if pingwait:
-            self.wait_for_ping(self.DEF_SHUTDOWN_TIME, invert=True)
+            Utilities.wait_for_ping(self.addr, self.DEF_SHUTDOWN_TIME,
+                                    invert=True)
         self.close_session()
         self.lgr.info("Device rebooted.")
 
     def wait_for_radio_online(self, timeout = DEF_BOOT_TIMEOUT):
         stime = time.time()
-        self.wait_for_ping(timeout)
+        Utilities.wait_for_ping(self.addr, timeout)
         self.lgr.info("Device pings.")
 
+    @abstractmethod
     def fetch_settings(self):
         raise RuntimeError("Child class did not define 'fetch_settings()'?!")
 
+    @abstractmethod
     def push_settings(self):
         raise RuntimeError("Child class did not define 'push_settings()'?!")

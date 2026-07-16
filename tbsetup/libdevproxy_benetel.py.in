@@ -206,9 +206,9 @@ class BenetelWrapper(DeviceWrapper):
                  log_level = DEF_LOG_LEVEL):
         super().__init__(mgmt_addr, username, keyfile, log_level)
 
-    def connect_session(self, password = DEF_PASSWD, retries = 0,
+    def connect_session(self, password = DEF_PASSWD,
                         ping_timeout = DEF_PING_TIMEOUT):
-        super().connect_session(password, retries, ping_timeout)
+        super().connect_session(password, ping_timeout)
         self._parse_fwversion(self._fwversion)
 
     def _parse_fwversion(self, fwstr):
@@ -226,7 +226,7 @@ class BenetelWrapper(DeviceWrapper):
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
         res = []
         stime = time.time()
-        self.wait_for_ping(self.DEF_BOOT_TIMEOUT)
+        Utilities.wait_for_ping(self.addr, self.DEF_BOOT_TIMEOUT)
         self.lgr.info("Device pings. Waiting for radio.")
         while time.time() <= stime + timeout:
             try:

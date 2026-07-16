@@ -14,23 +14,175 @@ import logging
 import re
 import sys
 import time
-import xml.etree.ElementTree as ET
-from functools import wraps
-from pexpect import fdpexpect
+from lxml import etree
+from abc import ABC, abstractmethod
+from ncclient import manager
 
 sys.path.append("@prefix@/lib")
 from libdevproxy import Utilities, DeviceConfig, DeviceWrapper
 
-def run_once(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if not wrapper.has_run:
-            wrapper.has_run = True
-            return f(*args, **kwargs)
-        # Optional: Add a print message or log here if needed
-    wrapper.has_run = False
-    return wrapper
+##############################################################################
+#
+# classes for individual M-Plane config elements
+#
+class MPlaneDefs(object):
+    NS_DEFAULT = "urn:ietf:params:xml:ns:netconf:base:1.0"
+    NS_PROCELT = "urn:o-ran:processing-element:1.0"
+    NS_UPCONF  = "urn:o-ran:uplane-conf:1.0"
+    NS_INTERFACES = "urn:ietf:params:xml:ns:yang:ietf-interfaces"
+    NS_ORANIFACES = "urn:o-ran:interfaces:1.0"
+    NS_IFTYPE = "urn:ietf:params:xml:ns:yang:iana-if-type"
+    NS_IFIP = "urn:ietf:params:xml:ns:yang:ietf-ip"
 
+# This function will only run once, no matter how many times this module
+# is imported.
+def _init_xml():
+    if not hasattr(_init_xml, "has_run"):
+        #etree.register_namespace(None, MPlaneDefs.NS_DEFAULT)
+        etree.register_namespace('procelt', MPlaneDefs.NS_PROCELT)
+        etree.register_namespace('upconf', MPlaneDefs.NS_UPCONF)
+        etree.register_namespace('interfaces', MPlaneDefs.NS_INTERFACES)
+        etree.register_namespace('ifref', MPlaneDefs.NS_ORANIFACES)
+        etree.register_namespace('iftype', MPlaneDefs.NS_IFTYPE)
+        etree.register_namespace('ifip', MPlaneDefs.NS_IFIP)
+    _init_xml.has_run = True
+_init_xml()
+
+# Abstract class for all MPlane configuration objects.
+class MPlaneObject(ABC):
+    @abstractmethod
+    def generate_xml(self):
+        raise RuntimeError("Child class must implement this method!")
+
+    def pretty_print(self):
+        print(etree.tostring(self.generate_xml(), encoding=str, pretty_print=True))
+
+class MPlaneInterface(MPlaneObject):
+    def __init__(self, xmlobj):
+        self.name = xmlobj.find(f"{{{MPlaneDefs.NS_INTERFACES}}}name").text
+        self.iftype = xmlobj.find(f"{{{MPlaneDefs.NS_INTERFACES}}}type").text.split(':')[1]
+        enabled = xmlobj.find(f"{{{MPlaneDefs.NS_INTERFACES}}}enabled").text
+        self.enabled = True if enabled.lower() == 'true' else False
+        ip = xmlobj.find(f".//{{{MPlaneDefs.NS_IFIP}}}ip")
+        self.ipaddr = ip.text if ip is not None else None
+        netmask = xmlobj.find(f".//{{{MPlaneDefs.NS_IFIP}}}netmask")
+        self.netmask = netmask.text if netmask is not None else None
+        self.mac = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}mac-address").text
+        baseif = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}base-interface")
+        self.baseif = baseif.text if baseif is not None else None
+        vlanid = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}vlan-id")
+        self.vlanid = vlanid.text if vlanid is not None else None
+        mtu = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}l2-mtu")
+        self.mtu = int(mtu.text) if mtu is not None else None
+        pref = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}port-reference")
+        self.port_name = pref.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}port-name").text if pref is not None else None
+        self.port_num = int(pref.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}port-number").text) if pref is not None else None
+
+    def generate_xml(self):
+        ifelt = etree.Element(f"{{{MPlaneDefs.NS_INTERFACES}}}interface")
+        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_INTERFACES}}}name").text = self.name
+        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_INTERFACES}}}type", nsmap={"iftype": MPlaneDefs.NS_IFTYPE}).text = f"iftype:{self.iftype}"
+        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_INTERFACES}}}enabled").text = str(self.enabled).lower()
+        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}mac-address").text = self.mac
+        if self.ipaddr is not None and self.netmask is not None:
+            ipv4elt = etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_IFIP}}}ipv4")
+            etree.SubElement(ipv4elt, f"{{{MPlaneDefs.NS_IFIP}}}enabled").text = "true"
+            addrelt = etree.SubElement(ipv4elt, f"{{{MPlaneDefs.NS_IFIP}}}address")
+            etree.SubElement(addrelt, f"{{{MPlaneDefs.NS_IFIP}}}ip").text = self.ipaddr
+            etree.SubElement(addrelt, f"{{{MPlaneDefs.NS_IFIP}}}netmask").text = self.netmask
+        if self.mtu is not None:
+            etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}l2-mtu").text = str(self.mtu)
+        if self.baseif is not None:
+            etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}base-interface").text = self.baseif
+        if self.vlanid is not None:
+            etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}vlan-id").text = self.vlanid
+        if self.port_name is not None and self.port_num is not None:
+            prefelt = etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}port-reference")
+            etree.SubElement(prefelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}port-name").text = self.port_name
+            etree.SubElement(prefelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}port-number").text = str(self.port_num)
+        return ifelt
+
+class MPlaneProcessingElements(MPlaneObject):
+    def __init__(self, xmlobj):
+        self.name = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}name").text
+        self.ifname = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}interface-name").text
+        self.rumac = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}ru-mac-address").text
+        self.dumac = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}o-du-mac-address").text
+        self.vlanid = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}vlan-id").text
+
+    def generate_xml(self):
+        pelt = etree.Element(f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
+        etree.SubElement(pelt, f"{{{MPlaneDefs.NS_PROCELT}}}transport-session-type").text = "ETH-INTERFACE"
+        ruelt = etree.SubElement(pelt, f"{{{MPlaneDefs.NS_PROCELT}}}ru-elements")
+        etree.SubElement(ruelt, f"{{{MPlaneDefs.NS_PROCELT}}}name").text = self.name
+        tfelt = etree.SubElement(ruelt, f"{{{MPlaneDefs.NS_PROCELT}}}transport-flow")
+        etree.SubElement(tfelt, f"{{{MPlaneDefs.NS_PROCELT}}}interface-name").text = self.ifname
+        ethelt = etree.SubElement(tfelt, f"{{{MPlaneDefs.NS_PROCELT}}}eth-flow")
+        etree.SubElement(ethelt, f"{{{MPlaneDefs.NS_PROCELT}}}ru-mac-address").text = self.rumac
+        etree.SubElement(ethelt, f"{{{MPlaneDefs.NS_PROCELT}}}o-du-mac-address").text = self.dumac
+        etree.SubElement(ethelt, f"{{{MPlaneDefs.NS_PROCELT}}}vlan-id").text = self.vlanid
+        return pelt
+
+class MPlaneLLTXLink(MPlaneObject):
+    def __init__(self, xmlobj):
+        self.name = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}name").text
+        self.proc_elt = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}processing-element").text
+        self.arr_carr = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}tx-array-carrier").text
+        self.endpoint = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-endpoint").text
+
+    def generate_xml(self):
+        lltxelt = etree.Element(f"{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-links")
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}name").text = self.name
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}processing-element").text = self.proc_elt
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}tx-array-carrier").text = self.arr_carr
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-endpoint").text = self.endpoint
+        return lltxelt
+
+class MPlaneLLRXLink(MPlaneObject):
+    def __init__(self, xmlobj):
+        self.name = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}name").text
+        self.proc_elt = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}processing-element").text
+        self.arr_carr = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}rx-array-carrier").text
+        self.endpoint = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}low-level-rx-endpoint").text
+
+    def generate_xml(self):
+        llrxelt = etree.Element(f"{{{MPlaneDefs.NS_UPCONF}}}low-level-rx-links")
+        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}name").text = self.name
+        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}processing-element").text = self.proc_elt
+        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}rx-array-carrier").text = self.arr_carr
+        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}low-level-rx-endpoint").text = self.endpoint
+        return llrxelt
+
+class MPlaneLLTXEndpoint(MPlaneObject):
+    def __init__(self, xmlobj):
+        self.name = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}name").text
+        self.bitwidth = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}iq-bitwidth").text)
+        self.cmp_type = xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}compression-type").text
+        self.fs_off = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}fs-offset").text)
+        self.cp_len = int(xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}cp-length").text)
+        self.cp_len_other = int(xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}cp-length-other").text)
+        self.abs_off = int(xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}offset-to-absolute-frequencty-center").text)
+        self.prb_scs = xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}scs").text
+        self.num_prb = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}number-of-prb").text)
+        self.eaxcid_du_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}o-du-port-bitmask").text)
+        self.eaxcid_bs_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}band-sector-bitmask").text)
+        self.eaxcid_ccid_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}ccid-bitmask").text)
+        self.eaxcid_ru_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}ru-port-bitmask").text)
+        self.eaxcid_id = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}eaxc-id").text)
+
+    def generate_xml(self):
+        lltxelt = etree.Element(f"{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-endpoints")
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}name").text = self.name
+        cmpelt = etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}compression")
+        etree.SubElement(cmpelt, f"{{{MPlaneDefs.NS_UPCONF}}}iq-bitwidth").text = str(self.bitwidth)
+        etree.SubElement(cmpelt, f"{{{MPlaneDefs.NS_UPCONF}}}compression-type").text = self.cmp_type
+        etree.SubElement(cmpelt, f"{{{MPlaneDefs.NS_UPCONF}}}fs-offset").text = str(self.fs_off)
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}cp-length").text = str(self.cp_len)
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}cp-length-other").text = str(self.cp_len_other)
+        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}offset-to-absolute-frequency-center").text = str(self.abs_off)
+        # TODO: finish
+        return lltxelt
+        
 ##############################################################################
 #
 # VVDN O-RU M-Plane session (over SSHWrapper connection)
@@ -38,66 +190,50 @@ def run_once(f):
 class VVDNMPlaneSession(object):
     DEF_MPLANE_USER = DEF_MPLANE_PASS = "oranuser"
     DEF_LOG_LEVEL = logging.INFO
-    DEFAULT_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
-    PROCELT_NS = "urn:o-ran:processing-element:1.0"
-    UPCONF_NS  = "urn:o-ran:uplane-conf:1.0"
-    INTERFACES_NS = "urn:ietf:params:xml:ns:yang:ietf-interfaces"
-    INTFREF_NS = "urn:o-ran:interfaces:1.0"
-    INTFTYP_NS = "urn:ietf:params:xml:ns:yang:iana-if-type"
-    NETCONF_CLI = "/usr/bin/netopeer2-cli"
+    DEF_PING_TIMEOUT = DeviceWrapper.DEF_PING_TIMEOUT
 
-    def __init__(self, ssh_obj, log_level = DEF_LOG_LEVEL):
+    def __init__(self, mgmt_addr, username=DEF_MPLANE_USER,
+                 log_level = DEF_LOG_LEVEL):
         self.lgr = Utilities.mk_logger(self.__class__.__name__, log_level)
-        self._ssh = ssh_obj
-        stdin, stdout, stderr = ssh_obj.exec(self.NETCONF_CLI,
-                                             interactive = True)
-        self._in = stdin
-        self._out = stdout
-        self._err = stderr
+        self._addr = mgmt_addr
+        self._user = username
+        self._mgr = None
         self._connected = False
-        self._init_xml()
+        self._config = None
 
-    @run_once
-    def _init_xml(self):
-        ET.register_namespace('', self.DEFAULT_NS)
-        ET.register_namespace('procelt', self.PROCELT_NS)
-        ET.register_namespace('upconf', self.UPCONF_NS)
-        ET.register_namespace('interfaces', self.INTERFACES_NS)
-        ET.register_namespace('intfref', self.INTFREF_NS)
-        ET.register_namespace('intftyp', self.INTFTYP_NS)
+    def connect_session(self, password=DEF_MPLANE_PASS,
+                        ping_timeout=DEF_PING_TIMEOUT):
+        Utilities.wait_for_ping(self._addr, ping_timeout)
+        self._mgr = manager.connect_ssh(
+            self._addr, username=self._user, password=password,
+            hostkey_verify=False)
+        self.lgr.info(f"M-Plane session established with {self._addr}, "
+                      f"session ID {self._mgr.session_id}")
+        self._connected = True
 
-    def connect_session(self, user=DEF_MPLANE_USER, password=DEF_MPLANE_PASS):
-        # Prototype code... Must rewrite! No error handling...
-        if not self._connected:
-            self._ex = fdpexpect.fdspawn(self._out.channel)
-            self._ex.sendline("")
-            self._ex.expect(">")
-            self._ex.sendline(f"connect --login {user}")
-            self._ex.expect("password:")
-            self._ex.sendline(password)
-            self._ex.expect(">")
-            self.lgr.info("M-Plane Netconf connection established.")
-            self._connected = True
-        return self._ex
+    def is_connected(self):
+        return self._connected
 
-    def get_config(self):
-        # Prototype code... Must rewrite! No error handling...
-        TMPXMLPATH = "/tmp/tmprpc.xml"
-        OUTXMLPATH = "/tmp/rpcout.xml"
-        root = ET.Element(f"{{{self.DEFAULT_NS}}}get-config")
-        src = ET.SubElement(root, "source")
-        ET.SubElement(src, "running")
-        tree = ET.ElementTree(root)
-        self._ssh.write_remote_file(
-            TMPXMLPATH, ET.tostring(root, encoding="unicode"), overwrite=True)
-        ex = self.connect_session()
-        print("", file=self._in)
-        ex.expect(">")
-        print(f"usr-rpc --content {TMPXMLPATH} --out {OUTXMLPATH}",
-              file=self._in)
-        ex.expect(">")
-        return self._ssh.read_remote_file(OUTXMLPATH)
+    def get_session(self):
+        if not self._mgr:
+            self.connect_session()
+        return self._mgr
 
+    def get_config(self, refresh = False):
+        if refresh or self._config is None:
+            self._config = self.get_session().get_config(source="running").data
+        return self._config
+
+    def get_interfaces(self):
+        ifaces = self.get_config().find(f"{{{MPlaneDefs.NS_INTERFACES}}}interfaces")
+        rvals = []
+        for iface in ifaces:
+            rvals.append(MPlaneInterface(iface))
+        return rvals
+
+    def get_processing_elements(self):
+        procelts = self.get_config().find(f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
+        return MPlaneProcessingElements(procelts)
 
 ##############################################################################
 #
@@ -162,8 +298,8 @@ class VVDNConfig_MPRU_b78(DeviceConfig):
 #
 class VVDNWrapper(DeviceWrapper):
     DEF_LOG_LEVEL = logging.INFO
-    DEF_USER = "root"
-    DEF_PASSWD = ""
+    DEF_USER = "oranuser"
+    DEF_PASSWD = "oranuser"
     DEF_PING_TIMEOUT = 5
     DEF_BOOT_TIMEOUT = 120
     DEF_SHUTDOWN_TIME = 30
@@ -171,30 +307,34 @@ class VVDNWrapper(DeviceWrapper):
     WAIT_LOG_SLEEP = 1
     FW_VERSION_UNKNOWN = "YYYYMMDDHHMMSS"
     FW_VERSION_FILE = "/etc/version"
-    RADIO_CONFIG_MAP = {
-        'mimo_mode': 'mimo_mode',
-        'downlink_scaling': 'downlink_scaling',
-        'prach_format': 'prach_format',
-        'compression': 'compression',
-        'lf_prach_compression_enable': 'lf_prach_compression_enable',
-        'flexran_prach_workaround': 'flexran_prach_workaround',
-        'bandwidth_hz': 'bandwidth',
-        'centre_frequency_hz': 'center_frequency',
-        'tx_power_dbm': 'gain',
-        'c_plane_du_mac': 'du_cplane_mac',
-        'u_plane_du_mac': 'du_uplane_mac',
-        'c_plane_du_vlan': 'fh_cplane_vlan',
-        'u_plane_du_vlan_downlink': 'fh_uplane_vlan',
-        'u_plane_du_vlan_uplink': 'fh_uplane_vlan'
-    }
 
     def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
                  log_level = DEF_LOG_LEVEL):
         super().__init__(mgmt_addr, username, keyfile, log_level)
-        self._mpsess = None
+        self._mpsess = VVDNMPlaneSession(
+            mgmt_addr, username, log_level=log_level)
 
-    def _get_mplane_session(self):
-        if not self._mpsess:
-            self._mpsess = VVDNMPlaneSession(
-                self.get_session(), log_level = self.lgr.level)
+    def connect_session(self, password = DEF_PASSWD, connect_ssh = False,
+                        ping_timeout = DEF_PING_TIMEOUT):
+        if connect_ssh:
+            super().connect_session(password, ping_timeout)
+        self._mpsess.connect_session(password, ping_timeout)
+
+    def get_session(self):
+        raise RuntimeError(
+            f"{Utilities.whoami(self)}: Do not call this method! It is "
+            "ambiguous in this class since multiple sessions exist.")
+
+    def get_ssh_session(self):
+        return super().get_session()
+
+    def get_mplane_session(self):
+        if not self._mpsess.is_connected():
+            self.connect_session()
         return self._mpsess
+
+    def fetch_settings(self):
+        pass
+
+    def push_settings(self):
+        pass

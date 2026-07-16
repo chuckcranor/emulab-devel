@@ -108,7 +108,7 @@ def parse_args():
 def main():
     args = parse_args()
     loglvl = logging.ERROR if args.quiet else logging.INFO
-    lgr = Utilities.mk_logger("beneshell", loglvl)
+    lgr = Utilities.mk_logger("orucle", loglvl)
     wrapper = get_wrapper(args, loglvl)
     try:
         connect(args, wrapper)
