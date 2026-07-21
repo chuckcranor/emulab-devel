@@ -5,33 +5,59 @@ Note that if the boss VM is not running, start it.
 Log into the control node and copy the rfmonitor config
 to Mothership boss and put it in ~stoller/powder/systems/XXX
 
-	control> scp /etc/rfmonitor/device_config.json boss.emulab.net:
+    control> scp /etc/rfmonitor/device_config.json \
+	boss.emulab.net:/home/stoller/powder/systems/XXX/rfmon.json
 
 On the boss, grab interfaces info and copy to Mothership boss and put
 it in ~stoller/powder/systems/XXX
 
-	boss> echo 'select node_id,iface,role,ip,mac from interfaces;' | mysql -t tbdb > /tmp/iface.txt
-	boss> scp /tmp/iface.txt boss.emulab.net: 
+    boss> echo 'select node_id,iface,role,ip,mac from interfaces;' | \
+	mysql -t tbdb > /tmp/iface.txt
+    boss> scp /tmp/iface.txt boss.emulab.net:/home/stoller/powder/systems/XXX/
 
 Grab a copy of the DB and copy to Mothership boss and put it in
 ~stoller/powder/systems/XXX
 
-	boss> mysqldump --skip-opt tbdb | gzip > /tmp/tbdb.sql.gz
-	boss> scp /tmp/tbdb.sql.gz boss.emulab.net:
+    boss> mysqldump --skip-opt tbdb | gzip > /tmp/tbdb.sql.gz
+    boss> scp /tmp/tbdb.sql.gz boss.emulab.net:/home/stoller/powder/systems/XXX/
+
+If you want to retain the older RF monitor files, capture them now as well:
+
+    boss> cd /usr/testbed/www
+    boss> sudo tar czf /tmp/rfmonitor.tar.gz rfmonitor
+    boss> scp /tmp/rfmonitor.tar.gz boss.emulab.net:/home/stoller/powder/systems/XXX/
 
 Now use the interfaces info to update the files in ~stoller/powder/systems/XXX
+(currently only nodes.txt gets updated for the ed1 node ctrl/mgmt MACs).
 If the node.txt is space delimited, needs to be fixed up. Look at one of the
 other buses.
 
 Before removing the old disk from the endpoint
 
-        msboss> manage_aggregate EBC chflag admin yes
+    msboss> manage_aggregate EBC chflag admin yes
 
 Before starting the elabinelab:
 
-	msboss> sudo /usr/testbed/sbin/protogeni/cacontrol -R -r boss.<aggregate>.powderwireless.net
+    msboss> sudo /usr/testbed/sbin/protogeni/cacontrol -R -r boss.<aggregate>.powderwireless.net
 
-And update the ns file for experiment elab-febuild (or elab-mebuild2).
+Now you can handle the machinations associated with reading the disk (NVMe)
+for reload. What I have been doing is saving the old disk (that you just got
+info off of) and using one of the old disk from a bus you have previously
+upgraded, preferably one that has booted from its new disk and is running
+with no problems.
+
+Once you have the new target disk, switch nuc20 back into UEFI BIOS mode
+and boot it into the admin MFS. Then I completely erase the disk with:
+
+    /usr/sbin/zapdisk64 -EZ /dev/nvme0n1
+
+The console will show some abort errors, but those don't seem to indicate
+any real issue. You can run the zapdisk64 again if you are concerned.
+
+Now you can free nuc20 from whatever experiment it is in, to run through
+reloading and get it free once more.
+
+Now update the ns file for experiment elab-febuild (or elab-mebuild2).
 You need to change:
 
 	CONFIG_NICKNAME (.defs files POWDER_NICKNAME value)
@@ -48,61 +74,114 @@ You need to change:
 
 Fire up the elabinelab.
 
+[
+HACK HACK! Until the Xen 4.16 image is updated, you will have to manually
+intervene as the FBSD135-64-STD boss VM is booting. During the initial boot,
+it will stop at the "mountroot> " prompt because we have the wrong root
+device. You have to catch this within a couple of minutes of it happening
+or else `stated` will declare failure and the swapin will fail. To catch
+this prompt, you have to wait til nuc20 has been reloaded with Xen and
+starts to setup the boss VM. I usually do this by logging into nuc20 when
+it comes up and monitoring the setup of the VM:
+
+    tail -f /var/emulab/logs/tbvnode-nucvm20-1.log
+
+It will run frisbee twice, once to download the FBSD image, the other to
+create a "golden image" from that. After that second frisbee, I start
+watching for the VM console to become functional. From boss (not the node!)
+do:
+
+    wap console nucvm20-1
+
+and keep repeating every few seconds til it stops complaining about
+"Could not find tipserver info for nucvm20-1" and connects. Then you will
+see the VM booting. Once it stops at the mountroot prompt you type:
+
+    ufs:/dev/da0p3
+
+and it should continue booting. But the horror show is not over yet.
+
+After the VM comes up you can ssh in from boss as root and start watching
+the /etc/fstab file. You will see that the root device is "ada0" when it
+should be "da0", but you cannot change it too soon or it will get
+overwritten! Wait til:
+
+  # the following extra FS device added by /usr/local/etc/emulab/mkextrafs.pl
+  /dev/da2p1 /usr/testbed ufs rw 0 2
+
+gets added and then you can do:
+
+    ed /etc/fstab
+    2s/ada/da
+    w
+    q
+
+Eventually, a third line gets added, but you must do it before that lines
+is added.
+
+We now return you to your regularly scheduled setup instructions...
+]
+
 Once the VMs are ready, copy the directory mentioned above over to the
 inner boss as /usr/testbed/etc/targetsys. Do NOT put this stuff on the
 inner ops!
 
-	msboss> sudo scp -rp ~stoller/powder/systems/XXX
-	         	pcvmXXX-1:/usr/testbed/etc/targetsys
+    msboss> sudo scp -rp ~stoller/powder/systems/XXX \
+	nucvm20-1:/usr/testbed/etc/targetsys/
 
 Sync the apt package mirror. You need the msboss elabman ssh key in your agent. 
 
-	msboss> ~/testbed/testbed/install/powder-fixed/syncmirror.sh pcvmXXX-1
+    msboss> ~stoller/testbed/testbed/install/powder-fixed/syncmirror.sh \
+	nucvm20-1
 
 Now we convert the VMs for boot in the target environment:
 
 First ssh (as root) into inner ops:
 
-	ops> cd /usr/testbed/obj/testbed/install
-	ops> perl emulab-install -b -i ops/targetsys ops
-	ops> perl emulab-install -b -i ops/powder-endpoint ops
+    ops> cd /usr/testbed/obj/testbed/install
+    ops> perl emulab-install -b -i ops/targetsys ops
+    ops> perl emulab-install -b -i ops/powder-endpoint ops
 
 Now ssh (as root) into the inner boss VM from outer boss:
 
-	boss> cd /usr/testbed/obj/testbed/install
-	boss> perl emulab-install -b -i boss/targetsys boss
-	boss> cd /users/elabman/emulab-devel/obj/install
-	boss> perl emulab-install -b -i boss/powder-endpoint boss
-	boss> exit
+    boss> cd /usr/testbed/obj/testbed/install
+    boss> perl emulab-install -b -i boss/targetsys boss
+    boss> cd /users/elabman/emulab-devel/obj/install
+    boss> perl emulab-install -b -i boss/powder-endpoint boss
 
-Add these to both inner boss/ops /etc/mail/aliases and run newaliases:
-	
-	# Send everything to the Mothership.
-	testbed-ops:            powder-aggregate-ops@emulab.net
-	testbed-logs:           powder-aggregate-logs@emulab.net
-	testbed-www:            powder-aggregate-www@emulab.net
-	testbed-approval:       powder-aggregate-approval@emulab.net
-	testbed-audit:          powder-aggregate-audit@emulab.net
-	testbed-stated:         powder-aggregate-stated@emulab.net
-	testbed-testsuite:      powder-aggregate-testsuite@emulab.net
-	testbed-errors:         powder-aggregate-errors@emulab.net
-	testbed-automail:       powder-aggregate-automail@emulab.net
+Add these to both inner boss/ops /etc/mail/aliases and run newaliases.
+(NOTE: On boss, you will be replacing existing alises.)
+----
 
-Grab (inner) boss:/usr/testbed/etc/elabman.pswd and save it:
+# Send everything to the Mothership.
+testbed-ops:            powder-aggregate-ops@emulab.net
+testbed-logs:           powder-aggregate-logs@emulab.net
+testbed-www:            powder-aggregate-www@emulab.net
+testbed-approval:       powder-aggregate-approval@emulab.net
+testbed-audit:          powder-aggregate-audit@emulab.net
+testbed-stated:         powder-aggregate-stated@emulab.net
+testbed-testsuite:      powder-aggregate-testsuite@emulab.net
+testbed-errors:         powder-aggregate-errors@emulab.net
+testbed-automail:       powder-aggregate-automail@emulab.net
 
-     	msboss:~stoller/powder/systems/xxx/elabman.pswd
+----
+Grab inner boss:/usr/testbed/etc/elabman.pswd and save it to boss:
+
+    msboss> sudo scp -p nucvm20-1:/usr/testbed/etc/elabman.pswd \
+	~stoller/powder/systems/xxx/elabman.pswd
 
 Fix for ntpdate:
-        boss> echo '155.98.33.74    ntp1.emulab.net ntp1' | sudo bash -c '/bin/cat >> /etc/hosts'
+    boss> echo '155.98.33.74    ntp1.emulab.net ntp1' | \
+	sudo bash -c '/bin/cat >> /etc/hosts'
 
 Copy MFS tar ball to boss while the network is good:
 
-	msboss> sudo scp ~mike/FE.tar.gz XXX:/tftpboot
+    msboss> sudo scp ~mike/FE.tar.gz nucvm20-1:/tftpboot
 
 Now we have to shutdown the VMs. Log out of the boss/ops vms, and log
 into the physical host and then:
 
-	vhost-0> sudo /usr/local/etc/emulab/vnodesetup -jh pcvmXXX-1
+    vhost-0> sudo /usr/local/etc/emulab/vnodesetup -jh nucvm20-1
 
 Make sure its really gone, then toss the token to David.
 
@@ -121,7 +200,13 @@ Wait wait wait, for the token from David.
 After David does his magic and boss boots then:
 
 Log into the new control node and remove the symlink in /etc/xen/auto,
-We wil put ths back once the enpoint is installed and things are working
+  [ If "control.<aggregate>.powderwireless.net" does not resolve
+    on boss when you try to ssh in, login using the IP address
+    and startup the boss VM (next step). Then you should be
+    able to ssh in using the DNS name. If the control node has
+    not been up for a very long time, it times out in the DNS. ]
+
+We wil put ths back once the endpoint is installed and things are working
 okay. Saves on filesystem corruptions.
 
 	control> sudo rm /etc/xen/auto/boss.conf
@@ -158,22 +243,30 @@ Unpack the MFSs:
 	boss> cd NEW
 	boss> sudo sh install.sh
 
-Apply the boss/ops SSL patch:
-        boss> scp boss.emulab.net:~mike/ssl-fix.tar.gz /tmp/
+Apply the boss/ops SSL patch. There are now two versions of this patch, one for
+an older -p2 patch level of 13.5 and one for the newer -p14 version. You can
+find out which version is running with
+
+        boss> freebsd-version
+
+It should show either 13.5-RELEASE-p2 or 13.5-RELEASE-p14. Use "p2" or "p14" in
+the scp below.
+
+        boss> scp boss.emulab.net:~mike/ssl-fix-<VERS>.tar.gz /tmp/ssl-fix.tar.gz
 	boss> tar -C /tmp -xzf /tmp/ssl-fix.tar.gz
 	boss> cd /tmp/ssl-fix; sudo sh fixssl.sh
 	boss> sudo rm -rf /tmp/ssl-fix*
 
 Re-install syncthing.
-        Follow the instructions in powder/syncthing/README in the source tree.
-
+	Follow the instructions in powder/syncthing/README in the source tree.
+	
 Copy the defs file back to the MotherShip.
 
 	boss> cd ~elabman/emulab-devel
 	boss> cp defs-targetsys emulab-devel/powder-defs/XXX    (bus-5175)
-	boss> scp defs-targetsys stoller@boss.emulab.net:testbed-noelvin/testbed/powder-defs/XXX
+	boss> scp defs-targetsys boss.emulab.net:/home/stoller/testbed-noelvin/testbed/powder-defs/XXX
 	boss> sudo rm defs-targetsys
-	boss> ln -s emulab-devel/powder-defs/XXX defs-targetsys
+	boss> sudo -u elabman ln -s emulab-devel/powder-defs/XXX defs-targetsys
 
 Be sure to commit the new defs file.
 
@@ -191,17 +284,18 @@ After installation in the endpoint:
 Copy over Jie's monitor:
 
 	msboss> cd ~stoller/testbed-noelvin
-	msboss> rsync -av -C rfmonitor-jie elabman@control.<aggregate>.powderwireless.net:
+	msboss> sudo rsync -av -C rfmonitor-jie control.<aggregate>.powderwireless.net:/users/stoller
 
 Install Jie's monitor:
 
-	control> cd ~elabman/rfmonitor-jie
+	control> cd ~stoller/rfmonitor-jie
 	control> sudo systemctl stop rfmonitor
 	control> sudo python3 setup.py install
 	control> (cd /usr/bin; sudo rm -f rfmonitor; sudo ln -s /usr/local/bin/rfmonitor .)
 
-Setup the rfmonitor config file. Either copy it from the old disk, or
-create a new one by creating /etc/rfmonitor/device_config.json:
+Setup the rfmonitor config file. Either copy it from the old disk backup
+(~stoller/powder/systems/XXX/rfmon.json), or create a new one by creating
+/etc/rfmonitor/device_config.json:
 
   Bus:
 	{
@@ -230,12 +324,13 @@ create a new one by creating /etc/rfmonitor/device_config.json:
 
 Run the noise calibration. I have no idea what this does:
 
-	control> cd ~elabman/rfmonitor-jie
+	control> cd ~stoller/rfmonitor-jie
 	control> (cd scripts; sudo ./run_noisefloor_calibration.sh)
 
 Start the monitor. Hopefully you see it in ps and it is not in a death loop.
 
 	control> sudo systemctl start rfmonitor
+	control> sudo journalctl -f -u rfmonitor
 
 Start up the boss VM:
 
@@ -252,6 +347,9 @@ Enable the deadman radio watcher:
 Make sure the arduino is doing the right thing:
 
 	boss> tail -f /usr/testbed/log/endpoint-monitor.log
+
+	[ If it says it cannot connect, make sure that 'powduino'
+	  is in the tiplines table in the DB and capture is running. ]
 
     On an FE:
 	Oct 28 13:42:33 : keepalive: 1761680553
@@ -270,7 +368,11 @@ Make sure the arduino is doing the right thing:
 
 Free the nodes from hwdown:
 
-	boss> wap nfree emulab-ops hwdown ed1 (or nuc1 nuc2)
+	# FE
+	boss> wap nfree emulab-ops hwdown nuc1 nuc2
+
+        # ME
+	boss> wap nfree emulab-ops hwdown ed1
 
 Now for the fun part! Start this experiment in the emulab-ops project:
 Be sure to select correct radio or FE or ME. Delete the spectrum range!
@@ -285,8 +387,8 @@ And log into the experiment node and run:
 
 	node> /usr/libexec/uhd/examples/tx_waveforms --ant TX/RX --channel 0 --rate 1e6 --freq 3550e6 --gain 50
 
-    Let it run while watching the output from rfmonitor_daemon.log. It might take
-    till the second report to see anything. Ideally you want to see this:
+    Let it run while watching the output from rfmonitor_daemon.log. It might
+    take til the second report to see anything. Ideally you want to see this:
 
     	Above floor:-110.0 ed1:rf0: 3550,-104.455875279867,3556.0
 	No interface limit info for ed1
@@ -307,10 +409,11 @@ And log into the experiment node and run:
                             }
 		};
 
-    If after another iteration or two there is nothing or if you see stuff on totally
-    other frequenceies, you can stop. You probably had a bad coin flip up above. Reverse
-    incident and transmit and rerun the noise calculation, restart the rfmonitor (all this
-    on the control node. Then rerun the transmit test. Hopefully you see something then
+    If after another iteration or two there is nothing or if you see stuff on
+    totally other frequenceies, you can stop. You probably had a bad coin
+    flip up above. Reverse incident and transmit and rerun the noise
+    calculation, restart the rfmonitor (all this on the control node. Then
+    rerun the transmit test. Hopefully you see something then.
 
 Restore symlink in /etc/xen/auto
 
@@ -322,3 +425,214 @@ Let the bus roam:
 	msboss> manage_aggregate Bus6365 chflag admin no
 
 QED
+
+
+Checking a mobile endpoint.
+
+1. If you cannot resolve {control,boss}.<aggregate>.powderwireless.net
+   then it probably means the boss has been down for awhile and the DNS
+   cache has timed out. Find the IP address of the control node in
+   the source powder-defs/<aggregate> file as CONTROL_ROUTER_IP.
+   If that address does not ping, something is wrong with the node.
+   If you can ssh into the control node that way, fire up the boss VM:
+
+      sudo xl create /etc/xen/boss.conf
+
+   and follow along:
+
+      sudo console-nossl -l boss
+
+   to make sure it comes up. If it is coming up for the first time in
+   a long time, you will want to check the filesystems. So as it is booting,
+   wait for it to start loading the kernel text+data and type space to
+   interrupt it. When it drops to the boot prompt do:
+
+      boot -s
+
+   This will bring it to single user mode where you can:
+
+      fsck -yf
+      reboot
+      
+   and skip to step 3.
+   
+2. If the boss node was already up, and you suspect filesystem problems,
+   shut the boss down to single user:
+
+     sudo shutdown now
+
+   umount all the filesystems, check/fix the local filesystems, and reboot:
+
+     zfs unmount -a
+     accton
+     umount -a
+     mount -o ro -u /
+     fsck -yf
+     reboot
+
+3. Once boss comes back, login and see how far the update made it.
+   It is safe to assume that we got thru fixing /etc/hosts for "ntp1"
+   in the steps above.
+
+   Start by seeing if the MFSes got updated. Check for /tftpboot/FE.tar.gz.
+   if that does not exist, you will have to copy it over and installed it
+   as described above ("Unpack the MFSs"). If it does exist and the
+   /tftpboot/NEW directory is there, the tarball has likely been unpacked
+   and installed, skip to the next step. Otherwise, follow the instructions
+   above.
+
+4. It is most likely the case that the above has been done. The next couple
+   of items happened late in the game after we had already reinstalled most
+   of the endpoints. So it is more likely you will need to do these.
+
+   Make sure the SSL install has been fixed. Do:
+
+      ls -lat /usr/lib/ | head
+
+   If the "engines" subdirectory along with the "libcrypto" libraries are
+   on top, this patch has been applied. Otherwise follow the instructions
+   above ("Apply the boss/ops SSL patch").
+
+5. Make sure syncthing has been reinstalled and activated. This is what
+   is used to transfer the RF monitor logs back to boss.
+   If /usr/testbed/etc/syncthing exists, then all is well and you are
+   done. Other follow the instructions in powder/syncthing/README.
+   You do not need to do the initial steps that apply to the mothership.
+   Start with step 6 to create a tarball of the needed config, and then
+   all the following steps under "To add collection of RF monitoring data".
+
+6. I do the "letsencrypt dance" as well, since it is idempotent and does
+   not hurt.
+
+7. Follow the steps to (re)install and test the RF monitor
+
+
+
+Problems I have encountered:
+
+0. Reboot errors to ignore on the console.
+
+   Not all errors at reboot time indicate a problem (at least not a problem
+   we care about). If you see:
+
+     bad exports list line '/ops/...': symbolic link in export path or statfs failed
+
+   these are due to the funky way we manage ZFS in the ops jail. Nothing to
+   see here. When apache starts you will see:
+
+      [core:warn] [pid 2447] (2)No such file or directory: AH00075: Failed to enable the 'httpready' Accept Filter
+
+   for both "httpready" and "dataready". Those are modules we don't bother
+   loading in the OS. Just move along.
+
+1. Repeated reboots
+
+   Often this is signaled by a steady stream of emails from stated saying
+   it is starting up, with no intervening messages about shutting down.
+   This most likely indicates a corrupt filesystem. To fix:
+
+     ssh control.<aggregate>.powderwireless.net
+     sudo console-nossl -l boss
+
+   If it is unresponsive at the console (no login prompt, no echo), then
+   you can get out of console and:
+
+     sudo xl shutdown boss
+
+   Then get back into the console and wait for it to shutdown to single user.
+
+   If boss is responsive (i.e., login prompt), then you need to reboot it.
+   ssh in from another window and shut the boss down to single user:
+
+     ssh boss.<aggregate>.powderwireless.net
+     sudo shutdown now
+
+   Umount all the filesystems, check/fix the local filesystems, and reboot:
+
+     zfs unmount -a
+     accton
+     umount -a
+     mount -o ro -u /
+     fsck -yf
+     reboot
+
+2. "Could not generate CRL" and "Failed: postcr"
+
+   Probably complains about inability to parse the lastupdate field.
+   Usually due to a current or past corruption in the FS that leads to an
+   empty crl.pem file.
+
+   Make sure you have the console just in case it is a current corruption
+   and crashes while you are fixing this.
+     
+     cd /usr/testbed/ssl
+     sudo rm crl.pem
+     sudo /usr/testbed/sbin/protogeni/gencrl
+     sudo /usr/testbed/sbin/protogeni/postcrl
+
+3. Control node is up, but not the boss VM
+
+   First, login to the control node and make sure that
+   /etc/xen/auto/boss.conf exists (symlink to "../boss.conf". If not,
+   we probably didn't finish the in-the-field testing. Most likely the
+   test to see if the RF monitor is working. Follow the "Checking"
+   process above.
+
+   If that file exists but the boss VM is not running, then it probably
+   did not pass the conditions required by the "start gate"
+   /usr/local/bin/xendomains-start-gate.sh. Run:
+
+      /usr/local/bin/get_arduino_data.py -v
+
+   and it should report three numbers:
+
+     onbattery,voltage,onacc
+
+   which must meet the conditions in /etc/default/xendomains-custom.
+   Typically this means: not on battery, not on ACC, and voltage > 11.
+   If it is on battery, then the bus is not powered on at all.
+   If it is on ACC, then the bus is running off its battery (accessory).
+   If both are off and the voltage is low, there might be a problem with
+   the power board or our battery. See this thread:
+
+   https://fluxgroup.slack.com/archives/GQ6KJ3K98/p1761684034448029?thread_ts=1761680844.852999&cid=GQ6KJ3K98
+
+   Or search for DATA_OPTIONS in the Slack search.
+
+   If you get errors from the get_arduino_data.py script, it could be that
+   the arduino is bad (though I have not seen this myself).
+
+   If you get: "/dev/ttyACM0 does not exist" (this I have seen), then see if
+   the Arduino is seen at all. Do:
+
+     lsusb | grep -i arduino
+
+   and see if anything shows up. If it does then it is likely that the boss
+   VM is running (the VM takes control of the Arduino, hence the error).
+   First do "xl list" to see if the boss VM exists. Then see if it is all the
+   way by trying to login. If not, grab the boss console (as described above)
+   and see what it shows. Most likely there was an fsck error that caused it
+   to stop in single user mode.
+
+4. Database won't start on boss.
+
+   Most likely you will find out about this via an email saying something
+   about a service not starting/running, e.g., "wbstoremonitor died".
+
+   If you login to the boss VM and cannot connect to the DB with "mysql tbdb"
+   then do a ps and see if there are any mysql (mariadb) processes running.
+   If not, check in /usr/testbed/log/mysqld-error.log and see what happened.
+   You will most likely see something like:
+
+     File '/usr/testbed/log/mysql/update.000106' not found
+
+   which indicates that the node died at an inopportune time when it had
+   added that file to the update.index but not written the file. Edit
+   /usr/testbed/log/mysql/update.index and remove that update file from
+   the end. Then:
+
+     /usr/local/etc/rc.d/2.mysql-server.sh
+     mysqlcheck --repair --all-databases
+
+   To be extra safe, reboot and watch the console for other errors because
+   this most like happened due to filesystem errors.
