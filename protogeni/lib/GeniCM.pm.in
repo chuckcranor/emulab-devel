@@ -2076,15 +2076,15 @@ sub GetTicketAuxAux($)
 		    print STARTUP "date\n\n";
 		    print STARTUP "# Redirecting stdin/stdout to $log\n";
 		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-		    print STARTUP "if [ \$? -ne 0 ]; then\n";
-		    print STARTUP "    status=\$?\n";
-		    print STARTUP "    exit \$status\n";
-		    print STARTUP "fi\n";
+		    print STARTUP "status=\$?\n";
 		    print STARTUP "# Writing exit status to $stat\n";
 		    print STARTUP "echo \"\$status\" > $stat\n";
 		    print STARTUP "echo " .
 			"\"Execution $count exited with status \$status\"\n";
 		    print STARTUP "echo '----------------------------------'\n";
+		    print STARTUP "if [ \$status -ne 0 ]; then\n";
+		    print STARTUP "    exit \$status\n";
+		    print STARTUP "fi\n";
 		    $count++;
 		}
 	    }
