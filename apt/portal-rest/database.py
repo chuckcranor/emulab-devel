@@ -56,10 +56,11 @@ def DBQuery(DB, stmt, params=None, *, fatal=False):
         try:
             return DB.execute(stmt, params)
         except OperationalError as e:
+            DB.rollback()
             last_exc = e
             LOG.warning("Error: could not reconnect to mysqld!, %s", e)
-            DB.rollback()
         except SQLAlchemyError as e:
+            DB.rollback()
             last_exc = e
             tbmsg = f"{stmt}\n{params}\n\n{traceback.format_exc()}"
             if __dbMailOnFail:

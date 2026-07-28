@@ -58,6 +58,10 @@ async def db_session_middleware(request: Request, next):
     token = db_session.set(session)
     try:
         response = await next(request)
+    except:
+        LOG.exception("db_session_middleware handler reached")
+        session.rollback()
+        raise
     finally:
         session.close()
         db_session.reset(token)
