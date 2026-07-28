@@ -62,7 +62,7 @@ def DBQuery(DB, stmt, params=None, *, fatal=False):
         except SQLAlchemyError as e:
             DB.rollback()
             last_exc = e
-            tbmsg = f"{stmt}\n{params}\n\n{traceback.format_exc()}"
+            tbmsg = f"{stmt}\n{params}\n\n{traceback.format_exc(*sys.exc_info())}"
             if __dbMailOnFail:
                 SENDMAIL(__dbFailMailAddr, "DB query failed", f"DB query failed:\n\n{tbmsg}",
                          __dbFailMailAddr)
