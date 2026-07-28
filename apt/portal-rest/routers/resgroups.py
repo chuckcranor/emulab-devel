@@ -71,7 +71,7 @@ from ..api.models import (
 )
 
 # Testbed DB access lib
-from WebTask import WebTask
+from ..WebTask import WebTask
 from APT_ORM import AptReservationGroups
 import AccessCheck
 

@@ -27,7 +27,7 @@ import json
 import time
 
 from sqlalchemy import text
-from database import get_current_db, DBQuery
+from .database import get_current_db, DBQuery
 
 class WebTask:
     def __init__(self, task_id):
