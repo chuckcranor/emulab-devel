@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,6 +60,7 @@ use power_racktivity;
 use power_ue;
 use power_powduino;
 use power_5gstore;
+use power_uis722;
 use power_enlogic;
 use power_remotecmd;
 use power_esi;
@@ -616,6 +617,36 @@ foreach my $power_id (keys %outlets) {
 		$errors++;
 	    }
 	}
+    } elsif ($type eq "uis722") {
+	#
+	# XXX a "cycle" operation will do nothing if the node is off.
+	# See comment above for forced power cycles.
+	# 
+	my $device = new power_uis722($power_id,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	}
+	if (@forceoutlets) {
+	    $nodestr = join(',', @forcenodes);
+	    print "Calling device->power(forcecycle, @forceoutlets)\n"
+		if $verbose > 1;
+	    if ($device->power("forcecycle", @forceoutlets)) {
+		print "Control of $nodestr failed.\n";
+		$exitval++;
+		$errors++;
+	    }
+	}
+	if (@unforceoutlets) {
+	    $nodestr = join(',', @unforcenodes);
+	    print "Calling device->power($op, @unforceoutlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op, @unforceoutlets)) {
+		print "Control of $nodestr failed.\n";
+		$exitval++;
+		$errors++;
+	    }
+	}
     } elsif ($type eq "ue") {
 	if (uectrl($op,@nodes)) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
@@ -1130,6 +1161,27 @@ sub dostatus(@) {
 	    print "\n";
 	} elsif ($ctrls{$ctrl} eq "5gstore") {
 	    my $device = new power_5gstore($ctrl, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	    for my $outlet (1..2) {
+		my $ostr = "outlet$outlet";
+		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
+		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
+	} elsif ($ctrls{$ctrl} eq "uis722") {
+	    my $device = new power_uis722($ctrl, $verbose);
 	    if (!defined $device) {
 		warn "Unable to contact controller $ctrl.\n";
 		$errors++;
