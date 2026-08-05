@@ -649,7 +649,7 @@ function CHECKPASSWORD($uid, $password, $name, $email, &$error)
     }
     # Ascii only.
     if (! TBvalid_userdata($password)) {
-	$error = "Invalid characters; ascii only please";
+	$error = "Invalid characters; ascii (excluding less than/greater than) only please";
 	return 0;
     }
 
