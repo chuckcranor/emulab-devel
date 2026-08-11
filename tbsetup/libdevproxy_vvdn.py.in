@@ -54,22 +54,23 @@ def _init_xml():
 # Abstract class for all MPlane configuration objects.
 class MPlaneConfig(object):
     def __init__(self, xmlstr = None):
-        xmlobj = objectify.fromstring(xmlstr)
-        if xmlobj:
+        if xmlstr is not None:
+            dobj = objectify.fromstring(xmlstr)\
+                            .find(f"{{{MPlaneDefs.NS_DEFAULT}}}data")
             root = objectify.Element("data")
-            ifsobj = xmlobj.find(
+            ifsobj = dobj.find(
                 f"{{{MPlaneDefs.NS_INTERFACES}}}interfaces")
             root.append(ifsobj)
             self.yifsobj = pybindIETFXMLDecoder.load_xml(
                 root, libyb_ietf_interfaces, "ietf-interfaces")
             root.remove(ifsobj)
-            peobj = xmlobj.find(
+            peobj = dobj.find(
                 f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
             root.append(peobj)
             self.ypeobj = pybindIETFXMLDecoder.load_xml(
                 root, libyb_oran_processing_element, "o-ran-processing-element")
             root.remove(peobj)
-            upobj = xmlobj.find(
+            upobj = dobj.find(
                 f"{{{MPlaneDefs.NS_UPCONF}}}user-plane-configuration")
             root.append(upobj)
             self.yupobj = pybindIETFXMLDecoder.load_xml(
@@ -207,7 +208,7 @@ class VVDNWrapper(DeviceWrapper):
         super().__init__(mgmt_addr, username, keyfile, log_level)
         self._mpsess = VVDNMPlaneSession(
             mgmt_addr, username, log_level=log_level)
-        self._mpconf = MPlaneConfig(self._mpsess.get_config().data_xml.decode("utf-8"))
+        self._mpconf = MPlaneConfig(str(self._mpsess.get_config()))
 
     def connect_session(self, password = DEF_PASSWD, connect_ssh = False,
                         ping_timeout = DEF_PING_TIMEOUT):
