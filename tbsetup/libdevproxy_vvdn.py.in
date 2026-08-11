@@ -14,12 +14,15 @@ import logging
 import re
 import sys
 import time
-from lxml import etree
-from abc import ABC, abstractmethod
+from lxml import objectify, etree
 from ncclient import manager
+from pyangbind.lib.serialise import pybindIETFXMLEncoder, pybindIETFXMLDecoder
 
 sys.path.append("@prefix@/lib")
 from libdevproxy import Utilities, DeviceConfig, DeviceWrapper
+import libyb_ietf_interfaces
+import libyb_oran_processing_element
+import libyb_oran_uplane_conf
 
 ##############################################################################
 #
@@ -46,142 +49,40 @@ def _init_xml():
         etree.register_namespace('iftype', MPlaneDefs.NS_IFTYPE)
         etree.register_namespace('ifip', MPlaneDefs.NS_IFIP)
     _init_xml.has_run = True
-_init_xml()
+#_init_xml()
 
 # Abstract class for all MPlane configuration objects.
-class MPlaneObject(ABC):
-    @abstractmethod
-    def generate_xml(self):
-        raise RuntimeError("Child class must implement this method!")
+class MPlaneConfig(object):
+    def __init__(self, xmlstr = None):
+        xmlobj = objectify.fromstring(xmlstr)
+        if xmlobj:
+            root = objectify.Element("data")
+            ifsobj = xmlobj.find(
+                f"{{{MPlaneDefs.NS_INTERFACES}}}interfaces")
+            root.append(ifsobj)
+            self.yifsobj = pybindIETFXMLDecoder.load_xml(
+                root, libyb_ietf_interfaces, "ietf-interfaces")
+            root.remove(ifsobj)
+            peobj = xmlobj.find(
+                f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
+            root.append(peobj)
+            self.ypeobj = pybindIETFXMLDecoder.load_xml(
+                root, libyb_oran_processing_element, "o-ran-processing-element")
+            root.remove(peobj)
+            upobj = xmlobj.find(
+                f"{{{MPlaneDefs.NS_UPCONF}}}user-plane-configuration")
+            root.append(upobj)
+            self.yupobj = pybindIETFXMLDecoder.load_xml(
+                root, libyb_oran_uplane_conf, "o-ran-uplane-conf")
+            root.remove(upobj)
+        else:
+            self.yifsobj = libyb_ietf_interfaces.ietf_interfaces()
+            self.ypeobj  = libyb_oran_processing_element.o_ran_processing_element()
+            self.yupobj  = libyb_oran_uplane_conf.o_ran_uplane_conf()
 
-    def pretty_print(self):
-        print(etree.tostring(self.generate_xml(), encoding=str, pretty_print=True))
+    #def pretty_print(self):
+    #    print(etree.tostring(self.generate_xml(), encoding=str, pretty_print=True))
 
-class MPlaneInterface(MPlaneObject):
-    def __init__(self, xmlobj):
-        self.name = xmlobj.find(f"{{{MPlaneDefs.NS_INTERFACES}}}name").text
-        self.iftype = xmlobj.find(f"{{{MPlaneDefs.NS_INTERFACES}}}type").text.split(':')[1]
-        enabled = xmlobj.find(f"{{{MPlaneDefs.NS_INTERFACES}}}enabled").text
-        self.enabled = True if enabled.lower() == 'true' else False
-        ip = xmlobj.find(f".//{{{MPlaneDefs.NS_IFIP}}}ip")
-        self.ipaddr = ip.text if ip is not None else None
-        netmask = xmlobj.find(f".//{{{MPlaneDefs.NS_IFIP}}}netmask")
-        self.netmask = netmask.text if netmask is not None else None
-        self.mac = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}mac-address").text
-        baseif = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}base-interface")
-        self.baseif = baseif.text if baseif is not None else None
-        vlanid = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}vlan-id")
-        self.vlanid = vlanid.text if vlanid is not None else None
-        mtu = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}l2-mtu")
-        self.mtu = int(mtu.text) if mtu is not None else None
-        pref = xmlobj.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}port-reference")
-        self.port_name = pref.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}port-name").text if pref is not None else None
-        self.port_num = int(pref.find(f"{{{MPlaneDefs.NS_ORANIFACES}}}port-number").text) if pref is not None else None
-
-    def generate_xml(self):
-        ifelt = etree.Element(f"{{{MPlaneDefs.NS_INTERFACES}}}interface")
-        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_INTERFACES}}}name").text = self.name
-        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_INTERFACES}}}type", nsmap={"iftype": MPlaneDefs.NS_IFTYPE}).text = f"iftype:{self.iftype}"
-        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_INTERFACES}}}enabled").text = str(self.enabled).lower()
-        etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}mac-address").text = self.mac
-        if self.ipaddr is not None and self.netmask is not None:
-            ipv4elt = etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_IFIP}}}ipv4")
-            etree.SubElement(ipv4elt, f"{{{MPlaneDefs.NS_IFIP}}}enabled").text = "true"
-            addrelt = etree.SubElement(ipv4elt, f"{{{MPlaneDefs.NS_IFIP}}}address")
-            etree.SubElement(addrelt, f"{{{MPlaneDefs.NS_IFIP}}}ip").text = self.ipaddr
-            etree.SubElement(addrelt, f"{{{MPlaneDefs.NS_IFIP}}}netmask").text = self.netmask
-        if self.mtu is not None:
-            etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}l2-mtu").text = str(self.mtu)
-        if self.baseif is not None:
-            etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}base-interface").text = self.baseif
-        if self.vlanid is not None:
-            etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}vlan-id").text = self.vlanid
-        if self.port_name is not None and self.port_num is not None:
-            prefelt = etree.SubElement(ifelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}port-reference")
-            etree.SubElement(prefelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}port-name").text = self.port_name
-            etree.SubElement(prefelt, f"{{{MPlaneDefs.NS_ORANIFACES}}}port-number").text = str(self.port_num)
-        return ifelt
-
-class MPlaneProcessingElements(MPlaneObject):
-    def __init__(self, xmlobj):
-        self.name = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}name").text
-        self.ifname = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}interface-name").text
-        self.rumac = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}ru-mac-address").text
-        self.dumac = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}o-du-mac-address").text
-        self.vlanid = xmlobj.find(f".//{{{MPlaneDefs.NS_PROCELT}}}vlan-id").text
-
-    def generate_xml(self):
-        pelt = etree.Element(f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
-        etree.SubElement(pelt, f"{{{MPlaneDefs.NS_PROCELT}}}transport-session-type").text = "ETH-INTERFACE"
-        ruelt = etree.SubElement(pelt, f"{{{MPlaneDefs.NS_PROCELT}}}ru-elements")
-        etree.SubElement(ruelt, f"{{{MPlaneDefs.NS_PROCELT}}}name").text = self.name
-        tfelt = etree.SubElement(ruelt, f"{{{MPlaneDefs.NS_PROCELT}}}transport-flow")
-        etree.SubElement(tfelt, f"{{{MPlaneDefs.NS_PROCELT}}}interface-name").text = self.ifname
-        ethelt = etree.SubElement(tfelt, f"{{{MPlaneDefs.NS_PROCELT}}}eth-flow")
-        etree.SubElement(ethelt, f"{{{MPlaneDefs.NS_PROCELT}}}ru-mac-address").text = self.rumac
-        etree.SubElement(ethelt, f"{{{MPlaneDefs.NS_PROCELT}}}o-du-mac-address").text = self.dumac
-        etree.SubElement(ethelt, f"{{{MPlaneDefs.NS_PROCELT}}}vlan-id").text = self.vlanid
-        return pelt
-
-class MPlaneLLTXLink(MPlaneObject):
-    def __init__(self, xmlobj):
-        self.name = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}name").text
-        self.proc_elt = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}processing-element").text
-        self.arr_carr = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}tx-array-carrier").text
-        self.endpoint = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-endpoint").text
-
-    def generate_xml(self):
-        lltxelt = etree.Element(f"{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-links")
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}name").text = self.name
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}processing-element").text = self.proc_elt
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}tx-array-carrier").text = self.arr_carr
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-endpoint").text = self.endpoint
-        return lltxelt
-
-class MPlaneLLRXLink(MPlaneObject):
-    def __init__(self, xmlobj):
-        self.name = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}name").text
-        self.proc_elt = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}processing-element").text
-        self.arr_carr = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}rx-array-carrier").text
-        self.endpoint = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}low-level-rx-endpoint").text
-
-    def generate_xml(self):
-        llrxelt = etree.Element(f"{{{MPlaneDefs.NS_UPCONF}}}low-level-rx-links")
-        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}name").text = self.name
-        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}processing-element").text = self.proc_elt
-        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}rx-array-carrier").text = self.arr_carr
-        etree.SubElement(llrxelt, f"{{{MPlaneDefs.NS_UPCONF}}}low-level-rx-endpoint").text = self.endpoint
-        return llrxelt
-
-class MPlaneLLTXEndpoint(MPlaneObject):
-    def __init__(self, xmlobj):
-        self.name = xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}name").text
-        self.bitwidth = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}iq-bitwidth").text)
-        self.cmp_type = xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}compression-type").text
-        self.fs_off = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}fs-offset").text)
-        self.cp_len = int(xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}cp-length").text)
-        self.cp_len_other = int(xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}cp-length-other").text)
-        self.abs_off = int(xmlobj.find(f"./{{{MPlaneDefs.NS_UPCONF}}}offset-to-absolute-frequencty-center").text)
-        self.prb_scs = xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}scs").text
-        self.num_prb = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}number-of-prb").text)
-        self.eaxcid_du_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}o-du-port-bitmask").text)
-        self.eaxcid_bs_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}band-sector-bitmask").text)
-        self.eaxcid_ccid_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}ccid-bitmask").text)
-        self.eaxcid_ru_bm = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}ru-port-bitmask").text)
-        self.eaxcid_id = int(xmlobj.find(f".//{{{MPlaneDefs.NS_UPCONF}}}eaxc-id").text)
-
-    def generate_xml(self):
-        lltxelt = etree.Element(f"{{{MPlaneDefs.NS_UPCONF}}}low-level-tx-endpoints")
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}name").text = self.name
-        cmpelt = etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}compression")
-        etree.SubElement(cmpelt, f"{{{MPlaneDefs.NS_UPCONF}}}iq-bitwidth").text = str(self.bitwidth)
-        etree.SubElement(cmpelt, f"{{{MPlaneDefs.NS_UPCONF}}}compression-type").text = self.cmp_type
-        etree.SubElement(cmpelt, f"{{{MPlaneDefs.NS_UPCONF}}}fs-offset").text = str(self.fs_off)
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}cp-length").text = str(self.cp_len)
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}cp-length-other").text = str(self.cp_len_other)
-        etree.SubElement(lltxelt, f"{{{MPlaneDefs.NS_UPCONF}}}offset-to-absolute-frequency-center").text = str(self.abs_off)
-        # TODO: finish
-        return lltxelt
         
 ##############################################################################
 #
@@ -219,21 +120,14 @@ class VVDNMPlaneSession(object):
             self.connect_session()
         return self._mgr
 
-    def get_config(self, refresh = False):
+    def get_config(self, source = "running", refresh = False):
         if refresh or self._config is None:
-            self._config = self.get_session().get_config(source="running").data
+            self._config = self.get_session().get_config(source=source)
         return self._config
 
-    def get_interfaces(self):
-        ifaces = self.get_config().find(f"{{{MPlaneDefs.NS_INTERFACES}}}interfaces")
-        rvals = []
-        for iface in ifaces:
-            rvals.append(MPlaneInterface(iface))
-        return rvals
+    def edit_config(self, config, target = "running"):
+        return self.get_session().edit_config(target=target, config=config)
 
-    def get_processing_elements(self):
-        procelts = self.get_config().find(f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
-        return MPlaneProcessingElements(procelts)
 
 ##############################################################################
 #
@@ -313,6 +207,7 @@ class VVDNWrapper(DeviceWrapper):
         super().__init__(mgmt_addr, username, keyfile, log_level)
         self._mpsess = VVDNMPlaneSession(
             mgmt_addr, username, log_level=log_level)
+        self._mpconf = MPlaneConfig(self._mpsess.get_config().data_xml.decode("utf-8"))
 
     def connect_session(self, password = DEF_PASSWD, connect_ssh = False,
                         ping_timeout = DEF_PING_TIMEOUT):
