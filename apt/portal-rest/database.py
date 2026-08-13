@@ -24,7 +24,7 @@
 import logging
 import traceback, sys
 from . import config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from contextvars import ContextVar
@@ -64,7 +64,7 @@ def DBQuery(DB, stmt, params=None, *, fatal=False):
             last_exc = e
             tbmsg = f"{stmt}\n{params}\n\n{traceback.format_exc(*sys.exc_info())}"
             if __dbMailOnFail:
-                SENDMAIL(__dbFailMailAddr, "DB query failed", f"DB query failed:\n\n{tbmsg}",
+                SENDMAIL(__dbFailMailAddr, "DB query failed(Portal-Rest)", f"DB query failed:\n\n{tbmsg}",
                          __dbFailMailAddr)
             break
             
@@ -72,3 +72,15 @@ def DBQuery(DB, stmt, params=None, *, fatal=False):
         raise RuntimeError("DBQuery failed") from last_exc
     return None
 
+@event.listens_for(engine.pool, "connect")
+def log_connect(dbapi_connection, connection_record):
+        LOG.info("New DB connection create")
+
+
+@event.listens_for(engine.pool, "checkout")
+def log_checkout(dbapi_connection, connection_record, connection_proxy):
+    LOG.info(f"Connection checked out. Pool Status: {engine.pool.checkedout()}/{engine.pool.size()} active")
+
+@event.listens_for(engine.pool, "checkin")
+def log_checkin(dbapi_connection, connection_record):
+    LOG.info(f"Connection returned to pool. Pool Status: {engine.pool.checkedout()}/{engine.pool.size()} active")

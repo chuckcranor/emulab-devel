@@ -72,7 +72,7 @@ from ..api.models import (
 # Testbed DB access lib
 from ..WebTask import WebTask
 from APT_ORM import UserJwtTokens, UserSsoCodes
-import AccessCheck
+from app import AccessCheck
 
 MANAGETOKENS = "webmanage_tokens"
 

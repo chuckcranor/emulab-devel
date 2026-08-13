@@ -30,6 +30,7 @@ from . import config
 
 import subprocess, shlex
 import time
+import sys
 from datetime import datetime, timezone
 import logging
 from typing import Annotated
@@ -117,6 +118,7 @@ def get_current_user(x_api_token: Annotated[str, Header()], DB : Session = Depen
     try:
         user = AccessCheck.User(
             uid_idx, role=role, scope=scope_type, scope_value=scope_value)
+        LOG.debug("[DEBUG] User class: %r from %r", type(user), sys.modules[type(user).__module__].__file__)
     except Exception as exc:
         raise HTTPException(status_code=401, detail=str(exc))
     

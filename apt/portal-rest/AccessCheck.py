@@ -23,13 +23,46 @@
 
 import sys
 import re
+import functools
+import logging
 
 from sqlalchemy import text
-from database import get_current_db, DBQuery
+from .database import get_current_db, DBQuery
 
 if __name__ == "__main__":
     sys.path.append("/usr/testbed/devel/stoller/lib")
     pass
+
+LOG = logging.getLogger("uvicorn.error")
+
+#
+# Short label for an object in the log.
+#
+def LogSubject(obj):
+    for attr in ("uuid", "pidgid", "uid"):
+        if hasattr(obj, attr):
+            return "%s(%s)" % (type(obj).__name__, getattr(obj, attr))
+        pass
+    return type(obj).__name__
+
+#
+# Decorator for the AccessCheck() methods.
+#
+def LogAccessCheck(func):
+    @functools.wraps(func)
+    def wrapper(self, user, access_type, *args, **kwargs):
+        try:
+            allowed = func(self, user, access_type, *args, **kwargs)
+        except Exception as exc:
+            LOG.warning("AccessCheck %s: user=%s type=%r raised %s: %s",
+                        LogSubject(self), LogSubject(user), access_type,
+                        type(exc).__name__, exc)
+            raise
+        LOG.info("AccessCheck %s: user=%s type=%r -- %s",
+                 LogSubject(self), LogSubject(user), access_type,
+                 "ALLOW" if allowed else "DENY")
+        return allowed
+    return wrapper
 
 #
 # Numerics for project level trust strings, for comparison
@@ -90,6 +123,13 @@ def TBMinTrust(trust_value, minimum):
 class AccessCheckError(Exception):
     def __init__(self, msg):
         self.msg=msg
+        #
+        # Catch any raise from other files.
+        #
+        frame = sys._getframe(1)
+        LOG.warning("%s: %s [raised at %s:%d]",
+                    type(self).__name__, msg,
+                    frame.f_code.co_filename, frame.f_lineno)
         pass
     def __str__(self):
         return self.msg
@@ -122,6 +162,7 @@ class UserAccess:
         self.membership = {}
         self.mapping = {}
         self.role = role
+        qres = None
 
         DB = get_current_db()
         if type(user) == str:
@@ -131,7 +172,7 @@ class UserAccess:
                          "where uid_uuid=:user and status!='archived'"
                     ),
                     {"user" : user}, fatal=False)
-                qres = qres.all() if result is not None else None
+                qres = result.all() if result is not None else None
 
             elif re.match("^[\w]*$", user):
                 result = DBQuery(DB,
@@ -139,16 +180,16 @@ class UserAccess:
                                 "where uid=:user and status!='archived'"),
                                 {"user" : user}, fatal=False
                     )
-                qres = qres.all() if result is not None else None
+                qres = result.all() if result is not None else None
                 pass
             pass
         elif type(user) == int:
-            result = DBQuery(
+            result = DBQuery(DB,
                 text("select uid,uid_idx,admin from users " +
                             "where uid_idx=:user"), {"user" : str(user)},
                             fatal=False
-                    ).all()
-            qres = qres.all() if result is not None else None
+                    )
+            qres = result.all() if result is not None else None
         else:
             raise NoSuchUser("No such user: %s" % (user,))
 
@@ -237,6 +278,12 @@ class UserAccess:
             return True
         if self.scope == scope and self.scope_value == scope_value:
             return True
+
+        #
+        # Check token scope.
+        #
+        LOG.info("CheckScope DENY: uid=%s token scope=%s/%r, wanted %s/%r",
+                 self.uid, self.scope, self.scope_value, scope, scope_value)
         return False
 
     pass
@@ -255,7 +302,7 @@ class User:
             self.access = user.access
         else:
             self.access = UserAccess(user, role=role,
-                                     scope=scope, scope_value=scope_value )
+                                     scope=scope, scope_value=scope_value)
             pass
         pass
 
@@ -279,6 +326,7 @@ class User:
     def uid_idx(self):
         return self.access.uid_idx
     
+    @LogAccessCheck
     def AccessCheck(self, source_user, access_type):
         if isinstance(source_user, User):
             source_access = source_user.access
@@ -352,6 +400,7 @@ class ProjectGroup:
         if group == None:
             group = project;
             pass
+        qres = None
 
         DB = get_current_db()
         if type(project) == str:
@@ -365,7 +414,7 @@ class ProjectGroup:
                 qres = result.all() if result is not None else None
                 pass
         elif type(project) == int:
-            result = DBQuery(
+            result = DBQuery(DB,
                 text("select pid,pid_idx,disabled from projects " +
                             "where pid_idx=:project"), {"project" : project},
                             fatal=False
@@ -380,6 +429,7 @@ class ProjectGroup:
         self.pid      = qres[0][0]
         self.pid_idx  = qres[0][1]
         self.disabled = qres[0][2]
+        qres = None
 
         if type(group) == str:
             if re.match("^[\-\w]+$", group):
@@ -420,6 +470,7 @@ class ProjectGroup:
             pass
         pass
 
+    @LogAccessCheck
     def AccessCheck(self, user, access_type):
         if isinstance(user, User):
             self.user = user
@@ -608,6 +659,7 @@ class Experiment:
     def group(self):
         return self.projgroup
     
+    @LogAccessCheck
     def AccessCheck(self, user, access_type):
         if isinstance(user, User):
             user = user
@@ -693,6 +745,7 @@ class ResGroup:
     def group(self):
         return self.projgroup
     
+    @LogAccessCheck
     def AccessCheck(self, user, access_type):
         if isinstance(user, User):
             user = user
@@ -827,6 +880,7 @@ class Profile:
     def group(self):
         return self.projgroup
     
+    @LogAccessCheck
     def AccessCheck(self, user, access_type):
         if isinstance(user, User):
             user = user
