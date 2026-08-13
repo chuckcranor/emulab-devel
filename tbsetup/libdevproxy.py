@@ -60,7 +60,29 @@ class Utilities(object):
         func = sys._getframe(1).f_code.co_name
         return f"{klass}.{func}()"
 
+    @staticmethod
+    def cf2arfcn(F_REF):
+        F_REF = F_REF/1000000.0
+        if F_REF >= 0 and F_REF < 3000:
+            dF_Global = 0.005
+            F_REF_Offs = 0.0
+            N_REF_Offs = 0
+        elif F_REF > 2999 and F_REF < 24250:
+            dF_Global = 0.015
+            F_REF_Offs = 3000.0
+            N_REF_Offs = 600000
+        elif F_REF > 24249 and F_REF < 100000:
+            dF_Global = 0.060
+            F_REF_Offs = 24250.08
+            N_REF_Offs = 2016667
+        else:
+            raise ValueError(f"Invalid center frequency value: {F_REF}")
+        N_REF = int((F_REF - F_REF_Offs) / dF_Global + N_REF_Offs)
+        if N_REF % 2:
+            N_REF += 1
+        return N_REF
 
+    
 ##############################################################################
 #
 # Generic Device configuration abstract class (must be inherited).

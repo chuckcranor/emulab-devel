@@ -53,6 +53,66 @@ def _init_xml():
 
 # Abstract class for all MPlane configuration objects.
 class MPlaneConfig(object):
+    IFTYPE_ETHERNET = "ethernetCsmacd"
+    IFTYPE_L2VLAN = "l2vlan"
+    
+    DEF_PROCESSING_ELEMENT = "element1"
+    DEF_PROCELT_TRANSPORT_SESSION_TYPE = "ETH-INTERFACE"
+
+    DEF_LLTX_LINK_PREFIX = "lltxlink"
+    DEF_LLRX_LINK_PREFIX = "llrxlink"
+
+    DEF_LLTX_ENDPOINT_PREFIX = "slltx-endpoint"
+    DEF_LLRX_ENDPOINT_PREFIX = "sllrx-endpoint"
+    DEF_LLRX_ENDPOINT_NON_TIME_MANAGED_DELAY_ENABLED = True
+    DEF_LLEP_COMPRESSION_IQ_BITWIDTH = 9
+    DEF_LLEP_COMPRESSION_TYPE = "STATIC"
+    DEF_LLEP_COMPRESSION_FS_OFFSET = 0
+    DEF_LLEP_CP_LENGTH = 352
+    DEF_LLEP_CP_LENGTH_OTHER = 288
+    DEF_LLEP_ABS_CF_OFFSET = 0
+    DEF_LLEP_NUM_PRB_PER_SCS_ENTRIES = [
+        {"scs": "KHZ_30", "number-of-prb": 106},
+    ]
+    DEF_LLEP_EAXCID_ATTRS = {
+        "o-du-port-bitmask": 65024,
+        "band-sector-bitmask": 448,
+        "ccid-bitmask": 56,
+        "ru-port-bitmask": 7,
+    }
+
+    DEF_TX_ARRAY_CARRIER = "txarraycarrier0"
+    DEF_RX_ARRAY_CARRIER = "rxarraycarrier0"
+    DEF_TX_ARRAY_CARRIER_GAIN = 27.0
+    DEF_RX_ARRAY_CARRIER_GAIN_CORRECTION = 0.0
+    DEF_RX_ARRAY_CARRIER_N_TA_OFFSET = 25600
+    DEF_ARRAY_CARRIER_DL_RADIO_FRAME_OFFSET = 0
+    DEF_ARRAY_CARRIER_DL_SFN_OFFSET = 0
+
+    NUM_LLTX_LINKS = 4
+    NUM_LLTX_ENDPOINTS = 4
+    NUM_LLRX_LINKS = 4
+    NUM_LLRX_ENDPOINTS = 8
+
+    ARRAY_CARRIER_INACTIVE = "INACTIVE"
+    ARRAY_CARRIER_ACTIVE = "ACTIVE"
+
+    DEL_VLANIF_CMD = """
+    <interfaces xmlns="urn:ietf:params:xml:ns:yang:ietf-interfaces">
+      <interface xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xc:operation="delete">
+        <name>{}</name>
+      </interface>
+    </interfaces>
+    """
+
+    DEL_RUELT_CMD = """
+    <processing-elements xmlns="urn:o-ran:processing-element:1.0">
+      <ru-elements xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xc:operation="delete">
+        <name>{}</name>
+      </ru-elements>
+    </processing-elements>
+    """
+
     def __init__(self, xmlstr = None):
         if xmlstr is not None:
             dobj = objectify.fromstring(xmlstr)\
@@ -78,13 +138,235 @@ class MPlaneConfig(object):
             root.remove(upobj)
         else:
             self.yifsobj = libyb_ietf_interfaces.ietf_interfaces()
-            self.ypeobj  = libyb_oran_processing_element.o_ran_processing_element()
+            self.ypeobj  = libyb_oran_processing_element.\
+                o_ran_processing_element()
             self.yupobj  = libyb_oran_uplane_conf.o_ran_uplane_conf()
 
-    #def pretty_print(self):
-    #    print(etree.tostring(self.generate_xml(), encoding=str, pretty_print=True))
+    def safe_name(self, name):
+        return re.sub(r'-', '_', name)
 
+    def get_interfaces(self):
+        return self.yifsobj.interfaces.interface.values()
+
+    def get_vlan_interfaces(self, mac = None):
+        rvals = []
+        for intf in self.get_interfaces():
+            if (not mac or mac.lower() == intf.mac_address.lower()) \
+               and int(intf.vlan_id) != 0:
+                rvals.append(intf)
+        return rvals
+
+    def find_interface(self, name = None, mac = None, vlan_id = 0):
+        for intf in self.get_interfaces():
+            if (name and intf.name == name) \
+               or (mac and mac.lower() == intf.mac_address.lower() \
+                   and vlan_id == intf.vlan_id):
+                return intf
+        return None
+
+    def mk_vlan_interface(self, vlan_id, basename = None, basemac = None):
+        if vlan_id < 1 or vlan_id > 4094:
+            raise ValueError(f"vlan_id out of range: {vlan_id}")
+        baseif = self.find_interface(basename, basemac)
+        vif = self.yifsobj.interfaces.interface.add(f"{baseif.name}.{vlan_id}")
+        vif.type = self.IFTYPE_L2VLAN
+        vif.enabled = True
+        vif.base_interface = baseif.name
+        vif.mac_address = baseif.mac_address
+        vif.vlan_id = vlan_id
+        vif.port_reference.port_name = baseif.port_reference.port_name
+        vif.port_reference.port_number = baseif.port_reference.port_number
+        return vif
+
+    def delete_vlan_interface(self, name = None, mac = None, vlan_id = None):
+        vif = self.find_interface(name, mac, vlan_id)
+        cmd = self.DEL_VLANIF_CMD.format(vif.name)
+        self.yifsobj.interfaces.interface.delete(vif.name)
+        return cmd
+
+    def get_ru_processing_elements(self):
+        return self.ypeobj.processing_elements.ru_elements.values()
+
+    def find_ru_processing_element(self, name = None, ifname = None, mac = None):
+        for ruelt in self.get_ru_processing_elements():
+            tf = ruelt.transport_flow
+            if (name and ruelt.name == name) \
+               or (ifname and tf.interface_name.lower() == ifname.lower()) \
+               or (mac and tf.eth_flow.ru_mac_address.lower() == mac.lower()):
+                return ruelt
+        return None
+
+    def mk_ru_processing_element(
+            self, du_mac, name = DEF_PROCESSING_ELEMENT,
+            ifname = None, mac = None, vlan_id = None
+    ):
+        ifobj = self.find_interface(ifname, mac, vlan_id)
+        self.ypeobj.processing_elements.transport_session_type = \
+            self.DEF_PROCELT_TRANSPORT_SESSION_TYPE
+        ruelt = self.ypeobj.processing_elements.ru_elements.add(name)
+        tf = ruelt.transport_flow
+        tf.interface_name = ifobj.name
+        tf.eth_flow.ru_mac_address = ifobj.mac_address
+        tf.eth_flow.vlan_id = ifobj.vlan_id
+        tf.eth_flow.o_du_mac_address = du_mac
+        return ruelt
+
+    def delete_ru_processing_element(self, name = None, ifname = None, mac = None):
+        ruelt = self.find_ru_processing_element(name, ifname, mac)
+        cmd = self.DEL_RUELT_CMD.format(ruelt.name)
+        self.ypeobj.processing_elements.ru_elements.delete(ruelt.name)
+        return cmd
+
+    def mk_uplane_lltx_links(
+            self, link_prefix = DEF_LLTX_LINK_PREFIX,
+            endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
+            processing_element = DEF_PROCESSING_ELEMENT,
+            tx_array_carrier = DEF_TX_ARRAY_CARRIER
+    ):
+        for i in range(self.NUM_LLTX_LINKS):
+            lltxlink = self.yupobj.user_plane_configuration.\
+                low_level_tx_links.add(f"{link_prefix}{i}")
+            lltxlink.low_level_tx_endpoint = f"{endpoint_prefix}{i}"
+            lltxlink.processing_element = processing_element
+            lltxlink.tx_array_carrier = tx_array_carrier
+        return self.yupobj.user_plane_configuration.low_level_tx_links
+
+    def mk_uplane_llrx_links(
+            self, link_prefix = DEF_LLRX_LINK_PREFIX,
+            endpoint_prefix = DEF_LLRX_ENDPOINT_PREFIX,
+            processing_element = DEF_PROCESSING_ELEMENT,
+            rx_array_carrier = DEF_RX_ARRAY_CARRIER
+    ):
+        for i in range(self.NUM_LLRX_LINKS):
+            llrxlink = self.yupobj.user_plane_configuration.\
+                low_level_rx_links.add(f"{link_prefix}{i}")
+            llrxlink.low_level_rx_endpoint = f"{endpoint_prefix}{i}"
+            llrxlink.processing_element = processing_element
+            llrxlink.rx_array_carrier = rx_array_carrier
+        return self.yupobj.user_plane_configuration.low_level_rx_links
+
+    def mk_uplane_lltx_endpoints(
+            self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
+            compression_type = DEF_LLEP_COMPRESSION_TYPE,
+            endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
+            extra = {}
+    ):
+        for i in range(self.NUM_LLTX_ENDPOINTS):
+            lltxep = self.yupobj.user_plane_configuration.\
+                low_level_tx_endpoints.add(f"{endpoint_prefix}{i}")
+            lltxep.compression.iq_bitwidth = iq_bitwidth
+            lltxep.compression.compression_type = compression_type
+            lltxep.compression.fs_offset = self.DEF_LLEP_COMPRESSION_FS_OFFSET
+            lltxep.cp_length = self.DEF_LLEP_CP_LENGTH
+            lltxep.cp_length_other = self.DEF_LLEP_CP_LENGTH_OTHER
+            lltxep.offset_to_absolute_frequency_center = \
+                self.DEF_LLEP_ABS_CF_OFFSET
+            for m in self.DEF_LLEP_NUM_PRB_PER_SCS_ENTRIES:
+                lltxep.number_of_prb_per_scs.add(m['scs'])
+                lltxep.number_of_prb_per_scs[m['scs']].\
+                    number_of_prb = m['number-of-prb']
+            for k, v in self.DEF_LLEP_EAXCID_ATTRS.items():
+                setattr(lltxep.e_axcid, self.safe_name(k), v)
+                lltxep.e_axcid.eaxc_id = i
+            for k, v in extra.items():
+                if k in ("compression", "e-axcid"):
+                    for j, u in v.items():
+                        setattr(getattr(lltxep, self.safe_name(k)),
+                                self.safe_name(j), u)
+                elif k == "number-of-prb-per-scs":
+                    for m in v:
+                        if m['scs'] not in lltxep.number_of_prb_per_scs:
+                            lltxep.number_of_prb_per_scs.add(m['scs'])
+                        lltxep.number_of_prb_per_scs[m['scs']].number_of_prb = \
+                            m['number-of-prb']
+                else:
+                    setattr(lltxep, self.safe_name(k), v)
+        return self.yupobj.user_plane_configuration.low_level_tx_endpoints
+
+    def mk_uplane_llrx_endpoints(
+            self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
+            compression_type = DEF_LLEP_COMPRESSION_TYPE,
+            endpoint_prefix = DEF_LLRX_ENDPOINT_PREFIX,
+            extra = {}
+    ):
+        for i in range(self.NUM_LLRX_ENDPOINTS):
+            llrxep = self.yupobj.user_plane_configuration.\
+                low_level_rx_endpoints.add(f"{endpoint_prefix}{i}")
+            llrxep.compression.iq_bitwidth = iq_bitwidth
+            llrxep.compression.compression_type = compression_type
+            llrxep.compression.fs_offset = self.DEF_LLEP_COMPRESSION_FS_OFFSET
+            llrxep.cp_length = self.DEF_LLEP_CP_LENGTH
+            llrxep.cp_length_other = self.DEF_LLEP_CP_LENGTH_OTHER
+            llrxep.offset_to_absolute_frequency_center = \
+                self.DEF_LLEP_ABS_CF_OFFSET
+            llrxep.non_time_managed_delay_enabled = \
+                self.DEF_LLRX_ENDPOINT_NON_TIME_MANAGED_DELAY_ENABLED
+            for m in self.DEF_LLEP_NUM_PRB_PER_SCS_ENTRIES:
+                llrxep.number_of_prb_per_scs.add(m['scs'])
+                llrxep.number_of_prb_per_scs[m['scs']].\
+                    number_of_prb = m['number-of-prb']
+                # Unclear if this next thing is actually needed.
+                llrxep.ul_fft_sampling_offsets.add(m['scs'])
+            for k, v in self.DEF_LLEP_EAXCID_ATTRS.items():
+                setattr(llrxep.e_axcid, self.safe_name(k), v)
+                llrxep.e_axcid.eaxc_id = i
+            for k, v in extra.items():
+                if k in ("compression", "e-axcid"):
+                    for j, u in v.items():
+                        setattr(getattr(llrxep, self.safe_name(k)),
+                                self.safe_name(j), u)
+                elif k == "number-of-prb-per-scs":
+                    for m in v:
+                        if m['scs'] not in llrxep.number_of_prb_per_scs:
+                            llrxep.number_of_prb_per_scs.add(m['scs'])
+                        llrxep.number_of_prb_per_scs[m['scs']].number_of_prb = \
+                            m['number-of-prb']
+                        # Not clear this is needed or correct...
+                        llrxep.ul_fft_sampling_offsets.add(m['scs'])
+                else:
+                    setattr(llrxep, self.safe_name(k), v)
+        return self.yupobj.user_plane_configuration.low_level_rx_endpoints
+
+    def mk_uplane_txcarrier(
+            self, center_frequency, bandwidth,
+            name = DEF_TX_ARRAY_CARRIER,
+            extra = {}
+    ):
+        txcarr = self.yupobj.user_plane_configuration.\
+            tx_array_carriers.add(name)
+        txcarr.center_of_channel_bandwidth = center_frequency
+        txcarr.absolute_frequency_center = Utilities.cf2arfcn(center_frequency)
+        txcarr.channel_bandwidth = bandwidth
+        txcarr.active = self.ARRAY_CARRIER_INACTIVE
+        txcarr.gain = self.DEF_TX_ARRAY_CARRIER_GAIN
+        txcarr.downlink_radio_frame_offset = \
+            self.DEF_ARRAY_CARRIER_DL_RADIO_FRAME_OFFSET
+        txcarr.downlink_sfn_offset = self.DEF_ARRAY_CARRIER_DL_SFN_OFFSET
+        for k, v in extra.items():
+            setattr(txcarr, self.safe_name(k), v)
+        return txcarr
         
+    def mk_uplane_rxcarrier(
+            self, center_frequency, bandwidth,
+            name = DEF_RX_ARRAY_CARRIER,
+            extra = {}
+    ):
+        rxcarr = self.yupobj.user_plane_configuration.\
+            rx_array_carriers.add(name)
+        rxcarr.center_of_channel_bandwidth = center_frequency
+        rxcarr.absolute_frequency_center = Utilities.cf2arfcn(center_frequency)
+        rxcarr.channel_bandwidth = bandwidth
+        rxcarr.active = self.ARRAY_CARRIER_INACTIVE
+        rxcarr.downlink_radio_frame_offset = \
+            self.DEF_ARRAY_CARRIER_DL_RADIO_FRAME_OFFSET
+        rxcarr.downlink_sfn_offset = self.DEF_ARRAY_CARRIER_DL_SFN_OFFSET
+        rxcarr.gain_correction = self.DEF_RX_ARRAY_CARRIER_GAIN_CORRECTION
+        rxcarr.n_ta_offset = self.DEF_RX_ARRAY_CARRIER_N_TA_OFFSET
+        for k, v in extra.items():
+            setattr(rxcarr, self.safe_name(k), v)
+        return rxcarr
+
+
 ##############################################################################
 #
 # VVDN O-RU M-Plane session (over SSHWrapper connection)
