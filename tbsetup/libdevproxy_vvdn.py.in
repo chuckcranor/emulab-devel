@@ -56,7 +56,7 @@ class MPlaneConfig(object):
     IFTYPE_ETHERNET = "ethernetCsmacd"
     IFTYPE_L2VLAN = "l2vlan"
     
-    DEF_PROCESSING_ELEMENT = "element1"
+    DEF_RU_PROCESSING_ELEMENT = "element1"
     DEF_PROCELT_TRANSPORT_SESSION_TYPE = "ETH-INTERFACE"
 
     DEF_LLTX_LINK_PREFIX = "lltxlink"
@@ -197,7 +197,7 @@ class MPlaneConfig(object):
         return None
 
     def mk_ru_processing_element(
-            self, du_mac, name = DEF_PROCESSING_ELEMENT,
+            self, du_mac, name = DEF_RU_PROCESSING_ELEMENT,
             ifname = None, mac = None, vlan_id = None
     ):
         ifobj = self.find_interface(ifname, mac, vlan_id)
@@ -220,7 +220,7 @@ class MPlaneConfig(object):
     def mk_uplane_lltx_links(
             self, link_prefix = DEF_LLTX_LINK_PREFIX,
             endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
-            processing_element = DEF_PROCESSING_ELEMENT,
+            processing_element = DEF_RU_PROCESSING_ELEMENT,
             tx_array_carrier = DEF_TX_ARRAY_CARRIER
     ):
         for i in range(self.NUM_LLTX_LINKS):
@@ -234,7 +234,7 @@ class MPlaneConfig(object):
     def mk_uplane_llrx_links(
             self, link_prefix = DEF_LLRX_LINK_PREFIX,
             endpoint_prefix = DEF_LLRX_ENDPOINT_PREFIX,
-            processing_element = DEF_PROCESSING_ELEMENT,
+            processing_element = DEF_RU_PROCESSING_ELEMENT,
             rx_array_carrier = DEF_RX_ARRAY_CARRIER
     ):
         for i in range(self.NUM_LLRX_LINKS):
@@ -244,6 +244,9 @@ class MPlaneConfig(object):
             llrxlink.processing_element = processing_element
             llrxlink.rx_array_carrier = rx_array_carrier
         return self.yupobj.user_plane_configuration.low_level_rx_links
+
+    def get_uplane_lltx_endpoint(self, name):
+        return self.yupobj.user_plane_configuration.low_level_tx_endpoints[name]
 
     def mk_uplane_lltx_endpoints(
             self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
@@ -327,7 +330,10 @@ class MPlaneConfig(object):
                     setattr(llrxep, self.safe_name(k), v)
         return self.yupobj.user_plane_configuration.low_level_rx_endpoints
 
-    def mk_uplane_txcarrier(
+    def get_uplane_tx_array_carrier(self, name):
+        return self.yupobj.user_plane_configuration.tx_array_carriers[name]
+
+    def mk_uplane_tx_array_carrier(
             self, center_frequency, bandwidth,
             name = DEF_TX_ARRAY_CARRIER,
             extra = {}
@@ -346,7 +352,7 @@ class MPlaneConfig(object):
             setattr(txcarr, self.safe_name(k), v)
         return txcarr
         
-    def mk_uplane_rxcarrier(
+    def mk_uplane_rx_array_carrier(
             self, center_frequency, bandwidth,
             name = DEF_RX_ARRAY_CARRIER,
             extra = {}
@@ -420,7 +426,7 @@ class VVDNConfig_MPRU_b78(DeviceConfig):
     DEFAULT_SETTINGS = {
         'center_frequency': {
             'def': 3370.2,
-            'allowed_ranges': ((3400.0,3700.0),)
+            'allowed_ranges': ((3358.0,3700.0),)
         },
         'bandwidth': {
             'def': 20.0,
@@ -430,42 +436,22 @@ class VVDNConfig_MPRU_b78(DeviceConfig):
             'def': 37.0,
             'allowed_ranges': ((1.0,37.0),)
         },
-        'fh_cplane_vlan': {
+        'ofh_vlan': {
             'def': 1,
             'allowed_ranges': ((1,4096),)
         },
-        'fh_uplane_vlan': {
-            'def': 1,
-            'allowed_ranges': ((1,4096),)
-        },
-        'du_cplane_mac': {
-            'def': '000000000000',
-            'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
-        },
-        'du_uplane_mac': {
+        'du_mac': {
             'def': '000000000000',
             'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
         },
         'mimo_mode': {
-            'def': '2_4',
+            'def': '1_2_3_4_4x4',
             'allowed_values': ('1_3','2_4','1_2_3_4_4x2','1_2_3_4_4x4')
-        },
-        'downlink_scaling': {
-            'def': 0,
-            'allowed_values': (0, 6, 12, 18)
-        },
-        'prach_format': {
-            'def': 'short',
-            'allowed_values': ('short', 'long')
         },
         'compression': {
             'def': 'dynamic_compressed',
             'allowed_values': ('static_uncompressed', 'static_compressed',
                                'dynamic_uncompressed', 'dynamic_compressed')
-        },
-        'lf_prach_compression_enable': {
-            'def': 'false',
-            'allowed_values': ('true', 'false')
         },
     }
 
@@ -512,7 +498,25 @@ class VVDNWrapper(DeviceWrapper):
         return self._mpsess
 
     def fetch_settings(self):
-        pass
+        settings = VVDNConfig_MPRU_b78()
+        txcarr = self._mpconf.\
+            get_uplane_tx_array_carrier(MPlaneConfig.DEF_TX_ARRAY_CARRIER)
+        ethflow = self._mpconf.\
+            find_ru_processing_element(MPlaneConfig.DEF_RU_PROCESSING_ELEMENT).\
+            transport_flow.eth_flow
+        txep = self._mpconf.\
+            get_uplane_lltx_endpoint(f"{MPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX}0")
+        settings['center_frequency'] = txcarr.center_of_channel_bandwidth / 1e6
+        settings['bandwidth'] = txcarr.channel_bandwidth / 1e6
+        settings['gain'] = txcarr.gain
+        settings['ofh_vlan'] = ethflow.vlan_id
+        settings['du_mac'] = ethflow.o_du_mac_address.replace(':', '')
+        cmpmeth = 'uncompressed' \
+            if txep.compression.compression_method == 'NO_COMPRESSION' \
+               else 'compressed'
+        settings['compression'] = \
+            f"{txep.compression.compression_type.lower()}_{cmpmeth}"
+        return settings
 
     def push_settings(self):
         pass
