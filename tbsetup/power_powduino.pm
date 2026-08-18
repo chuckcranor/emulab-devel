@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023, 2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,6 +37,7 @@ use vars qw(@ISA @EXPORT);
 
 use Socket;
 use IO::Socket;
+use IO::Select;
 use IO::Handle;
 use POSIX qw(strftime);
 
@@ -257,6 +258,31 @@ sub powduinoctrl {
 }
 
 #
+# Assume that two input strings should be equal, but they are not, because
+# characters were dropped from the latter (e.g., serial connection issues).
+# Return a count of missing chars.  Assumes len($s2) <= len($s1).
+#
+sub countdroppedchars($$) {
+    my ($s1,$s2) = @_;
+
+    my @s1a = split(//, $s1);
+    my @s2a = split(//, $s2);
+    my $s1len = scalar(@s1a);
+    my $s2len = scalar(@s2a);
+
+    my $j = 0;
+    my $i = 0;
+    while ($i < $s1len) {
+	if ($j < $s2len && $s1a[$i] eq $s2a[$j]) {
+	    $j += 1;
+	}
+	$i += 1;
+    }
+
+    return $i - $j;
+}
+
+#
 # Sync up with the power controller, and set it a command. $controller is the
 # controller name, for error message purposes, $TIP is the connection to
 # the controller opened with tipconnect, and $command is the whole command
@@ -279,25 +305,27 @@ sub syncandsend($$$;$) {
     for (my $i = 0; $i < 20; $i++) {
 	my $line;
 
-	if ($TIP->syswrite("\r") == 0) {
-	    print STDERR
-		"*** Power control sync write failed ($controller)\n";
-	    return 1;
-	}
-
 	while (1) {
-	    $line = rpc_readline($TIP);
+	    if (!defined($line)) {
+		if ($TIP->syswrite("\r") == 0) {
+		    print STDERR
+			"*** Power control sync write failed ($controller)\n";
+		    return 1;
+		}
+	    }
+	    $line = rpc_readline($TIP, 2.0);
 	    if (!defined($line)) {
 		print STDERR
 		    "*** Power control sync read failed ($controller)\n";
-		return 1;
+		last;
+		#return 1;
 	    }
 	    if ($debug) {
-		print STDERR "Read: $line";
+		print STDERR "syncandsend: sync read: '$line'\n";
 	    }
 	    if ($line =~ /$PROMPT/) {
 		if ($debug) {
-		    print STDERR "Matched prompt '$PROMPT'!\n";
+		    print STDERR "syncandsend: Matched prompt '$PROMPT'!\n";
 		}
 		$insync = 1;
 		last;
@@ -312,8 +340,15 @@ sub syncandsend($$$;$) {
 	return 1;
     }
 
+    # Drain console line one more time, nonblocking.
+    while (1) {
+	my $line = rpc_readline($TIP, 1.0);
+	last if (!defined($line));
+	print STDERR "syncandsend: post-sync drain read: '$line'\n";
+    }
+
     if ($debug) {
-	print STDERR "Sending '$cmd' to $controller\n";
+	print STDERR "syncandsend: Sending '$cmd' to $controller\n";
     }
 
     # Okay, got a prompt. Send it the string:
@@ -329,51 +364,72 @@ sub syncandsend($$$;$) {
     my %status = ();
     my $gotcmd = 0;
     my $gotstatus = 0;
-    print STDERR "Reading output following command\n"
+    my $gotprompt = 0;
+    print STDERR "syncandsend: reading output following command\n"
 	if ($debug);
     while (my $line = rpc_readline($TIP)) {
 	if (!defined($line)) {
 	    return -1;
 	}
-	print STDERR "Read: $line"
+	print STDERR "syncandsend: read: '$line'\n"
 	    if ($debug);
-	# skip echoed prompt+command
-	if ($line =~ /$cmd/) {
-	    $gotcmd = 1;
-	    print STDERR "GotCmd\n" if ($debug);
-	    next;
-	}
 	# didn't recognize our command for some reason, return failure
 	if ($line =~ /Invalid/) {
-	    print STDERR "Bad result\n" if ($debug);
+	    print STDERR "syncandsend: bad result\n" if ($debug);
 	    return -1;
+	}
+	# NB: sometimes prompt and echoed command may be intermingled
+	# or on the same line, *or* the prompt may arrive before the
+	# echoed command.  So, no longer go to the next iteration
+	# on any match; just set the flag, and check all flags before
+	# $statusp check.
+	if ($line =~ /$cmd/) {
+	    $gotcmd = 1;
+	    print STDERR "syncandsend: gotcmd\n" if ($debug);
+	    #next;
+	}
+	# check if there was a dropped char in echoed command
+	elsif (length($line) < length($PROMPT) && countdroppedchars($cmd, $line) == 1) {
+	    $gotcmd = 1;
+	    print STDERR "syncandsend: gotcmd (dist=1)\n" if ($debug);
+	    #next;
+	}
+	if ($line =~ /$PROMPT/) {
+	    $gotprompt = 1;
+	    print STDERR "syncandsend: gotprompt\n" if ($debug);
+	    #next;
+	}
+	elsif (length($line) < length($PROMPT) && countdroppedchars($PROMPT, $line) == 1) {
+	    $gotprompt = 1;
+	    print STDERR "syncandsend: gotprompt (dist=1)\n" if ($debug);
+	    #next;
 	}
 	#
 	# Got the following prompt, all done.
 	#
-	if (($gotcmd || $gotstatus) && $line =~ /$PROMPT/) {
+	if (($gotcmd || $gotstatus) && $gotprompt) {
 	    last;
 	}
 	if ($statusp) {
 	    if ($line =~ /^Pin\s+(\d+)\s+(on|off)/) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
-		print STDERR "status 'pin$1' = ", $status{"pin$1"}, "\n"
+		print STDERR "syncandsend: status 'pin$1' = ", $status{"pin$1"}, "\n"
 		    if ($debug);
 	    } elsif ($line =~ /^Pin\s+(\d+):\s+(\d+)/) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
-		print STDERR "status 'pin$1' = ", $status{"pin$1"}, "\n"
+		print STDERR "syncandsend: status 'pin$1' = ", $status{"pin$1"}, "\n"
 		    if ($debug);
 	    } elsif ($line =~ /^(\-?\d+(\.\d+)?)/) {
 		$status{"tempC"} = $1;
 		$gotstatus = 1;
-		print STDERR "status 'temp' = ", $status{"tempC"}, "\n"
+		print STDERR "syncandsend: status 'temp' = ", $status{"tempC"}, "\n"
 		    if ($debug);
 	    } elsif ($line =~ /^Current:\s+(\-?\d+(\.\d+)?)/) {
 		$status{"current"} = $1;
 		$gotstatus = 1;
-		print STDERR "status 'current' = ", $status{"current"}, "\n"
+		print STDERR "syncandsend: status 'current' = ", $status{"current"}, "\n"
 		    if ($debug);
 	    }
 	}
@@ -512,7 +568,7 @@ sub tipconnect($) {
 
 	my $foo = unpack("i", $capret);
 	if ($debug) {
-	    print STDERR "Capture returned $foo\n";
+	    print STDERR "tipconnect: capture returned $foo\n";
 	}
 	if ($foo == 0) {
 	    return($socket);
@@ -534,21 +590,96 @@ sub tipconnect($) {
     return 0;
 }
 
-sub rpc_readline($)
+sub rpc_readline_old($;$)
 {
-    my ($TIP) = @_;
+    my ($TIP, $timeout) = @_;
     my $line;
 
     my $cc = 0;
     while (1) {
+	if (defined($timeout) && $timeout > 0) {
+	    $TIP->blocking(0);
+	    my $select = IO::Select->new();
+	    $select->add($TIP);
+	    my @ready = $select->can_read($timeout);
+	    $TIP->blocking(1);
+	    if (scalar(@ready) == 0) {
+		print STDERR "got: undef (timeout $timeout reached)\n" if ($debug);
+		return undef;
+	    }
+	}
 	my $rval = $TIP->sysread($line, 1, $cc);
 	if (!defined($rval) || $rval == 0) {
 	    return undef;
 	}
-	print STDERR "got: =$line=\n" if ($debug > 1);
+	print STDERR "RpcReadline: =$line=\n" if ($debug > 1);
+	$cc++;
+	last if ($line =~ /\n/ || $line =~ /$PROMPT/ || $cc > 1023);
+	# Allow some missing chars from the prompt.
+	if (defined($line) && length($line) < length($PROMPT) && countdroppedchars($PROMPT, $line) == 1) {
+	    print STDERR "GotPrompt(dist=1)\n" if ($debug);
+	    last;
+	}
+    }
+    return $line;
+}
+
+sub rpc_readline($;$)
+{
+    my ($TIP, $timeout) = @_;
+    my $line;
+
+    my $inttimeout = $timeout;
+    if (!defined($inttimeout)) {
+	$inttimeout = 1.0;
+    }
+
+    $TIP->blocking(0);
+    my $select = IO::Select->new();
+
+    my $cc = 0;
+    while (1) {
+	$select->add($TIP);
+	my @ready = $select->can_read($inttimeout);
+	#$TIP->blocking(1);
+	if (scalar(@ready) == 0) {
+	    if (defined($line) && length($line) < length($PROMPT) && countdroppedchars($PROMPT, $line) == 1) {
+		# Allow a missing char from the prompt.
+		print STDERR "rpc_readline: gotprompt (dist=1)\n" if ($debug);
+		$TIP->blocking(1);
+		return $PROMPT;
+	    }
+	    elsif (defined($timeout) && $timeout > 0) {
+		# Throw an error if we hit the caller timeout.
+		print STDERR "rpc_readline: got undef (timeout $timeout reached)\n" if ($debug);
+		$TIP->blocking(1);
+		return undef;
+	    }
+	    else {
+		# If we had nothing to read, and were not supposed to
+		# timeout as instructed by caller, go around and try another
+		# select.
+		next;
+	    }
+	}
+	my $rval = $TIP->sysread($line, 1, $cc);
+	if (!defined($rval) || $rval == 0) {
+	    if (defined($line) && countdroppedchars($PROMPT, $line) == 1) {
+		# Allow a missing char from the prompt.
+		print STDERR "rpc_readline: gotprompt (dist=1)\n" if ($debug);
+		$TIP->blocking(1);
+		return $PROMPT;
+	    }
+	    else {
+		$TIP->blocking(1);
+		return undef;
+	    }
+	}
+	print STDERR "rpc_readline: =$line=\n" if ($debug > 1);
 	$cc++;
 	last if ($line =~ /\n/ || $line =~ /$PROMPT/ || $cc > 1023);
     }
+    $TIP->blocking(1);
     return $line;
 }
 
