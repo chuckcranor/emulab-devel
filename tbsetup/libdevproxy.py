@@ -83,11 +83,11 @@ class Utilities(object):
         return N_REF
 
     @staticmethod
-    def elab2normal_mac(mac):
+    def elab2standard_mac(mac):
         return re.sub(r'([0-9a-f]{2})', r'\1:', mac.lower(), count=5)
 
     @staticmethod
-    def normal2elab_mac(mac):
+    def standard2elab_mac(mac):
         return mac.lower().replace(':','')
 
     

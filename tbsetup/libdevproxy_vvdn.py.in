@@ -384,8 +384,8 @@ class VVDNMPlaneSession(object):
         return self._config
 
     def edit_config(self, config, target = "running"):
-        #return self.get_session().edit_config(target=target, config=config)
-        print(f"Config we would send:\n{config}")
+        print(f"Sending config:\n{config}")
+        return self.get_session().edit_config(target=target, config=config)
 
 
 ##############################################################################
@@ -473,9 +473,11 @@ class VVDNWrapper(DeviceWrapper):
 
     def _get_active_vif(self):
         vif = None
-        ruelt = self._mpconf.find_ru_processing_element(MPlaneConfig.DEF_RU_PROCESSING_ELEMENT)
+        ruelt = self._mpconf.find_ru_processing_element(
+            MPlaneConfig.DEF_RU_PROCESSING_ELEMENT)
         if ruelt:
-            vif = find_interface(ruelt.interface_name)
+            vif = self._mpconf.find_interface(
+                ruelt.transport_flow.interface_name)
         return vif
 
     def _create_active_vif(self, settings):
@@ -502,16 +504,19 @@ class VVDNWrapper(DeviceWrapper):
         upconf = pybindIETFXMLEncoder.encode(
             conf.yupobj.user_plane_configuration)
         confelt.append(upconf)
-        self._mpsess.edit_config(etree.tostring(confelt, encoding=str))
+        self._mpsess.edit_config(etree.tostring(confelt, encoding=str, pretty_print=True))
 
     def _push_settings_groups(self, groups):
-        confelt = etree.Element(f"config", nsmap={None: MPlaneDefs.NS_DEFAULT})
+        confelt = etree.Element(
+            f"config",
+            nsmap={None: MPlaneDefs.NS_DEFAULT, 'xc': MPlaneDefs.NS_DEFAULT})
         self._set_carrier_state(MPlaneConfig.ARRAY_CARRIER_INACTIVE)
         for group in groups:
             if group:
                 for cmd in group:
                     confelt.append(cmd)
-                self._mpsess.edit_config(etree.tostring(confelt, encoding=str))
+                self._mpsess.edit_config(
+                    etree.tostring(confelt, encoding=str, pretty_print=True))
                 confelt.clear()
         self._set_carrier_state(MPlaneConfig.ARRAY_CARRIER_ACTIVE)
 
@@ -528,8 +533,8 @@ class VVDNWrapper(DeviceWrapper):
         settings['bandwidth'] = txcarr.channel_bandwidth / 1e6
         settings['gain'] = txcarr.gain
         settings['ofh_vlan'] = ethflow.vlan_id
-        settings['ru_mac'] = Utilities.normal2elab_mac(ethflow.ru_mac_address)
-        settings['du_mac'] = Utilities.normal2elab_mac(ethflow.o_du_mac_address)
+        settings['ru_mac'] = Utilities.standard2elab_mac(ethflow.ru_mac_address)
+        settings['du_mac'] = Utilities.standard2elab_mac(ethflow.o_du_mac_address)
         cmpmeth = 'uncompressed' \
             if txep.compression.compression_method == 'NO_COMPRESSION' \
                else 'compressed'
@@ -541,8 +546,10 @@ class VVDNWrapper(DeviceWrapper):
         vifrm_cmds = []
         vifmk_cmds = []
         upc_cmds = []
-        ifelt = etree.Element("interfaces",
-                              nsmap={None: MPlaneDefs.NS_INTERFACES})
+        ifelt  = etree.Element("interfaces",
+                               nsmap={None: MPlaneDefs.NS_INTERFACES})
+        upcelt = etree.Element("user-plane-configuration",
+                               nsmap={None: MPlaneDefs.NS_UPCONF})
         active_vif = self._get_active_vif()
         if active_vif:
             if active_vif.vlan_id != settings["ofh_vlan"]:
@@ -562,6 +569,7 @@ class VVDNWrapper(DeviceWrapper):
             MPlaneConfig.DEF_TX_ARRAY_CARRIER)
         rxcarr = self._mpconf.get_uplane_rx_array_carrier(
             MPlaneConfig.DEF_RX_ARRAY_CARRIER)
+        txcarr.active = rxcarr.active = MPlaneConfig.ARRAY_CARRIER_INACTIVE
         txcarr.center_of_channel_bandwidth = \
             rxcarr.center_of_channel_bandwidth = \
                 int(settings["center_frequency"] * 1e6)
@@ -570,7 +578,8 @@ class VVDNWrapper(DeviceWrapper):
                 Utilities.cf2arfcn(settings["center_frequency"])
         txcarr.channel_bandwidth = rxcarr.channel_bandwidth = \
             int(settings["bandwidth"] * 1e6)
-        txcarr.gain = rxcarr.gain = settings["gain"]
-        upc_cmds.append(pybindIETFXMLEncoder.encode(txcarr))
-        upc_cmds.append(pybindIETFXMLEncoder.encode(rxcarr))
-        self._push_settings_groups([vifrm_cmds, vifmd_cmds, upc_cmds])
+        txcarr.gain = settings["gain"]
+        upcelt.append(pybindIETFXMLEncoder.encode(txcarr))
+        upcelt.append(pybindIETFXMLEncoder.encode(rxcarr))
+        upc_cmds.append(upcelt)
+        self._push_settings_groups([vifrm_cmds, vifmk_cmds, upc_cmds])
