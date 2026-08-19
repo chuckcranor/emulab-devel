@@ -98,6 +98,12 @@ class MPlaneConfig(object):
     DEL_RUELT_CMD = \
         """<processing-elements xmlns="urn:o-ran:processing-element:1.0"><ru-elements xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xc:operation="delete"><name>{}</name></ru-elements></processing-elements>"""
 
+    DEL_LLTXEP_CMD = \
+        """<low-level-tx-links xmlns="urn:o-ran:uplane-conf:1.0" xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xc:operation="delete"><name>{}</name></low-level-tx-links>"""
+
+    DEL_LLRXEP_CMD = \
+        """<low-level-rx-links xmlns="urn:o-ran:uplane-conf:1.0" xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xc:operation="delete"><name>{}</name></low-level-rx-links>"""
+
     def __init__(self, xmlstr = None):
         if xmlstr is not None:
             dobj = objectify.fromstring(xmlstr)\
@@ -202,19 +208,44 @@ class MPlaneConfig(object):
         self.ypeobj.processing_elements.ru_elements.delete(ruelt.name)
         return delobj
 
+    def find_uplane_lltx_links(self, prefix = None, pename = None):
+        rvals = []
+        for lltxlink in self.yupobj.user_plane_configuration.low_level_tx_links.values():
+            if (prefix and prefix in lltxlink.name) \
+               or (pename and pename == lltxlink.processing_element):
+                rvals.append(lltxlink)
+        return rvals
+
     def mk_uplane_lltx_links(
             self, link_prefix = DEF_LLTX_LINK_PREFIX,
             endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
             processing_element = DEF_RU_PROCESSING_ELEMENT,
             tx_array_carrier = DEF_TX_ARRAY_CARRIER
     ):
+        rvals = []
         for i in range(self.NUM_LLTX_LINKS):
             lltxlink = self.yupobj.user_plane_configuration.\
                 low_level_tx_links.add(f"{link_prefix}{i}")
             lltxlink.low_level_tx_endpoint = f"{endpoint_prefix}{i}"
             lltxlink.processing_element = processing_element
             lltxlink.tx_array_carrier = tx_array_carrier
-        return self.yupobj.user_plane_configuration.low_level_tx_links
+            rvals.append(lltxlink)
+        return rvals
+
+    def delete_uplane_lltx_links(self, prefix = None, pename = None):
+        delcmds = []
+        for lltxelt in self.find_uplane_lltx_links(prefix, pename):
+            delcmds.append(objectify.fromstring(self.DEL_LLTXEP_CMD.format(lltxelt.name)))
+            self.yupobj.user_plane_configuration.low_level_tx_links.delete(lltxelt.name)
+        return delcmds
+
+    def find_uplane_llrx_links(self, prefix = None, pename = None):
+        rvals = []
+        for llrxlink in self.yupobj.user_plane_configuration.low_level_rx_links.values():
+            if (prefix and prefix in llrxlink.name) \
+               or (pename and pename == llrxlink.processing_element):
+                rvals.append(llrxlink)
+        return rvals
 
     def mk_uplane_llrx_links(
             self, link_prefix = DEF_LLRX_LINK_PREFIX,
@@ -222,13 +253,22 @@ class MPlaneConfig(object):
             processing_element = DEF_RU_PROCESSING_ELEMENT,
             rx_array_carrier = DEF_RX_ARRAY_CARRIER
     ):
+        rvals = []
         for i in range(self.NUM_LLRX_LINKS):
             llrxlink = self.yupobj.user_plane_configuration.\
                 low_level_rx_links.add(f"{link_prefix}{i}")
             llrxlink.low_level_rx_endpoint = f"{endpoint_prefix}{i}"
             llrxlink.processing_element = processing_element
             llrxlink.rx_array_carrier = rx_array_carrier
-        return self.yupobj.user_plane_configuration.low_level_rx_links
+            rvals.append(llrxlink)
+        return rvals
+
+    def delete_uplane_llrx_links(self, prefix = None, pename = None):
+        delcmds = []
+        for llrxelt in self.find_uplane_llrx_links(prefix, pename):
+            delcmds.append(objectify.fromstring(self.DEL_LLRXEP_CMD.format(llrxelt.name)))
+            self.yupobj.user_plane_configuration.low_level_rx_links.delete(llrxelt.name)
+        return delcmds
 
     def get_uplane_lltx_endpoint(self, name):
         return self.yupobj.user_plane_configuration.low_level_tx_endpoints[name]
@@ -395,8 +435,8 @@ class VVDNMPlaneSession(object):
 class VVDNConfig_MPRU_b78(DeviceConfig):
     DEFAULT_SETTINGS = {
         'center_frequency': {
-            'def': 3370.2,
-            'allowed_ranges': ((3358.0,3700.0),)
+            'def': 3420.0,
+            'allowed_ranges': ((3400.0,3700.0),)
         },
         'bandwidth': {
             'def': 20.0,
@@ -493,6 +533,13 @@ class VVDNWrapper(DeviceWrapper):
         newruelt = self._mpconf.mk_ru_processing_element(
             dumac, ru_mac=rumac, vlan_id=settings["ofh_vlan"])
         mk_cmds.append(pybindIETFXMLEncoder.encode(newruelt))
+        upcelt = etree.Element("user-plane-configuration",
+                               nsmap={None: MPlaneDefs.NS_UPCONF})
+        for lltxlink in self._mpconf.mk_uplane_lltx_links():
+            upcelt.append(pybindIETFXMLEncoder.encode(lltxlink))
+        for llrxlink in self._mpconf.mk_uplane_llrx_links():
+            upcelt.append(pybindIETFXMLEncoder.encode(llrxlink))
+        mk_cmds.append(upcelt)
         return mk_cmds
 
     def _set_carrier_state(self, state):
@@ -546,24 +593,31 @@ class VVDNWrapper(DeviceWrapper):
         vifrm_cmds = []
         vifmk_cmds = []
         upc_cmds = []
-        ifelt  = etree.Element("interfaces",
-                               nsmap={None: MPlaneDefs.NS_INTERFACES})
-        upcelt = etree.Element("user-plane-configuration",
-                               nsmap={None: MPlaneDefs.NS_UPCONF})
+        ifrelt  = etree.Element("interfaces",
+                                nsmap={None: MPlaneDefs.NS_INTERFACES})
         active_vif = self._get_active_vif()
         if active_vif:
             if active_vif.vlan_id != settings["ofh_vlan"]:
+                dupcelt = etree.Element("user-plane-configuration",
+                                        nsmap={None: MPlaneDefs.NS_UPCONF})
+                for rm_cmd in self._mpconf.delete_uplane_lltx_links(
+                        pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
+                    dupcelt.append(rm_cmd)
+                for rm_cmd in self._mpconf.delete_uplane_llrx_links(
+                        pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
+                    dupcelt.append(rm_cmd)
+                vifrm_cmds.append(dupcelt)
                 vifrm_cmds.append(self._mpconf.delete_ru_processing_element(
                     MPlaneConfig.DEF_RU_PROCESSING_ELEMENT))
-                ifelt.append(
+                ifrelt.append(
                     self._mpconf.delete_vlan_interface(active_vif.name))
-                vifrm_cmds.append(ifelt)
+                vifrm_cmds.append(ifrelt)
                 vifmk_cmds = self._create_active_vif(settings)
         else:
             baseif = self._mpconf.find_interface(mac=settings["ru_mac"])
             for vif in self._mpconf.find_vlan_interfaces(baseif):
-                ifelt.append(self._mpconf.delete_vlan_interface(vif.name))
-            vifrm_cmds.append(ifelt)
+                ifrelt.append(self._mpconf.delete_vlan_interface(vif.name))
+            vifrm_cmds.append(ifrelt)
             vifmk_cmds = self._create_active_vif(settings)
         txcarr = self._mpconf.get_uplane_tx_array_carrier(
             MPlaneConfig.DEF_TX_ARRAY_CARRIER)
@@ -574,11 +628,13 @@ class VVDNWrapper(DeviceWrapper):
             rxcarr.center_of_channel_bandwidth = \
                 int(settings["center_frequency"] * 1e6)
         txcarr.absolute_frequency_center = \
-            txcarr.absolute_frequency_center = \
+            rxcarr.absolute_frequency_center = \
                 Utilities.cf2arfcn(settings["center_frequency"])
         txcarr.channel_bandwidth = rxcarr.channel_bandwidth = \
             int(settings["bandwidth"] * 1e6)
         txcarr.gain = settings["gain"]
+        upcelt = etree.Element("user-plane-configuration",
+                               nsmap={None: MPlaneDefs.NS_UPCONF})
         upcelt.append(pybindIETFXMLEncoder.encode(txcarr))
         upcelt.append(pybindIETFXMLEncoder.encode(rxcarr))
         upc_cmds.append(upcelt)

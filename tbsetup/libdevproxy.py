@@ -62,7 +62,7 @@ class Utilities(object):
 
     @staticmethod
     def cf2arfcn(F_REF):
-        F_REF = F_REF/1000000.0
+        #F_REF = F_REF/1000000.0
         if F_REF >= 0 and F_REF < 3000:
             dF_Global = 0.005
             F_REF_Offs = 0.0
@@ -78,8 +78,8 @@ class Utilities(object):
         else:
             raise ValueError(f"Invalid center frequency value: {F_REF}")
         N_REF = int((F_REF - F_REF_Offs) / dF_Global + N_REF_Offs)
-        if N_REF % 2:
-            N_REF += 1
+        #if N_REF % 2:
+        #    N_REF += 1
         return N_REF
 
     @staticmethod
