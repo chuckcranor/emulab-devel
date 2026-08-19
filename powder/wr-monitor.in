@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2023-2025 University of Utah and the Flux Group.
+# Copyright (c) 2023-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -708,6 +708,8 @@ sub wrzen_getstatus()
 		next;
 	    }
 	}
+    } else {
+	print STDERR "*** 'ssh $SSHOPTS $ip $GPACTRL healthingd' failed: $?\n"
     }
     %{$WRZEN{'status'}} = %status;
     print STDERR "$ip: ", Dumper(\%WRZEN), "\n"
@@ -1359,7 +1361,7 @@ sub NotifyTBOPS($$)
     
     my $TO = $TBOPS;
     if (1) {
-	$TO = "hibler\@flux.utah.edu";
+	$TO = "mike\@emulab.net";
     }
     SENDMAIL($TO, "WR Monitor: $subject",
 	     $message, $TBOPS, "X-NetBed: wr-monitor");

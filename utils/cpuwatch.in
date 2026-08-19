@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2018 University of Utah and the Flux Group.
+# Copyright (c) 2017-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,7 +87,7 @@ $GENI_DBNAME = "geni-cm";
 #
 
 #my $MAILTO	= $TBOPS;
-my $MAILTO	= "hibler\@flux.utah.edu";
+my $MAILTO	= "mike\@emulab.net";
 # Do not send mail more often than this (0 == any time)
 my $MAIL_IV	= (10 * 60);
 # Do not send more than this many total messages (0 == no limit)

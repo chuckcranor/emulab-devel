@@ -3,14 +3,14 @@
 #
 . defs-default
 
-TBOPSEMAIL=mike@flux.utah.edu
-TBLOGSEMAIL=mike@flux.utah.edu
-TBWWWEMAIL=mike@flux.utah.edu
-TBAPPROVALEMAIL=mike@flux.utah.edu
-TBLOGSEMAIL=mike@flux.utah.edu
-TBAUDITEMAIL=mike@flux.utah.edu
-TBSTATEDEMAIL=mike@flux.utah.edu
-TBTESTSUITEEMAIL=mike@flux.utah.edu
+TBOPSEMAIL=mike@emulab.net
+TBLOGSEMAIL=mike@emulab.net
+TBWWWEMAIL=mike@emulab.net
+TBAPPROVALEMAIL=mike@emulab.net
+TBLOGSEMAIL=mike@emulab.net
+TBAUDITEMAIL=mike@emulab.net
+TBSTATEDEMAIL=mike@emulab.net
+TBTESTSUITEEMAIL=mike@emulab.net
 WWW=www.emulab.net/dev/mike
 THISHOMEBASE=Mike.Emulab.Net
 

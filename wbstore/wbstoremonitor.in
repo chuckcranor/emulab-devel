@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2020-2021 University of Utah and the Flux Group.
+# Copyright (c) 2020-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1711,7 +1711,7 @@ sub fatal($)
     my $addr = $TBOPS;
 
     # XXX for now
-    $addr = "mike\@flux.utah.edu";
+    $addr = "mike\@emulab.net";
 
     #
     # Send a message to the testbed list. 
@@ -1742,7 +1742,7 @@ sub notify($)
     my $addr = $TBOPS;
 
     # XXX for now
-    $addr = "mike\@flux.utah.edu";
+    $addr = "mike\@emulab.net";
 
     return
 	if (!$MAINSITE);
