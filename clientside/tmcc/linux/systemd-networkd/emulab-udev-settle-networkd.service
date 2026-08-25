@@ -11,6 +11,7 @@ RequiredBy=systemd-networkd.socket
 
 [Service]
 Type=oneshot
+ExecStartPre=/bin/sh -c '. /etc/emulab/paths.sh ; CONTROLIF=`cat /var/emulab/boot/controlif` ; if [ -n "$CONTROLIF" -a -e /sys/class/net/$CONTROLIF ]; then $BINDIR/emulab-networkd-udev-helper.sh $CONTROLIF ; fi'
 ExecStart=/bin/sh -c ". /etc/emulab/paths.sh ; exec $BINDIR/emulab-udev-settle-networkd.sh"
 Restart=on-failure
 RemainAfterExit=false
