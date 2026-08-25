@@ -163,6 +163,7 @@ def get_redeem(
             status_code=404, detail="No such code " + str(code)
         )
     dbcode = row.UserSsoCodes
+    uid = dbcode.uid
     expires = dbcode.expires.timestamp()
     LOG.info("row: %r", dbcode)
     LOG.info("expires: %r %r", expires, time.time())
@@ -182,9 +183,9 @@ def get_redeem(
     # Now create the auth0 token (which is not stored in the DB).
     webtask = WebTask.CreateAnonymous()
     command = MANAGETOKENS + " -t " + webtask.task_id + " "
-    command  = command + " create -Z " + dbcode.uid
+    command  = command + " create -Z " + uid
 
-    completed = SUEXEC(dbcode.uid, "nobody", command);
+    completed = SUEXEC(uid, "nobody", command);
     if completed.returncode != 0:
         webtask.Delete()
         return HandleShellError(completed)
