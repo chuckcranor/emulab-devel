@@ -16,6 +16,7 @@ import sys
 import time
 from lxml import objectify, etree
 from ncclient import manager
+from ncclient.operations.rpc import RPCError
 from pyangbind.lib.serialise import pybindIETFXMLEncoder, pybindIETFXMLDecoder
 
 sys.path.append("@prefix@/lib")
@@ -26,7 +27,7 @@ import libyb_oran_uplane_conf
 
 ##############################################################################
 #
-# classes for individual M-Plane config elements
+# Classes for M-Plane config handling
 #
 class MPlaneDefs(object):
     NS_DEFAULT = "urn:ietf:params:xml:ns:netconf:base:1.0"
@@ -37,21 +38,7 @@ class MPlaneDefs(object):
     NS_IFTYPE = "urn:ietf:params:xml:ns:yang:iana-if-type"
     NS_IFIP = "urn:ietf:params:xml:ns:yang:ietf-ip"
 
-# This function will only run once, no matter how many times this module
-# is imported.
-def _init_xml():
-    if not hasattr(_init_xml, "has_run"):
-        #etree.register_namespace(None, MPlaneDefs.NS_DEFAULT)
-        etree.register_namespace('procelt', MPlaneDefs.NS_PROCELT)
-        etree.register_namespace('upconf', MPlaneDefs.NS_UPCONF)
-        etree.register_namespace('interfaces', MPlaneDefs.NS_INTERFACES)
-        etree.register_namespace('ifref', MPlaneDefs.NS_ORANIFACES)
-        etree.register_namespace('iftype', MPlaneDefs.NS_IFTYPE)
-        etree.register_namespace('ifip', MPlaneDefs.NS_IFIP)
-    _init_xml.has_run = True
-#_init_xml()
-
-# Abstract class for all MPlane configuration objects.
+# Class for handling MPlane configuration parsing/generation.
 class MPlaneConfig(object):
     IFTYPE_ETHERNET = "ethernetCsmacd"
     IFTYPE_L2VLAN = "l2vlan"
@@ -92,6 +79,9 @@ class MPlaneConfig(object):
     ARRAY_CARRIER_INACTIVE = "INACTIVE"
     ARRAY_CARRIER_ACTIVE = "ACTIVE"
 
+    # These delete commands are a sort of "cheat" as they aren't
+    # built up using proper lxml objects, but just trust that
+    # it was a lot easier to do it this way.
     DEL_VLANIF_CMD = \
         """<interface xmlns="urn:ietf:params:xml:ns:yang:ietf-interfaces" xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xc:operation="delete"><name>{}</name></interface>"""
 
@@ -273,6 +263,13 @@ class MPlaneConfig(object):
     def get_uplane_lltx_endpoint(self, name):
         return self.yupobj.user_plane_configuration.low_level_tx_endpoints[name]
 
+    def find_uplane_lltx_endpoints(self, prefix):
+        rvals = []
+        for ep in self.yupobj.user_plane_configuration.low_level_tx_endpoints.values():
+            if prefix in ep.name:
+                rvals.append(ep)
+        return rvals
+
     def mk_uplane_lltx_endpoints(
             self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
             compression_type = DEF_LLEP_COMPRESSION_TYPE,
@@ -310,6 +307,16 @@ class MPlaneConfig(object):
                 else:
                     setattr(lltxep, self.safe_name(k), v)
         return self.yupobj.user_plane_configuration.low_level_tx_endpoints
+
+    def get_uplane_llrx_endpoint(self, name):
+        return self.yupobj.user_plane_configuration.low_level_rx_endpoints[name]
+
+    def find_uplane_llrx_endpoints(self, prefix):
+        rvals = []
+        for ep in self.yupobj.user_plane_configuration.low_level_rx_endpoints.values():
+            if prefix in ep.name:
+                rvals.append(ep)
+        return rvals
 
     def mk_uplane_llrx_endpoints(
             self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
@@ -424,8 +431,13 @@ class VVDNMPlaneSession(object):
         return self._config
 
     def edit_config(self, config, target = "running"):
-        print(f"Sending config:\n{config}")
-        return self.get_session().edit_config(target=target, config=config)
+        rval = None
+        try:
+            rval = self.get_session().edit_config(target=target, config=config)
+        except RPCError:
+            self.lgr.error(f"edit_config operation failed on {self._addr}:\n{config}")
+            raise
+        return rval
 
 
 ##############################################################################
@@ -471,7 +483,7 @@ class VVDNConfig_MPRU_b78(DeviceConfig):
 
 ##############################################################################
 #
-# VVDNWrapper class definition
+# Top-level VVDNWrapper class definition
 #
 class VVDNWrapper(DeviceWrapper):
     DEF_LOG_LEVEL = logging.INFO
@@ -484,6 +496,14 @@ class VVDNWrapper(DeviceWrapper):
     WAIT_LOG_SLEEP = 1
     FW_VERSION_UNKNOWN = "YYYYMMDDHHMMSS"
     FW_VERSION_FILE = "/etc/version"
+
+    BW2PRB_MAP = {
+        20000000:  51,
+        40000000:  106,
+        60000000:  162,
+        80000000:  217,
+        100000000: 273
+    }
 
     def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
                  log_level = DEF_LOG_LEVEL):
@@ -593,6 +613,9 @@ class VVDNWrapper(DeviceWrapper):
         vifrm_cmds = []
         vifmk_cmds = []
         upc_cmds = []
+
+        # First handle any necessary (re)creation/cleanup related to the
+        # OFH vlan interface.
         ifrelt  = etree.Element("interfaces",
                                 nsmap={None: MPlaneDefs.NS_INTERFACES})
         active_vif = self._get_active_vif()
@@ -619,6 +642,10 @@ class VVDNWrapper(DeviceWrapper):
                 ifrelt.append(self._mpconf.delete_vlan_interface(vif.name))
             vifrm_cmds.append(ifrelt)
             vifmk_cmds = self._create_active_vif(settings)
+
+        # Now deal with changes to the "user plane configuration"
+        upcelt = etree.Element("user-plane-configuration",
+                               nsmap={None: MPlaneDefs.NS_UPCONF})
         txcarr = self._mpconf.get_uplane_tx_array_carrier(
             MPlaneConfig.DEF_TX_ARRAY_CARRIER)
         rxcarr = self._mpconf.get_uplane_rx_array_carrier(
@@ -630,11 +657,19 @@ class VVDNWrapper(DeviceWrapper):
         txcarr.absolute_frequency_center = \
             rxcarr.absolute_frequency_center = \
                 Utilities.cf2arfcn(settings["center_frequency"])
-        txcarr.channel_bandwidth = rxcarr.channel_bandwidth = \
-            int(settings["bandwidth"] * 1e6)
+        newbw = int(settings['bandwidth'] * 1e6)
+        if newbw != txcarr.channel_bandwidth:
+            newprb = self.BW2PRB_MAP[newbw]
+            for txep in self._mpconf.find_uplane_lltx_endpoints(
+                    prefix=MPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX):
+                txep.number_of_prb_per_scs["KHZ_30"].number_of_prb = newprb
+                upcelt.append(pybindIETFXMLEncoder.encode(txep))
+            for rxep in self._mpconf.find_uplane_llrx_endpoints(
+                    prefix=MPlaneConfig.DEF_LLRX_ENDPOINT_PREFIX):
+                rxep.number_of_prb_per_scs["KHZ_30"].number_of_prb = newprb
+                upcelt.append(pybindIETFXMLEncoder.encode(rxep))
+        txcarr.channel_bandwidth = rxcarr.channel_bandwidth = newbw
         txcarr.gain = settings["gain"]
-        upcelt = etree.Element("user-plane-configuration",
-                               nsmap={None: MPlaneDefs.NS_UPCONF})
         upcelt.append(pybindIETFXMLEncoder.encode(txcarr))
         upcelt.append(pybindIETFXMLEncoder.encode(rxcarr))
         upc_cmds.append(upcelt)
