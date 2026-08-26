@@ -40,19 +40,15 @@ class BenetelConfig_RAN650_b78(DeviceConfig):
             'def': 37.0,
             'allowed_ranges': ((1.0,37.0),)
         },
-        'fh_cplane_vlan': {
+        'ofh_vlan': {
             'def': 1,
             'allowed_ranges': ((1,4096),)
         },
-        'fh_uplane_vlan': {
-            'def': 1,
-            'allowed_ranges': ((1,4096),)
-        },
-        'du_cplane_mac': {
+        'ru_mac': {
             'def': '000000000000',
             'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
         },
-        'du_uplane_mac': {
+        'du_mac': {
             'def': '000000000000',
             'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
         },
@@ -103,19 +99,15 @@ class BenetelConfig_RAN550_b78(DeviceConfig):
             'def': 27.0,
             'allowed_ranges': ((1.0,27.0),)
         },
-        'fh_cplane_vlan': {
+        'ofh_vlan': {
             'def': 1,
             'allowed_ranges': ((1,4096),)
         },
-        'fh_uplane_vlan': {
-            'def': 1,
-            'allowed_ranges': ((1,4096),)
-        },
-        'du_cplane_mac': {
+        'ru_mac': {
             'def': '000000000000',
             'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
         },
-        'du_uplane_mac': {
+        'du_mac': {
             'def': '000000000000',
             'allowed_patterns': (r'[0-9A-Fa-f]{12}',)
         },
@@ -178,9 +170,6 @@ class BenetelWrapper(DeviceWrapper):
         'bandwidth': '/etc/ru-bandwidth',
         'gain': '/etc/ru-tx-gain-db',
     }
-    RADIO_SETUP_SCRIPT_SETTINGS = \
-        ('fh_cplane_vlan', 'fh_uplane_vlan', 'du_cplane_mac',
-         'du_uplane_mac')
     RADIO_CONFIG_FILE_MAP = {
         'mimo_mode': 'mimo_mode',
         'downlink_scaling': 'downlink_scaling',
@@ -191,11 +180,11 @@ class BenetelWrapper(DeviceWrapper):
         'bandwidth_hz': 'bandwidth',
         'centre_frequency_hz': 'center_frequency',
         'tx_power_dbm': 'gain',
-        'c_plane_du_mac': 'du_cplane_mac',
-        'u_plane_du_mac': 'du_uplane_mac',
-        'c_plane_du_vlan': 'fh_cplane_vlan',
-        'u_plane_du_vlan_downlink': 'fh_uplane_vlan',
-        'u_plane_du_vlan_uplink': 'fh_uplane_vlan'
+        'c_plane_du_mac': 'du_mac',
+        'u_plane_du_mac': 'du_mac',
+        'c_plane_du_vlan': 'ofh_vlan',
+        'u_plane_du_vlan_downlink': 'ofh_vlan',
+        'u_plane_du_vlan_uplink': 'ofh_vlan'
     }
     DEVCONF_MAP = {
         'RAN650': BenetelConfig_RAN650_b78,
@@ -209,10 +198,16 @@ class BenetelWrapper(DeviceWrapper):
     def connect_session(self, password = DEF_PASSWD,
                         ping_timeout = DEF_PING_TIMEOUT):
         super().connect_session(password, ping_timeout)
-        self._parse_fwversion(self._fwversion)
+        self._fetch_fwinfo()
 
-    def _parse_fwversion(self, fwstr):
-        hw, version, *other = fwstr.split("-")
+    def _fetch_fwinfo(self):
+        try:
+            contents = self._ssh.read_remote_file(self.FW_VERSION_FILE)
+        except FileNotFoundError as e:
+            self._ssh.close()
+            self.lgr.warning("Remote host has no firmware version file?")
+            raise
+        hw, version, *other = contents[0].strip().split("-")
         major, minor, rev = version.split(".")
         major = major.split("v")[1]
         self._hardware = hw
@@ -264,30 +259,21 @@ class BenetelWrapper(DeviceWrapper):
             m = re.search(self.RADIO_SETUP_SCRIPT_PATTERN, ln)
             if m:
                 scrset[m[1]] = m[2]
-        settings['fh_cplane_vlan'] = int(scrset['C0331'], base=16)
-        settings['fh_uplane_vlan'] = int(scrset['C0318'], base=16)
-        settings['du_cplane_mac'] = scrset['C031A'] + scrset['C0319']
-        settings['du_uplane_mac'] = scrset['C0316'] + scrset['C0315']
+        settings['ofh_vlan'] = int(scrset['C0331'], base=16)
+        settings['du_mac'] = scrset['C031A'] + scrset['C0319']
         return settings
 
     def _push_radio_setup_script_settings(self, settings):
         outlines = []
         prepat = r'-w \1 -x 0x'
         subst = {
-            'C0331': prepat +
-            format(settings['fh_cplane_vlan'], 'X'),
-            'C0318': prepat +
-            format(settings['fh_uplane_vlan'], 'X'),
-            'C0330': prepat +
-            format(settings['fh_uplane_vlan'], 'X'),
-            'C031A': prepat +
-            settings['du_cplane_mac'][0:4].upper(),
-            'C0319': prepat +
-            settings['du_cplane_mac'][4:].upper(),
-            'C0316': prepat +
-            settings['du_uplane_mac'][0:4].upper(),
-            'C0315': prepat +
-            settings['du_uplane_mac'][4:].upper(),
+            'C0331': prepat + format(settings['ofh_vlan'], 'X'),
+            'C0318': prepat + format(settings['ofh_vlan'], 'X'),
+            'C0330': prepat + format(settings['ofh_vlan'], 'X'),
+            'C031A': prepat + settings['du_mac'][0:4].upper(),
+            'C0319': prepat + settings['du_mac'][4:].upper(),
+            'C0316': prepat + settings['du_mac'][0:4].upper(),
+            'C0315': prepat + settings['du_mac'][4:].upper()
         }
         for ln in self.get_session().read_remote_file(self.RADIO_SETUP_SCRIPT):
             ln = ln.rstrip()
@@ -297,7 +283,7 @@ class BenetelWrapper(DeviceWrapper):
                 outlines.append(res)
             else:
                 outlines.append(ln)
-        outlines.append("") # Add final newline...
+        outlines.append("") # Add final newline.
         self.get_session().\
             write_remote_file(self.RADIO_SETUP_SCRIPT, outlines, overwrite=True)
 
@@ -338,7 +324,7 @@ class BenetelWrapper(DeviceWrapper):
                                        r'\1=' + str(val), ln))
             else:
                 outlines.append(ln)
-        outlines.append("") # Add final newline since this is a script...
+        outlines.append("") # Add final newline.
         self.get_session().\
             write_remote_file(self.RADIO_CONFIG_FILE, outlines, overwrite=True)
 
@@ -350,6 +336,7 @@ class BenetelWrapper(DeviceWrapper):
                 settings[stg] = self._fetch_single_file_setting(stg)
             settings.update(self._fetch_radio_setup_script_settings())
         settings.update(self._fetch_radio_config_file_settings())
+        # XXX: Update to fetch the RU's OFH mac address
         return settings
 
     def push_settings(self, settings):

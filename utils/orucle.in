@@ -44,16 +44,20 @@ DEV_TYPE_MAP = {
 # Top-level code (main script entry point and helpers)
 #
 def get_wrapper(args, loglvl):
-    return DEV_TYPE_MAP[args.type](args.address, args.username, log_level = loglvl)
+    devobj = DEV_TYPE_MAP[args.type]
+    uname = args.username if args.username else devobj.DEF_USER        
+    return devobj(args.address, uname, log_level = loglvl)
 
 def connect(args, wrapper):
-    passwd = ""
+    passwd = None
     if args.read_password:
         passwd = getpass()
     elif args.password:
         passwd = args.password
-    wrapper.connect_session(password=passwd, ping_timeout=args.ping_timeout)
-    passwd = None
+    if passwd is not None:
+        wrapper.connect_session(password=passwd, ping_timeout=args.ping_timeout)
+    else:
+        wrapper.connect_session(ping_timeout=args.ping_timeout)
 
 def update_config(args, wrapper):
     cfg = []
@@ -73,10 +77,12 @@ def parse_args():
     parser.add_argument("address", help="Address (hostname or IP) of the device.")
     parser.add_argument("type", choices=DEV_TYPE_MAP.keys(),
                         help=f"O-RU device type (required).")
-    parser.add_argument("-u", "--username", default=DeviceWrapper.DEF_USER,
+    parser.add_argument("-d", "--debug", action="store_true",
+                        help="Turn on debug logging.")
+    parser.add_argument("-u", "--username",
                         help="Username to supply when logging in to device.")
     parser.add_argument("-R", "--read-password", action="store_true",
-                        help="Read password from command line. "
+                        help="Read password from command line."
                         "Note: This argument overrides the `password` argument")
     parser.add_argument("-p", "--password", help="Password for authenticating.")
     parser.add_argument("-g", "--get-config", action="store_true",
@@ -107,7 +113,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    loglvl = logging.ERROR if args.quiet else logging.INFO
+    loglvl = logging.INFO
+    if args.quiet:
+        loglvl = logging.ERROR
+    elif args.debug:
+        loglvl = logging.DEBUG
     lgr = Utilities.mk_logger("orucle", loglvl)
     wrapper = get_wrapper(args, loglvl)
     try:

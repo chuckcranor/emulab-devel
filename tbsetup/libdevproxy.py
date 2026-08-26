@@ -369,6 +369,7 @@ class DeviceWrapper(ABC):
         self._hardware = self.HW_MODEL_UNKNOWN
         self._fwversion = self.FW_VERSION_UNKNOWN
         self._username = username
+        self._pass = self.DEF_PASSWD
         self._keyfile = keyfile
         self._ssh = SSHWrapper(mgmt_addr, default_user=username,
                                default_keyfile=keyfile, log_level = log_level)
@@ -377,17 +378,11 @@ class DeviceWrapper(ABC):
                         ping_timeout = DEF_PING_TIMEOUT):
         Utilities.wait_for_ping(self.addr, ping_timeout)
         self._ssh.connect(password = password)
-        try:
-            contents = self._ssh.read_remote_file(self.FW_VERSION_FILE)
-        except FileNotFoundError as e:
-            self._ssh.close()
-            self.lgr.warning("Remote host has no version file?")
-            raise
-        self._fwversion = contents[0].strip()
+        self._pass = password
 
     def get_session(self):
         if not self.is_connected():
-            self.connect_session()
+            self.connect_session(self._pass)
         return self._ssh
 
     def close_session(self):
@@ -410,10 +405,9 @@ class DeviceWrapper(ABC):
         self.close_session()
         self.lgr.info("Device rebooted.")
 
+    @abstractmethod
     def wait_for_radio_online(self, timeout = DEF_BOOT_TIMEOUT):
-        stime = time.time()
-        Utilities.wait_for_ping(self.addr, timeout)
-        self.lgr.info("Device pings.")
+        raise RuntimeError("Child class did not define 'wait_for_radio_online()'?!")
 
     @abstractmethod
     def fetch_settings(self):

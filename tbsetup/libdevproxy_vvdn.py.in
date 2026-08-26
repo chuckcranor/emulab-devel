@@ -37,6 +37,7 @@ class MPlaneDefs(object):
     NS_ORANIFACES = "urn:o-ran:interfaces:1.0"
     NS_IFTYPE = "urn:ietf:params:xml:ns:yang:iana-if-type"
     NS_IFIP = "urn:ietf:params:xml:ns:yang:ietf-ip"
+    NS_HARDWARE = "urn:ietf:params:xml:ns:yang:ietf-hardware"
 
 # Class for handling MPlane configuration parsing/generation.
 class MPlaneConfig(object):
@@ -105,8 +106,7 @@ class MPlaneConfig(object):
             self.yifsobj = pybindIETFXMLDecoder.load_xml(
                 root, libyb_ietf_interfaces, "ietf-interfaces")
             root.remove(ifsobj)
-            peobj = dobj.find(
-                f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
+            peobj = dobj.find(f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
             root.append(peobj)
             self.ypeobj = pybindIETFXMLDecoder.load_xml(
                 root, libyb_oran_processing_element, "o-ran-processing-element")
@@ -403,27 +403,34 @@ class VVDNMPlaneSession(object):
         self.lgr = Utilities.mk_logger(self.__class__.__name__, log_level)
         self._addr = mgmt_addr
         self._user = username
+        self._pass = self.DEF_MPLANE_PASS
         self._mgr = None
-        self._connected = False
         self._config = None
 
     def connect_session(self, password=DEF_MPLANE_PASS,
                         ping_timeout=DEF_PING_TIMEOUT):
-        Utilities.wait_for_ping(self._addr, ping_timeout)
+        if ping_timeout:
+            Utilities.wait_for_ping(self._addr, ping_timeout)
         self._mgr = manager.connect_ssh(
             self._addr, username=self._user, password=password,
             hostkey_verify=False)
-        self.lgr.info(f"M-Plane session established with {self._addr}, "
-                      f"session ID {self._mgr.session_id}")
-        self._connected = True
+        self._pass = password
 
     def is_connected(self):
-        return self._connected
+        return self._mgr and self._mgr.connected
 
     def get_session(self):
         if not self._mgr:
-            self.connect_session()
+            self.connect_session(self._pass)
         return self._mgr
+
+    def close_session(self):
+        if self._mgr:
+            self._mgr.close_session()
+        self._mgr = None
+
+    def get(self, filt):
+        return self.get_session().get(("subtree", filt))
 
     def get_config(self, source = "running", refresh = False):
         if refresh or self._config is None:
@@ -439,6 +446,8 @@ class VVDNMPlaneSession(object):
             raise
         return rval
 
+    def reboot(self):
+        self.get_session().reboot_machine()
 
 ##############################################################################
 #
@@ -493,9 +502,8 @@ class VVDNWrapper(DeviceWrapper):
     DEF_BOOT_TIMEOUT = 120
     DEF_SHUTDOWN_TIME = 30
     DEF_RADIO_ONLINE_TIMEOUT = 300
-    WAIT_LOG_SLEEP = 1
-    FW_VERSION_UNKNOWN = "YYYYMMDDHHMMSS"
-    FW_VERSION_FILE = "/etc/version"
+    WAIT_ONLINE_SLEEP = 5
+    FW_VERSION_UNKNOWN = "NN-vX.Y.Z.R"
 
     BW2PRB_MAP = {
         20000000:  51,
@@ -510,26 +518,80 @@ class VVDNWrapper(DeviceWrapper):
         super().__init__(mgmt_addr, username, keyfile, log_level)
         self._mpsess = VVDNMPlaneSession(
             mgmt_addr, username, log_level=log_level)
-        self._mpconf = MPlaneConfig(str(self._mpsess.get_config()))
+        self._fwversion = self.FW_VERSION_UNKNOWN
+        self._mpconf = None
 
-    def connect_session(self, password = DEF_PASSWD, connect_ssh = False,
+    def connect_session(self, password = DEF_PASSWD,
                         ping_timeout = DEF_PING_TIMEOUT):
-        if connect_ssh:
-            super().connect_session(password, ping_timeout)
-        self._mpsess.connect_session(password, ping_timeout)
+        self.connect_ssh_session(password, ping_timeout)
+        self.connect_mplane_session(password, ping_timeout = 0)
 
-    def get_session(self):
-        raise RuntimeError(
-            f"{Utilities.whoami(self)}: Do not call this method! It is "
-            "ambiguous in this class since multiple sessions exist.")
+    def connect_ssh_session(self, password = DEF_PASSWD,
+                            ping_timeout = DEF_PING_TIMEOUT):
+        super().connect_session(password, ping_timeout)
+
+    def connect_mplane_session(self, password = DEF_PASSWD,
+                               ping_timeout = DEF_PING_TIMEOUT):
+        self._mpsess.connect_session(password, ping_timeout)
+        self._mpconf = MPlaneConfig(str(self._mpsess.get_config()))
+        self._fetch_fwinfo()
 
     def get_ssh_session(self):
         return super().get_session()
 
     def get_mplane_session(self):
         if not self._mpsess.is_connected():
-            self.connect_session()
+            self.connect_mplane_session(self._pass)
         return self._mpsess
+
+    def close_session(self):
+        self.close_ssh_session()
+        self.close_mplane_session()
+
+    def close_ssh_session(self):
+        super().close_session()
+
+    def close_mplane_session(self):
+        self._mpsess.close_session()
+
+    def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
+        res = []
+        stime = time.time()
+        Utilities.wait_for_ping(self.addr, self.DEF_BOOT_TIMEOUT)
+        self.lgr.info("Device pings. Waiting for radio.")
+        filt = etree.Element("hardware", nsmap={None: MPlaneDefs.NS_HARDWARE})
+        etree.SubElement(etree.SubElement(etree.SubElement(filt, "component"),
+                                          "state"),
+                         "oper-state")
+        while time.time() <= stime + timeout:
+            res = self.get_mplane_session().get(filt)
+            if res:
+                res2 = res.data.xpath("//*[local-name()='oper-state']")
+                if len(res2) > 0:
+                    state = res2[0].text
+                    self.lgr.debug(f"Radio state: {state}")
+                    if "enabled" in state:
+                        self.lgr.info("Radio is ready.")
+                        return True
+            time.sleep(self.WAIT_ONLINE_SLEEP)
+        return False
+
+    def reboot(self, pingwait = True):
+        self.close_mplane_session()
+        self.get_ssh_session().exec("/sbin/reboot")
+        self.close_ssh_session()
+        if pingwait:
+            Utilities.wait_for_ping(self.addr, self.DEF_SHUTDOWN_TIME,
+                                    invert=True)
+        self.lgr.info("Device rebooted.")
+
+    def _fetch_fwinfo(self):
+        filt = etree.Element("hardware", nsmap={None: MPlaneDefs.NS_HARDWARE})
+        etree.SubElement(etree.SubElement(filt, "component"), "software-rev")
+        res = self.get_mplane_session().get(filt)
+        if res:
+            self._fwversion = \
+                res.data.xpath("//*[local-name()='software-rev']")[0].text
 
     def _get_active_vif(self):
         vif = None
