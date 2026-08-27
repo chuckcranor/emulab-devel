@@ -47,38 +47,61 @@ class MPlaneConfig(object):
     DEF_RU_PROCESSING_ELEMENT = "element1"
     DEF_PROCELT_TRANSPORT_SESSION_TYPE = "ETH-INTERFACE"
 
+    DEF_NUM_LLTX_LINKS = 4
+    DEF_NUM_LLRX_LINKS = 4
     DEF_LLTX_LINK_PREFIX = "lltxlink"
     DEF_LLRX_LINK_PREFIX = "llrxlink"
 
+    DEF_NUM_LLTX_ENDPOINTS = 4
+    DEF_NUM_LLRX_ENDPOINTS = 8
     DEF_LLTX_ENDPOINT_PREFIX = "slltx-endpoint"
     DEF_LLRX_ENDPOINT_PREFIX = "sllrx-endpoint"
-    DEF_LLRX_ENDPOINT_NON_TIME_MANAGED_DELAY_ENABLED = True
-    DEF_LLEP_COMPRESSION_IQ_BITWIDTH = 9
-    DEF_LLEP_COMPRESSION_TYPE = "STATIC"
-    DEF_LLEP_COMPRESSION_FS_OFFSET = 0
-    DEF_LLEP_CP_LENGTH = 352
-    DEF_LLEP_CP_LENGTH_OTHER = 288
-    DEF_LLEP_ABS_CF_OFFSET = 0
-    DEF_LLEP_NUM_PRB_PER_SCS_ENTRIES = [
-        {"scs": "KHZ_30", "number-of-prb": 106},
-    ]
-    DEF_LLEP_EAXCID_ATTRS = {
-        "o-du-port-bitmask": 65024,
-        "band-sector-bitmask": 448,
-        "ccid-bitmask": 56,
-        "ru-port-bitmask": 7,
+    DEF_COMMON_ENDPOINT_SETTINGS = {
+        'compression': {
+            'iq-bitwidth': 9,
+            'compression-type': "STATIC",
+            'fs-offset': 0,
+        },
+        'cp-length': 352,
+        'cp-length-other': 288,
+        'offset-to-absolute-frequency-center': 0,
+        'number-of-prb-per-scs': [
+            { 'scs': "KHZ_30", 'number-of-prb': 106, },
+        ],
+        'e-axcid': {
+            'o-du-port-bitmask': 65024,
+            'band-sector-bitmask': 448,
+            'ccid-bitmask': 56,
+            'ru-port-bitmask': 7,
+        },
     }
-
-    DEF_TX_ARRAY_CARRIER = "txarraycarrier0"
-    DEF_RX_ARRAY_CARRIER = "rxarraycarrier0"
-
-    NUM_LLTX_LINKS = 4
-    NUM_LLTX_ENDPOINTS = 4
-    NUM_LLRX_LINKS = 4
-    NUM_LLRX_ENDPOINTS = 8
+    DEF_LLTX_ENDPOINT_SETTINGS = DEF_COMMON_ENDPOINT_SETTINGS | {}
+    DEF_LLRX_ENDPOINT_SETTINGS = DEF_COMMON_ENDPOINT_SETTINGS | {
+        'non-time-managed-delay-enabled': True,
+        'ul-fft-sampling-offsets': [
+            {'scs': "KHZ_30", 'ul-fft-sampling-offset': 0},
+        ],
+    }
 
     ARRAY_CARRIER_INACTIVE = "INACTIVE"
     ARRAY_CARRIER_ACTIVE = "ACTIVE"
+    DEF_TX_ARRAY_CARRIER = "txarraycarrier0"
+    DEF_RX_ARRAY_CARRIER = "rxarraycarrier0"
+    DEF_COMMON_ARRAY_CARRIER_SETTINGS = {
+        'absolute-frequency-center': 628000,
+        'center-of-channel-bandwidth': 3420000000,
+        'channel-bandwidth': 40000000,
+        'active': ARRAY_CARRIER_INACTIVE,
+        'downlink-radio-frame-offset': 0,
+        'downlink-sfn-offset': 0,
+    }
+    DEF_TX_ARRAY_CARRIER_SETTINGS = DEF_COMMON_ARRAY_CARRIER_SETTINGS | {
+        'gain': 27,
+    }
+    DEF_RX_ARRAY_CARRIER_SETTINGS = DEF_COMMON_ARRAY_CARRIER_SETTINGS | {
+        'gain-correction': 0.0,
+        'n-ta-offset': 25600,
+    }
 
     # These delete commands are a sort of "cheat" as they aren't
     # built up using proper lxml objects, but just trust that
@@ -210,10 +233,11 @@ class MPlaneConfig(object):
             self, link_prefix = DEF_LLTX_LINK_PREFIX,
             endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
             processing_element = DEF_RU_PROCESSING_ELEMENT,
-            tx_array_carrier = DEF_TX_ARRAY_CARRIER
+            tx_array_carrier = DEF_TX_ARRAY_CARRIER,
+            count = DEF_NUM_LLTX_LINKS
     ):
         rvals = []
-        for i in range(self.NUM_LLTX_LINKS):
+        for i in range(count):
             lltxlink = self.yupobj.user_plane_configuration.\
                 low_level_tx_links.add(f"{link_prefix}{i}")
             lltxlink.low_level_tx_endpoint = f"{endpoint_prefix}{i}"
@@ -241,10 +265,11 @@ class MPlaneConfig(object):
             self, link_prefix = DEF_LLRX_LINK_PREFIX,
             endpoint_prefix = DEF_LLRX_ENDPOINT_PREFIX,
             processing_element = DEF_RU_PROCESSING_ELEMENT,
-            rx_array_carrier = DEF_RX_ARRAY_CARRIER
+            rx_array_carrier = DEF_RX_ARRAY_CARRIER,
+            count = DEF_NUM_LLRX_LINKS
     ):
         rvals = []
-        for i in range(self.NUM_LLRX_LINKS):
+        for i in range(count):
             llrxlink = self.yupobj.user_plane_configuration.\
                 low_level_rx_links.add(f"{link_prefix}{i}")
             llrxlink.low_level_rx_endpoint = f"{endpoint_prefix}{i}"
@@ -270,43 +295,40 @@ class MPlaneConfig(object):
                 rvals.append(ep)
         return rvals
 
-    def mk_uplane_lltx_endpoints(
-            self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
-            compression_type = DEF_LLEP_COMPRESSION_TYPE,
-            endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
-            extra = {}
-    ):
-        for i in range(self.NUM_LLTX_ENDPOINTS):
-            lltxep = self.yupobj.user_plane_configuration.\
-                low_level_tx_endpoints.add(f"{endpoint_prefix}{i}")
-            lltxep.compression.iq_bitwidth = iq_bitwidth
-            lltxep.compression.compression_type = compression_type
-            lltxep.compression.fs_offset = self.DEF_LLEP_COMPRESSION_FS_OFFSET
-            lltxep.cp_length = self.DEF_LLEP_CP_LENGTH
-            lltxep.cp_length_other = self.DEF_LLEP_CP_LENGTH_OTHER
-            lltxep.offset_to_absolute_frequency_center = \
-                self.DEF_LLEP_ABS_CF_OFFSET
-            for m in self.DEF_LLEP_NUM_PRB_PER_SCS_ENTRIES:
-                lltxep.number_of_prb_per_scs.add(m['scs'])
-                lltxep.number_of_prb_per_scs[m['scs']].\
-                    number_of_prb = m['number-of-prb']
-            for k, v in self.DEF_LLEP_EAXCID_ATTRS.items():
-                setattr(lltxep.e_axcid, self.safe_name(k), v)
-                lltxep.e_axcid.eaxc_id = i
-            for k, v in extra.items():
-                if k in ("compression", "e-axcid"):
+    def _mk_uplane_endpoints(self, endpoints_obj, endpoint_prefix, count):
+        for i in range(count):
+            llep = endpoints_obj.add(f"{endpoint_prefix}{i}")
+            for k, v in settings.items():
+                if type(v) == dict:
+                    sdict = getattr(llep, self.safe_name(k))
                     for j, u in v.items():
-                        setattr(getattr(lltxep, self.safe_name(k)),
-                                self.safe_name(j), u)
-                elif k == "number-of-prb-per-scs":
-                    for m in v:
-                        if m['scs'] not in lltxep.number_of_prb_per_scs:
-                            lltxep.number_of_prb_per_scs.add(m['scs'])
-                        lltxep.number_of_prb_per_scs[m['scs']].number_of_prb = \
-                            m['number-of-prb']
+                        setattr(sdict, self.safe_name(j), u)
+                elif type(v) == list:
+                    slist = getattr(llep, self.safe_name(k))
+                    for e in v:
+                        if 'name' in e:
+                            nkey = 'name'
+                        elif 'scs' in e:
+                            nkey = 'scs'
+                        if e[nkey] not in slist.keys():
+                            slist.add(e[nkey])
+                        for j, u in e.items():
+                            if j == nkey: continue
+                            setattr(slist[nkey], self.safe_name(j), u)
                 else:
-                    setattr(lltxep, self.safe_name(k), v)
-        return self.yupobj.user_plane_configuration.low_level_tx_endpoints
+                    setattr(llep, self.safe_name(k), v)
+            llep.e_axcid.eaxc_id = i
+
+    def mk_uplane_lltx_endpoints(
+            self,
+            endpoint_prefix = DEF_LLTX_ENDPOINT_PREFIX,
+            settings = DEF_LLTX_ENDPOINT_SETTINGS,
+            count = DEF_NUM_LLTX_ENDPOINTS
+    ):
+        lltxeps_obj = \
+            self.yupobj.user_plane_configuration.low_level_tx_endpoints
+        self._mk_uplane_endpoints(lltxeps_obj, endpoint_prefix, count)
+        return lltxeps_obj
 
     def get_uplane_llrx_endpoint(self, name):
         return self.yupobj.user_plane_configuration.low_level_rx_endpoints[name]
@@ -319,55 +341,22 @@ class MPlaneConfig(object):
         return rvals
 
     def mk_uplane_llrx_endpoints(
-            self, iq_bitwidth = DEF_LLEP_COMPRESSION_IQ_BITWIDTH,
-            compression_type = DEF_LLEP_COMPRESSION_TYPE,
+            self,
             endpoint_prefix = DEF_LLRX_ENDPOINT_PREFIX,
-            extra = {}
+            settings = DEF_LLRX_ENDPOINT_SETTINGS,
+            count = DEF_NUM_LLRX_ENDPOINTS
     ):
-        for i in range(self.NUM_LLRX_ENDPOINTS):
-            llrxep = self.yupobj.user_plane_configuration.\
-                low_level_rx_endpoints.add(f"{endpoint_prefix}{i}")
-            llrxep.compression.iq_bitwidth = iq_bitwidth
-            llrxep.compression.compression_type = compression_type
-            llrxep.compression.fs_offset = self.DEF_LLEP_COMPRESSION_FS_OFFSET
-            llrxep.cp_length = self.DEF_LLEP_CP_LENGTH
-            llrxep.cp_length_other = self.DEF_LLEP_CP_LENGTH_OTHER
-            llrxep.offset_to_absolute_frequency_center = \
-                self.DEF_LLEP_ABS_CF_OFFSET
-            llrxep.non_time_managed_delay_enabled = \
-                self.DEF_LLRX_ENDPOINT_NON_TIME_MANAGED_DELAY_ENABLED
-            for m in self.DEF_LLEP_NUM_PRB_PER_SCS_ENTRIES:
-                llrxep.number_of_prb_per_scs.add(m['scs'])
-                llrxep.number_of_prb_per_scs[m['scs']].\
-                    number_of_prb = m['number-of-prb']
-                # Unclear if this next thing is actually needed.
-                llrxep.ul_fft_sampling_offsets.add(m['scs'])
-            for k, v in self.DEF_LLEP_EAXCID_ATTRS.items():
-                setattr(llrxep.e_axcid, self.safe_name(k), v)
-                llrxep.e_axcid.eaxc_id = i
-            for k, v in extra.items():
-                if k in ("compression", "e-axcid"):
-                    for j, u in v.items():
-                        setattr(getattr(llrxep, self.safe_name(k)),
-                                self.safe_name(j), u)
-                elif k == "number-of-prb-per-scs":
-                    for m in v:
-                        if m['scs'] not in llrxep.number_of_prb_per_scs:
-                            llrxep.number_of_prb_per_scs.add(m['scs'])
-                        llrxep.number_of_prb_per_scs[m['scs']].number_of_prb = \
-                            m['number-of-prb']
-                        # Not clear this is needed or correct...
-                        llrxep.ul_fft_sampling_offsets.add(m['scs'])
-                else:
-                    setattr(llrxep, self.safe_name(k), v)
-        return self.yupobj.user_plane_configuration.low_level_rx_endpoints
+        llrxeps_obj = \
+            self.yupobj.user_plane_configuration.low_level_rx_endpoints
+        self._mk_uplane_endpoints(llrxeps_obj, endpoint_prefix, count)
+        return llrxeps_obj
 
     def get_uplane_tx_array_carrier(self, name):
         return self.yupobj.user_plane_configuration.tx_array_carriers[name]
 
     def mk_uplane_tx_array_carrier(
             self, name = DEF_TX_ARRAY_CARRIER,
-            settings = {}
+            settings = DEF_TX_ARRAY_CARRIER_SETTINGS
     ):
         txcarr = self.yupobj.user_plane_configuration.\
             tx_array_carriers.add(name)
@@ -380,7 +369,7 @@ class MPlaneConfig(object):
 
     def mk_uplane_rx_array_carrier(
             self, name = DEF_RX_ARRAY_CARRIER,
-            settings = {}
+            settings = DEF_RX_ARRAY_CARRIER_SETTINGS
     ):
         rxcarr = self.yupobj.user_plane_configuration.\
             rx_array_carriers.add(name)
