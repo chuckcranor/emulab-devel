@@ -355,12 +355,12 @@ class DeviceWrapper(ABC):
     DEF_PASSWD = ""
     DEF_PING_TIMEOUT = 5
     DEF_SHUTDOWN_TIME = 30
+    DEF_BOOT_TIMEOUT = 120
     DEF_RADIO_ONLINE_TIMEOUT = 300
+    REBOOT_CMD = "reboot"
     FW_VERSION_FILE = "/etc/version"
     FW_VERSION_UNKNOWN = "*UNKNOWN-FW-VERSION*"
     HW_MODEL_UNKNOWN = "*UNKNOWN-HW-TYPE*"
-    DEF_BOOT_TIMEOUT = 120
-    DEF_SHUTDOWN_TIME = 30
 
     def __init__(self, mgmt_addr, username=DEF_USER, keyfile=None,
                  log_level=DEF_LOG_LEVEL):
@@ -398,7 +398,7 @@ class DeviceWrapper(ABC):
         return self._hardware
 
     def reboot(self, pingwait=True):
-        self.get_session().exec("reboot")
+        self.get_session().exec(self.REBOOT_CMD)
         if pingwait:
             Utilities.wait_for_ping(self.addr, self.DEF_SHUTDOWN_TIME,
                                     invert=True)

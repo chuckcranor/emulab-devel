@@ -295,7 +295,8 @@ class MPlaneConfig(object):
                 rvals.append(ep)
         return rvals
 
-    def _mk_uplane_endpoints(self, endpoints_obj, endpoint_prefix, count):
+    def _mk_uplane_endpoints(self, endpoints_obj, endpoint_prefix, settings,
+                             count):
         for i in range(count):
             llep = endpoints_obj.add(f"{endpoint_prefix}{i}")
             for k, v in settings.items():
@@ -314,7 +315,7 @@ class MPlaneConfig(object):
                             slist.add(e[nkey])
                         for j, u in e.items():
                             if j == nkey: continue
-                            setattr(slist[nkey], self.safe_name(j), u)
+                            setattr(slist[e[nkey]], self.safe_name(j), u)
                 else:
                     setattr(llep, self.safe_name(k), v)
             llep.e_axcid.eaxc_id = i
@@ -327,7 +328,7 @@ class MPlaneConfig(object):
     ):
         lltxeps_obj = \
             self.yupobj.user_plane_configuration.low_level_tx_endpoints
-        self._mk_uplane_endpoints(lltxeps_obj, endpoint_prefix, count)
+        self._mk_uplane_endpoints(lltxeps_obj, endpoint_prefix, settings, count)
         return lltxeps_obj
 
     def get_uplane_llrx_endpoint(self, name):
@@ -348,7 +349,7 @@ class MPlaneConfig(object):
     ):
         llrxeps_obj = \
             self.yupobj.user_plane_configuration.low_level_rx_endpoints
-        self._mk_uplane_endpoints(llrxeps_obj, endpoint_prefix, count)
+        self._mk_uplane_endpoints(llrxeps_obj, endpoint_prefix, settings, count)
         return llrxeps_obj
 
     def get_uplane_tx_array_carrier(self, name):
@@ -409,7 +410,7 @@ class VVDNMPlaneSession(object):
         return self._mgr and self._mgr.connected
 
     def get_session(self):
-        if not self._mgr:
+        if not self.is_connected():
             self.connect_session(self._pass)
         return self._mgr
 
@@ -493,6 +494,7 @@ class VVDNWrapper(DeviceWrapper):
     DEF_RADIO_ONLINE_TIMEOUT = 300
     WAIT_ONLINE_SLEEP = 5
     FW_VERSION_UNKNOWN = "NN-vX.Y.Z.R"
+    REBOOT_CMD = "/sbin/reboot"
 
     BW2PRB_MAP = {
         20000000:  51,
@@ -565,15 +567,6 @@ class VVDNWrapper(DeviceWrapper):
             time.sleep(self.WAIT_ONLINE_SLEEP)
         return False
 
-    def reboot(self, pingwait = True):
-        self.close_mplane_session()
-        self.get_ssh_session().exec("/sbin/reboot")
-        self.close_ssh_session()
-        if pingwait:
-            Utilities.wait_for_ping(self.addr, self.DEF_SHUTDOWN_TIME,
-                                    invert=True)
-        self.lgr.info("Device rebooted.")
-
     def _fetch_fwinfo(self):
         filt = etree.Element("hardware", nsmap={None: MPlaneDefs.NS_HARDWARE})
         etree.SubElement(etree.SubElement(filt, "component"), "software-rev")
@@ -591,7 +584,7 @@ class VVDNWrapper(DeviceWrapper):
                 ruelt.transport_flow.interface_name)
         return vif
 
-    def _create_active_vif(self, settings):
+    def _mk_active_vif(self, settings):
         mk_cmds = []
         rumac = Utilities.elab2standard_mac(settings['ru_mac'])
         dumac = Utilities.elab2standard_mac(settings['du_mac'])
@@ -686,13 +679,13 @@ class VVDNWrapper(DeviceWrapper):
                 ifrelt.append(
                     self._mpconf.delete_vlan_interface(active_vif.name))
                 vifrm_cmds.append(ifrelt)
-                vifmk_cmds = self._create_active_vif(settings)
+                vifmk_cmds = self._mk_active_vif(settings)
         else:
             baseif = self._mpconf.find_interface(mac=settings["ru_mac"])
-            for vif in self._mpconf.find_vlan_interfaces(baseif):
+            for vif in self._mpconf.find_vlan_interfaces(baseif.name):
                 ifrelt.append(self._mpconf.delete_vlan_interface(vif.name))
             vifrm_cmds.append(ifrelt)
-            vifmk_cmds = self._create_active_vif(settings)
+            vifmk_cmds = self._mk_active_vif(settings)
 
         # Now deal with changes to the "user plane configuration"
         upcelt = etree.Element("user-plane-configuration",
