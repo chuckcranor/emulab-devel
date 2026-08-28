@@ -32,7 +32,7 @@ class Utilities(object):
         return lgr
 
     @staticmethod
-    def ping(host, count=2):
+    def ping(host, count=1):
         ping = None
         ping_paths = ("/sbin/ping", "/bin/ping", "/usr/bin/ping")
         for path in ping_paths:

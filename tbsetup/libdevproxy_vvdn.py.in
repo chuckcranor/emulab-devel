@@ -311,11 +311,12 @@ class MPlaneConfig(object):
                             nkey = 'name'
                         elif 'scs' in e:
                             nkey = 'scs'
-                        if e[nkey] not in slist.keys():
-                            slist.add(e[nkey])
+                        name = e[nkey]
+                        if name not in slist.keys():
+                            slist.add(name)
                         for j, u in e.items():
                             if j == nkey: continue
-                            setattr(slist[e[nkey]], self.safe_name(j), u)
+                            setattr(slist[name], self.safe_name(j), u)
                 else:
                     setattr(llep, self.safe_name(k), v)
             llep.e_axcid.eaxc_id = i
@@ -415,7 +416,7 @@ class VVDNMPlaneSession(object):
         return self._mgr
 
     def close_session(self):
-        if self._mgr:
+        if self.is_connected():
             self._mgr.close_session()
         self._mgr = None
 
@@ -525,6 +526,7 @@ class VVDNWrapper(DeviceWrapper):
                                ping_timeout = DEF_PING_TIMEOUT):
         self._mpsess.connect_session(password, ping_timeout)
         self._mpconf = MPlaneConfig(str(self._mpsess.get_config()))
+        self._mk_missing_uplane_settings()
         self._fetch_fwinfo()
 
     def get_ssh_session(self):
@@ -584,6 +586,37 @@ class VVDNWrapper(DeviceWrapper):
                 ruelt.transport_flow.interface_name)
         return vif
 
+    def _mk_missing_uplane_settings(self):
+        upcelt = etree.Element("user-plane-configuration",
+                               nsmap={None: MPlaneDefs.NS_UPCONF})
+        try:
+            self._mpconf.get_uplane_tx_array_carrier(
+                MPlaneConfig.DEF_TX_ARRAY_CARRIER)
+        except KeyError:
+            newtxcarr = self._mpconf.mk_uplane_tx_array_carrier()
+            upcelt.append(pybindIETFXMLEncoder.encode(newtxcarr))
+        try:
+            self._mpconf.get_uplane_rx_array_carrier(
+                MPlaneConfig.DEF_RX_ARRAY_CARRIER)
+        except KeyError:
+            newtxcarr = self._mpconf.mk_uplane_rx_array_carrier()
+            upcelt.append(pybindIETFXMLEncoder.encode(newrxcarr))
+        try:
+            self._mpconf.get_uplane_lltx_endpoint(
+                f"{MPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX}0")
+        except KeyError:
+            for lltxep in self._mpconf.mk_uplane_lltx_endpoints():
+                upcelt.append(pybindIETFXMLEncoder.encode(lltxep))
+        try:
+            self._mpconf.get_uplane_llrx_endpoint(
+                f"{MPlaneConfig.DEF_LLRX_ENDPOINT_PREFIX}0")
+        except KeyError:
+            for llrxep in self._mpconf.mk_uplane_llrx_endpoints():
+                upcelt.append(pybindIETFXMLEncoder.encode(llrxep))
+        if len(upcelt.getchildren()) > 0:
+            self.lgr.info(f"Pushing missing uplane settings to {self.addr}")
+            self._push_settings_groups([[upcelt,],])
+            
     def _mk_active_vif(self, settings):
         mk_cmds = []
         rumac = Utilities.elab2standard_mac(settings['ru_mac'])
@@ -605,6 +638,25 @@ class VVDNWrapper(DeviceWrapper):
             upcelt.append(pybindIETFXMLEncoder.encode(llrxlink))
         mk_cmds.append(upcelt)
         return mk_cmds
+
+    def _delete_active_vif(self, active_vif):
+        vifrm_cmds = []
+        ifrelt  = etree.Element("interfaces",
+                                nsmap={None: MPlaneDefs.NS_INTERFACES})
+        upcelt = etree.Element("user-plane-configuration",
+                                nsmap={None: MPlaneDefs.NS_UPCONF})
+        for rm_cmd in self._mpconf.delete_uplane_lltx_links(
+                pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
+            upcelt.append(rm_cmd)
+        for rm_cmd in self._mpconf.delete_uplane_llrx_links(
+                pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
+            upcelt.append(rm_cmd)
+        vifrm_cmds.append(upcelt)
+        vifrm_cmds.append(self._mpconf.delete_ru_processing_element(
+            MPlaneConfig.DEF_RU_PROCESSING_ELEMENT))
+        ifrelt.append(self._mpconf.delete_vlan_interface(active_vif.name))
+        vifrm_cmds.append(ifrelt)
+        return vifrm_cmds
 
     def _set_carrier_state(self, state):
         conf = MPlaneConfig()
@@ -665,20 +717,7 @@ class VVDNWrapper(DeviceWrapper):
         active_vif = self._get_active_vif()
         if active_vif:
             if active_vif.vlan_id != settings["ofh_vlan"]:
-                dupcelt = etree.Element("user-plane-configuration",
-                                        nsmap={None: MPlaneDefs.NS_UPCONF})
-                for rm_cmd in self._mpconf.delete_uplane_lltx_links(
-                        pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
-                    dupcelt.append(rm_cmd)
-                for rm_cmd in self._mpconf.delete_uplane_llrx_links(
-                        pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
-                    dupcelt.append(rm_cmd)
-                vifrm_cmds.append(dupcelt)
-                vifrm_cmds.append(self._mpconf.delete_ru_processing_element(
-                    MPlaneConfig.DEF_RU_PROCESSING_ELEMENT))
-                ifrelt.append(
-                    self._mpconf.delete_vlan_interface(active_vif.name))
-                vifrm_cmds.append(ifrelt)
+                vifrm_cmds = self._delete_active_vif(active_vif)
                 vifmk_cmds = self._mk_active_vif(settings)
         else:
             baseif = self._mpconf.find_interface(mac=settings["ru_mac"])
