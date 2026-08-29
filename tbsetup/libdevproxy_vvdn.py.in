@@ -39,13 +39,17 @@ class MPlaneDefs(object):
     NS_IFIP = "urn:ietf:params:xml:ns:yang:ietf-ip"
     NS_HARDWARE = "urn:ietf:params:xml:ns:yang:ietf-hardware"
 
-# Class for handling MPlane configuration parsing/generation.
-class MPlaneConfig(object):
     IFTYPE_ETHERNET = "ethernetCsmacd"
     IFTYPE_L2VLAN = "l2vlan"
-    
-    DEF_RU_PROCESSING_ELEMENT = "element1"
+
     DEF_PROCELT_TRANSPORT_SESSION_TYPE = "ETH-INTERFACE"
+
+    ARRAY_CARRIER_INACTIVE = "INACTIVE"
+    ARRAY_CARRIER_ACTIVE = "ACTIVE"
+
+# Class for handling MPlane configuration parsing/generation.
+class VVDNMPlaneConfig(object):
+    DEF_RU_PROCESSING_ELEMENT = "element1"
 
     DEF_NUM_LLTX_LINKS = 4
     DEF_NUM_LLRX_LINKS = 4
@@ -83,15 +87,13 @@ class MPlaneConfig(object):
         ],
     }
 
-    ARRAY_CARRIER_INACTIVE = "INACTIVE"
-    ARRAY_CARRIER_ACTIVE = "ACTIVE"
     DEF_TX_ARRAY_CARRIER = "txarraycarrier0"
     DEF_RX_ARRAY_CARRIER = "rxarraycarrier0"
     DEF_COMMON_ARRAY_CARRIER_SETTINGS = {
         'absolute-frequency-center': 628000,
         'center-of-channel-bandwidth': 3420000000,
         'channel-bandwidth': 40000000,
-        'active': ARRAY_CARRIER_INACTIVE,
+        'active': MPlaneDefs.ARRAY_CARRIER_INACTIVE,
         'downlink-radio-frame-offset': 0,
         'downlink-sfn-offset': 0,
     }
@@ -127,30 +129,43 @@ class MPlaneConfig(object):
                 f"{{{MPlaneDefs.NS_INTERFACES}}}interfaces")
             root.append(ifsobj)
             self.yifsobj = pybindIETFXMLDecoder.load_xml(
-                root, libyb_ietf_interfaces, "ietf-interfaces")
+                root, libyb_ietf_interfaces,
+                "ietf-interfaces").interfaces
             root.remove(ifsobj)
             peobj = dobj.find(f"{{{MPlaneDefs.NS_PROCELT}}}processing-elements")
             root.append(peobj)
             self.ypeobj = pybindIETFXMLDecoder.load_xml(
-                root, libyb_oran_processing_element, "o-ran-processing-element")
+                root, libyb_oran_processing_element,
+                "o-ran-processing-element").processing_elements
             root.remove(peobj)
             upobj = dobj.find(
                 f"{{{MPlaneDefs.NS_UPCONF}}}user-plane-configuration")
             root.append(upobj)
             self.yupobj = pybindIETFXMLDecoder.load_xml(
-                root, libyb_oran_uplane_conf, "o-ran-uplane-conf")
+                root, libyb_oran_uplane_conf,
+                "o-ran-uplane-conf").user_plane_configuration
             root.remove(upobj)
         else:
-            self.yifsobj = libyb_ietf_interfaces.ietf_interfaces()
+            self.yifsobj = libyb_ietf_interfaces.\
+                ietf_interfaces().interfaces
             self.ypeobj  = libyb_oran_processing_element.\
-                o_ran_processing_element()
-            self.yupobj  = libyb_oran_uplane_conf.o_ran_uplane_conf()
+                o_ran_processing_element().processing_elements
+            self.yupobj  = libyb_oran_uplane_conf.\
+                o_ran_uplane_conf().user_plane_configuration
 
     def safe_name(self, name):
         return re.sub(r'-', '_', name)
 
     def get_interfaces(self):
-        return self.yifsobj.interfaces.interface.values()
+        return self.yifsobj.interface.values()
+
+    def find_interface(self, name = None, mac = None, vlan_id = 0):
+        for intf in self.get_interfaces():
+            if (name and intf.name == name) \
+               or (mac and mac.lower() == intf.mac_address.lower() \
+                   and vlan_id == intf.vlan_id):
+                return intf
+        return None
 
     def find_vlan_interfaces(self, basename = None, mac = None):
         rvals = []
@@ -161,20 +176,12 @@ class MPlaneConfig(object):
                 rvals.append(intf)
         return rvals
 
-    def find_interface(self, name = None, mac = None, vlan_id = 0):
-        for intf in self.get_interfaces():
-            if (name and intf.name == name) \
-               or (mac and mac.lower() == intf.mac_address.lower() \
-                   and vlan_id == intf.vlan_id):
-                return intf
-        return None
-
     def mk_vlan_interface(self, vlan_id, basename = None, basemac = None):
         if vlan_id < 1 or vlan_id > 4094:
             raise ValueError(f"vlan_id out of range: {vlan_id}")
         baseif = self.find_interface(basename, basemac)
-        vif = self.yifsobj.interfaces.interface.add(f"{baseif.name}.{vlan_id}")
-        vif.type = self.IFTYPE_L2VLAN
+        vif = self.yifsobj.interface.add(f"{baseif.name}.{vlan_id}")
+        vif.type = MPlaneDefs.IFTYPE_L2VLAN
         vif.enabled = True
         vif.base_interface = baseif.name
         vif.mac_address = baseif.mac_address
@@ -186,17 +193,17 @@ class MPlaneConfig(object):
     def delete_vlan_interface(self, name = None, mac = None, vlan_id = None):
         vif = self.find_interface(name, mac, vlan_id)
         delobj = objectify.fromstring(self.DEL_VLANIF_CMD.format(vif.name))
-        self.yifsobj.interfaces.interface.delete(vif.name)
+        self.yifsobj.interface.delete(vif.name)
         return delobj
 
     def get_ru_processing_elements(self):
-        return self.ypeobj.processing_elements.ru_elements.values()
+        return self.ypeobj.ru_elements.values()
 
     def find_ru_processing_element(self, name = None, ifname = None, mac = None):
         for ruelt in self.get_ru_processing_elements():
             tf = ruelt.transport_flow
             if (name and ruelt.name == name) \
-               or (ifname and tf.interface_name.lower() == ifname.lower()) \
+               or (ifname and tf.interface_name == ifname) \
                or (mac and tf.eth_flow.ru_mac_address.lower() == mac.lower()):
                 return ruelt
         return None
@@ -206,24 +213,24 @@ class MPlaneConfig(object):
             ifname = None, ru_mac = None, vlan_id = None
     ):
         ifobj = self.find_interface(ifname, ru_mac, vlan_id)
-        self.ypeobj.processing_elements.transport_session_type = \
-            self.DEF_PROCELT_TRANSPORT_SESSION_TYPE
-        tf = self.ypeobj.processing_elements.ru_elements.add(name).transport_flow
+        self.ypeobj.transport_session_type = \
+            MPlaneDefs.DEF_PROCELT_TRANSPORT_SESSION_TYPE
+        tf = self.ypeobj.ru_elements.add(name).transport_flow
         tf.interface_name = ifobj.name
         tf.eth_flow.ru_mac_address = ifobj.mac_address
         tf.eth_flow.vlan_id = ifobj.vlan_id
         tf.eth_flow.o_du_mac_address = du_mac
-        return self.ypeobj.processing_elements
+        return self.ypeobj
 
     def delete_ru_processing_element(self, name = None, ifname = None, mac = None):
         ruelt = self.find_ru_processing_element(name, ifname, mac)
         delobj = objectify.fromstring(self.DEL_RUELT_CMD.format(ruelt.name))
-        self.ypeobj.processing_elements.ru_elements.delete(ruelt.name)
+        self.ypeobj.ru_elements.delete(ruelt.name)
         return delobj
 
     def find_uplane_lltx_links(self, prefix = None, pename = None):
         rvals = []
-        for lltxlink in self.yupobj.user_plane_configuration.low_level_tx_links.values():
+        for lltxlink in self.yupobj.low_level_tx_links.values():
             if (prefix and prefix in lltxlink.name) \
                or (pename and pename == lltxlink.processing_element):
                 rvals.append(lltxlink)
@@ -238,8 +245,7 @@ class MPlaneConfig(object):
     ):
         rvals = []
         for i in range(count):
-            lltxlink = self.yupobj.user_plane_configuration.\
-                low_level_tx_links.add(f"{link_prefix}{i}")
+            lltxlink = self.yupobj.low_level_tx_links.add(f"{link_prefix}{i}")
             lltxlink.low_level_tx_endpoint = f"{endpoint_prefix}{i}"
             lltxlink.processing_element = processing_element
             lltxlink.tx_array_carrier = tx_array_carrier
@@ -250,12 +256,12 @@ class MPlaneConfig(object):
         delcmds = []
         for lltxelt in self.find_uplane_lltx_links(prefix, pename):
             delcmds.append(objectify.fromstring(self.DEL_LLTXEP_CMD.format(lltxelt.name)))
-            self.yupobj.user_plane_configuration.low_level_tx_links.delete(lltxelt.name)
+            self.yupobj.low_level_tx_links.delete(lltxelt.name)
         return delcmds
 
     def find_uplane_llrx_links(self, prefix = None, pename = None):
         rvals = []
-        for llrxlink in self.yupobj.user_plane_configuration.low_level_rx_links.values():
+        for llrxlink in self.yupobj.low_level_rx_links.values():
             if (prefix and prefix in llrxlink.name) \
                or (pename and pename == llrxlink.processing_element):
                 rvals.append(llrxlink)
@@ -270,8 +276,7 @@ class MPlaneConfig(object):
     ):
         rvals = []
         for i in range(count):
-            llrxlink = self.yupobj.user_plane_configuration.\
-                low_level_rx_links.add(f"{link_prefix}{i}")
+            llrxlink = self.yupobj.low_level_rx_links.add(f"{link_prefix}{i}")
             llrxlink.low_level_rx_endpoint = f"{endpoint_prefix}{i}"
             llrxlink.processing_element = processing_element
             llrxlink.rx_array_carrier = rx_array_carrier
@@ -282,15 +287,15 @@ class MPlaneConfig(object):
         delcmds = []
         for llrxelt in self.find_uplane_llrx_links(prefix, pename):
             delcmds.append(objectify.fromstring(self.DEL_LLRXEP_CMD.format(llrxelt.name)))
-            self.yupobj.user_plane_configuration.low_level_rx_links.delete(llrxelt.name)
+            self.yupobj.low_level_rx_links.delete(llrxelt.name)
         return delcmds
 
     def get_uplane_lltx_endpoint(self, name):
-        return self.yupobj.user_plane_configuration.low_level_tx_endpoints[name]
+        return self.yupobj.low_level_tx_endpoints[name]
 
     def find_uplane_lltx_endpoints(self, prefix):
         rvals = []
-        for ep in self.yupobj.user_plane_configuration.low_level_tx_endpoints.values():
+        for ep in self.yupobj.low_level_tx_endpoints.values():
             if prefix in ep.name:
                 rvals.append(ep)
         return rvals
@@ -307,9 +312,8 @@ class MPlaneConfig(object):
                 elif type(v) == list:
                     slist = getattr(llep, self.safe_name(k))
                     for e in v:
-                        if 'name' in e:
-                            nkey = 'name'
-                        elif 'scs' in e:
+                        nkey = 'name'
+                        if 'scs' in e:
                             nkey = 'scs'
                         name = e[nkey]
                         if name not in slist.keys():
@@ -327,17 +331,16 @@ class MPlaneConfig(object):
             settings = DEF_LLTX_ENDPOINT_SETTINGS,
             count = DEF_NUM_LLTX_ENDPOINTS
     ):
-        lltxeps_obj = \
-            self.yupobj.user_plane_configuration.low_level_tx_endpoints
+        lltxeps_obj = self.yupobj.low_level_tx_endpoints
         self._mk_uplane_endpoints(lltxeps_obj, endpoint_prefix, settings, count)
         return lltxeps_obj
 
     def get_uplane_llrx_endpoint(self, name):
-        return self.yupobj.user_plane_configuration.low_level_rx_endpoints[name]
+        return self.yupobj.low_level_rx_endpoints[name]
 
     def find_uplane_llrx_endpoints(self, prefix):
         rvals = []
-        for ep in self.yupobj.user_plane_configuration.low_level_rx_endpoints.values():
+        for ep in self.yupobj.low_level_rx_endpoints.values():
             if prefix in ep.name:
                 rvals.append(ep)
         return rvals
@@ -348,33 +351,30 @@ class MPlaneConfig(object):
             settings = DEF_LLRX_ENDPOINT_SETTINGS,
             count = DEF_NUM_LLRX_ENDPOINTS
     ):
-        llrxeps_obj = \
-            self.yupobj.user_plane_configuration.low_level_rx_endpoints
+        llrxeps_obj = self.yupobj.low_level_rx_endpoints
         self._mk_uplane_endpoints(llrxeps_obj, endpoint_prefix, settings, count)
         return llrxeps_obj
 
     def get_uplane_tx_array_carrier(self, name):
-        return self.yupobj.user_plane_configuration.tx_array_carriers[name]
+        return self.yupobj.tx_array_carriers[name]
 
     def mk_uplane_tx_array_carrier(
             self, name = DEF_TX_ARRAY_CARRIER,
             settings = DEF_TX_ARRAY_CARRIER_SETTINGS
     ):
-        txcarr = self.yupobj.user_plane_configuration.\
-            tx_array_carriers.add(name)
+        txcarr = self.yupobj.tx_array_carriers.add(name)
         for k, v in settings.items():
             setattr(txcarr, self.safe_name(k), v)
         return txcarr
 
     def get_uplane_rx_array_carrier(self, name):
-        return self.yupobj.user_plane_configuration.rx_array_carriers[name]
+        return self.yupobj.rx_array_carriers[name]
 
     def mk_uplane_rx_array_carrier(
             self, name = DEF_RX_ARRAY_CARRIER,
             settings = DEF_RX_ARRAY_CARRIER_SETTINGS
     ):
-        rxcarr = self.yupobj.user_plane_configuration.\
-            rx_array_carriers.add(name)
+        rxcarr = self.yupobj.rx_array_carriers.add(name)
         for k, v in settings.items():
             setattr(rxcarr, self.safe_name(k), v)
         return rxcarr
@@ -451,8 +451,8 @@ class VVDNConfig_MPRU_b78(DeviceConfig):
             'allowed_ranges': ((3400.0,3700.0),)
         },
         'bandwidth': {
-            'def': 20.0,
-            'allowed_values': (20.0, 40.0, 60.0, 80.0, 100.0)
+            'def': 40.0,
+            'allowed_values': (10.0, 20.0, 40.0, 60.0, 80.0, 100.0)
         },
         'gain': {
             'def': 37.0,
@@ -497,7 +497,8 @@ class VVDNWrapper(DeviceWrapper):
     FW_VERSION_UNKNOWN = "NN-vX.Y.Z.R"
     REBOOT_CMD = "/sbin/reboot"
 
-    BW2PRB_MAP = {
+    BW2PRB_MAP_30KHZ = {
+        10000000:  24,
         20000000:  51,
         40000000:  106,
         60000000:  162,
@@ -525,7 +526,7 @@ class VVDNWrapper(DeviceWrapper):
     def connect_mplane_session(self, password = DEF_PASSWD,
                                ping_timeout = DEF_PING_TIMEOUT):
         self._mpsess.connect_session(password, ping_timeout)
-        self._mpconf = MPlaneConfig(str(self._mpsess.get_config()))
+        self._mpconf = VVDNMPlaneConfig(str(self._mpsess.get_config()))
         self._mk_missing_uplane_settings()
         self._fetch_fwinfo()
 
@@ -580,7 +581,7 @@ class VVDNWrapper(DeviceWrapper):
     def _get_active_vif(self):
         vif = None
         ruelt = self._mpconf.find_ru_processing_element(
-            MPlaneConfig.DEF_RU_PROCESSING_ELEMENT)
+            VVDNMPlaneConfig.DEF_RU_PROCESSING_ELEMENT)
         if ruelt:
             vif = self._mpconf.find_interface(
                 ruelt.transport_flow.interface_name)
@@ -591,25 +592,25 @@ class VVDNWrapper(DeviceWrapper):
                                nsmap={None: MPlaneDefs.NS_UPCONF})
         try:
             self._mpconf.get_uplane_tx_array_carrier(
-                MPlaneConfig.DEF_TX_ARRAY_CARRIER)
+                VVDNMPlaneConfig.DEF_TX_ARRAY_CARRIER)
         except KeyError:
             newtxcarr = self._mpconf.mk_uplane_tx_array_carrier()
             upcelt.append(pybindIETFXMLEncoder.encode(newtxcarr))
         try:
             self._mpconf.get_uplane_rx_array_carrier(
-                MPlaneConfig.DEF_RX_ARRAY_CARRIER)
+                VVDNMPlaneConfig.DEF_RX_ARRAY_CARRIER)
         except KeyError:
             newtxcarr = self._mpconf.mk_uplane_rx_array_carrier()
             upcelt.append(pybindIETFXMLEncoder.encode(newrxcarr))
         try:
             self._mpconf.get_uplane_lltx_endpoint(
-                f"{MPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX}0")
+                f"{VVDNMPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX}0")
         except KeyError:
             for lltxep in self._mpconf.mk_uplane_lltx_endpoints():
                 upcelt.append(pybindIETFXMLEncoder.encode(lltxep))
         try:
             self._mpconf.get_uplane_llrx_endpoint(
-                f"{MPlaneConfig.DEF_LLRX_ENDPOINT_PREFIX}0")
+                f"{VVDNMPlaneConfig.DEF_LLRX_ENDPOINT_PREFIX}0")
         except KeyError:
             for llrxep in self._mpconf.mk_uplane_llrx_endpoints():
                 upcelt.append(pybindIETFXMLEncoder.encode(llrxep))
@@ -619,8 +620,8 @@ class VVDNWrapper(DeviceWrapper):
             
     def _mk_active_vif(self, settings):
         mk_cmds = []
-        rumac = Utilities.elab2standard_mac(settings['ru_mac'])
-        dumac = Utilities.elab2standard_mac(settings['du_mac'])
+        rumac = Utilities.elab2std_mac(settings['ru_mac'])
+        dumac = Utilities.elab2std_mac(settings['du_mac'])
         ifelt = etree.Element("interfaces",
                               nsmap={None: MPlaneDefs.NS_INTERFACES})
         newvif = self._mpconf.mk_vlan_interface(
@@ -646,34 +647,33 @@ class VVDNWrapper(DeviceWrapper):
         upcelt = etree.Element("user-plane-configuration",
                                 nsmap={None: MPlaneDefs.NS_UPCONF})
         for rm_cmd in self._mpconf.delete_uplane_lltx_links(
-                pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
+                pename=VVDNMPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
             upcelt.append(rm_cmd)
         for rm_cmd in self._mpconf.delete_uplane_llrx_links(
-                pename=MPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
+                pename=VVDNMPlaneConfig.DEF_RU_PROCESSING_ELEMENT):
             upcelt.append(rm_cmd)
         vifrm_cmds.append(upcelt)
         vifrm_cmds.append(self._mpconf.delete_ru_processing_element(
-            MPlaneConfig.DEF_RU_PROCESSING_ELEMENT))
+            VVDNMPlaneConfig.DEF_RU_PROCESSING_ELEMENT))
         ifrelt.append(self._mpconf.delete_vlan_interface(active_vif.name))
         vifrm_cmds.append(ifrelt)
         return vifrm_cmds
 
     def _set_carrier_state(self, state):
-        conf = MPlaneConfig()
+        conf = VVDNMPlaneConfig()
         confelt = etree.Element(f"config", nsmap={None: MPlaneDefs.NS_DEFAULT})
         settings = { "active": state }
         conf.mk_uplane_tx_array_carrier(settings = settings)
         conf.mk_uplane_rx_array_carrier(settings = settings)
-        upconf = pybindIETFXMLEncoder.encode(
-            conf.yupobj.user_plane_configuration)
-        confelt.append(upconf)
-        self._mpsess.edit_config(etree.tostring(confelt, encoding=str, pretty_print=True))
+        confelt.append(pybindIETFXMLEncoder.encode(conf.yupobj))
+        self._mpsess.edit_config(
+            etree.tostring(confelt, encoding=str, pretty_print=True))
 
     def _push_settings_groups(self, groups):
         confelt = etree.Element(
             f"config",
             nsmap={None: MPlaneDefs.NS_DEFAULT, 'xc': MPlaneDefs.NS_DEFAULT})
-        self._set_carrier_state(MPlaneConfig.ARRAY_CARRIER_INACTIVE)
+        self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_INACTIVE)
         for group in groups:
             if group:
                 for cmd in group:
@@ -681,23 +681,22 @@ class VVDNWrapper(DeviceWrapper):
                 self._mpsess.edit_config(
                     etree.tostring(confelt, encoding=str, pretty_print=True))
                 confelt.clear()
-        self._set_carrier_state(MPlaneConfig.ARRAY_CARRIER_ACTIVE)
+        self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_ACTIVE)
 
     def fetch_settings(self):
         settings = VVDNConfig_MPRU_b78()
-        txcarr = self._mpconf.\
-            get_uplane_tx_array_carrier(MPlaneConfig.DEF_TX_ARRAY_CARRIER)
-        ethflow = self._mpconf.\
-            find_ru_processing_element(MPlaneConfig.DEF_RU_PROCESSING_ELEMENT).\
-            transport_flow.eth_flow
-        txep = self._mpconf.\
-            get_uplane_lltx_endpoint(f"{MPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX}0")
+        txcarr = self._mpconf.get_uplane_tx_array_carrier(
+            VVDNMPlaneConfig.DEF_TX_ARRAY_CARRIER)
+        ethflow = self._mpconf.find_ru_processing_element(
+            VVDNMPlaneConfig.DEF_RU_PROCESSING_ELEMENT).transport_flow.eth_flow
+        txep = self._mpconf.get_uplane_lltx_endpoint(
+            f"{VVDNMPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX}0")
         settings['center_frequency'] = txcarr.center_of_channel_bandwidth / 1e6
         settings['bandwidth'] = txcarr.channel_bandwidth / 1e6
         settings['gain'] = txcarr.gain
         settings['ofh_vlan'] = ethflow.vlan_id
-        settings['ru_mac'] = Utilities.standard2elab_mac(ethflow.ru_mac_address)
-        settings['du_mac'] = Utilities.standard2elab_mac(ethflow.o_du_mac_address)
+        settings['ru_mac'] = Utilities.std2elab_mac(ethflow.ru_mac_address)
+        settings['du_mac'] = Utilities.std2elab_mac(ethflow.o_du_mac_address)
         cmpmeth = 'uncompressed' \
             if txep.compression.compression_method == 'NO_COMPRESSION' \
                else 'compressed'
@@ -730,10 +729,10 @@ class VVDNWrapper(DeviceWrapper):
         upcelt = etree.Element("user-plane-configuration",
                                nsmap={None: MPlaneDefs.NS_UPCONF})
         txcarr = self._mpconf.get_uplane_tx_array_carrier(
-            MPlaneConfig.DEF_TX_ARRAY_CARRIER)
+            VVDNMPlaneConfig.DEF_TX_ARRAY_CARRIER)
         rxcarr = self._mpconf.get_uplane_rx_array_carrier(
-            MPlaneConfig.DEF_RX_ARRAY_CARRIER)
-        txcarr.active = rxcarr.active = MPlaneConfig.ARRAY_CARRIER_INACTIVE
+            VVDNMPlaneConfig.DEF_RX_ARRAY_CARRIER)
+        txcarr.active = rxcarr.active = MPlaneDefs.ARRAY_CARRIER_INACTIVE
         txcarr.center_of_channel_bandwidth = \
             rxcarr.center_of_channel_bandwidth = \
                 int(settings["center_frequency"] * 1e6)
@@ -742,13 +741,13 @@ class VVDNWrapper(DeviceWrapper):
                 Utilities.cf2arfcn(settings["center_frequency"])
         newbw = int(settings['bandwidth'] * 1e6)
         if newbw != txcarr.channel_bandwidth:
-            newprb = self.BW2PRB_MAP[newbw]
+            newprb = self.BW2PRB_MAP_30KHZ[newbw]
             for txep in self._mpconf.find_uplane_lltx_endpoints(
-                    prefix=MPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX):
+                    prefix=VVDNMPlaneConfig.DEF_LLTX_ENDPOINT_PREFIX):
                 txep.number_of_prb_per_scs["KHZ_30"].number_of_prb = newprb
                 upcelt.append(pybindIETFXMLEncoder.encode(txep))
             for rxep in self._mpconf.find_uplane_llrx_endpoints(
-                    prefix=MPlaneConfig.DEF_LLRX_ENDPOINT_PREFIX):
+                    prefix=VVDNMPlaneConfig.DEF_LLRX_ENDPOINT_PREFIX):
                 rxep.number_of_prb_per_scs["KHZ_30"].number_of_prb = newprb
                 upcelt.append(pybindIETFXMLEncoder.encode(rxep))
         txcarr.channel_bandwidth = rxcarr.channel_bandwidth = newbw
