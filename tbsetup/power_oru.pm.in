@@ -23,10 +23,10 @@
 # }}}
 #
 
-# Perl module to power cycle Benetel RU devices, handling node event state
+# Perl module to power cycle O-RU devices, handling node event state
 # machine transitions from the server side.
 
-package power_benetel;
+package power_oru;
 
 use lib "@prefix@/lib";
 use libdb;
@@ -48,7 +48,7 @@ my $ORUCLE = "$TBROOT/sbin/orucle";
 $| = 1;
 
 #
-# Create new Benetel power control object using wacky perl OO syntax.
+# Create new O-RU power control object using wacky perl OO syntax.
 # We store a reference to the node object passed in.
 #
 sub new($$) {
@@ -92,16 +92,16 @@ sub launchEventSender($) {
     my $waittime = $node->NodeTypeInfo()->power_delay();
 
     # Fork and go into the background to proxy events for device.
-    my $tmpfile = TBMakeTempFile("benetel-watcher");
+    my $tmpfile = TBMakeTempFile("oru-watcher");
     my $chpid = TBBackGround($tmpfile);
     if ($chpid) {
-	$self->log("Benetel radio background event proxy launched (PID $chpid). Logging to file: $tmpfile");
+	$self->log("O-RU background event proxy launched (PID $chpid). Logging to file: $tmpfile");
 	return;
     }
     TBdbfork();
     my $ecode = 0;
     # Send booting event (we assume the RU is now on and booting).
-    $self->log("Benetel event proxy sending `BOOTING` event.");
+    $self->log("O-RU event proxy sending `BOOTING` event.");
     $node->SetEventState(TBDB_NODESTATE_BOOTING());
     # Wait for a while for the RU to ping, after which we consider it up.
     # Takes about a minute.
@@ -117,7 +117,7 @@ sub launchEventSender($) {
 	    $auth_args .= " -p '$admin_pass'";
 	}
     }
-    system("$ORUCLE $node_id benetel $auth_args -q -P $waittime");
+    system("$ORUCLE $node_id $auth_args -q -P $waittime");
     if (! $?) {
 	$self->log("Device is up. Sending `ISUP` event.");
 	$node->SetEventState(TBDB_NODESTATE_ISUP());

@@ -872,10 +872,10 @@ sub RebootNode {
 	my $state = TBDB_NODESTATE_SHUTDOWN;
 	TBSetNodeEventState($pc,$state);
 	# Fire off RU boot watch / event sending proxy, if needed.
-	if ($nodeobject->type() =~ /^bt-ru\d+$/) {
-	    require power_benetel;
-	    my $btdev = new power_benetel($nodeobject);
-	    $btdev->launchEventSender();
+	if ($nodeobject->type() =~ /^bt-ru\d+$/ or $nodeobject->type() =~ /^v[lm]pru/) {
+	    require power_oru;
+	    my $rudev = new power_oru($nodeobject);
+	    $rudev->launchEventSender();
 	}
 	exit(0);
     }

@@ -24,6 +24,7 @@ import sys
 import time
 import logging
 import json
+import re
 from argparse import ArgumentParser
 from getpass import getpass
 sys.path.append("@prefix@/lib")
@@ -32,20 +33,39 @@ from libdevproxy_benetel import BenetelWrapper
 from libdevproxy_vvdn import VVDNWrapper
 
 #
-# Valid O-RU device types (manufacturers)
+# Device type map
 #
 DEV_TYPE_MAP = {
     'benetel': BenetelWrapper,
     'vvdn':    VVDNWrapper,
 }
 
+#
+# Device name pattern to type map.
+#
+DEV_TYPE_LIST = [
+    {'prefix': r'^bru',   'wrapper': BenetelWrapper},
+    {'prefix': r'^vmpru', 'wrapper': VVDNWrapper},
+    {'prefix': r'^vlpru', 'wrapper': VVDNWrapper},
+    {'prefix': r'^vvdn',  'wrapper': VVDNWrapper},
+]
+
 ##############################################################################
 #
 # Top-level code (main script entry point and helpers)
 #
 def get_wrapper(args, loglvl):
-    devobj = DEV_TYPE_MAP[args.type]
-    uname = args.username if args.username else devobj.DEF_USER        
+    devobj = None
+    if args.type:
+        devobj = DEV_TYPE_MAP[args.type]
+    else:
+        for e in DEV_TYPE_LIST:
+            if re.search(e['prefix'], args.address):
+                devobj = e['wrapper']
+                break
+    if not devobj:
+        raise RuntimeError("Could not determine device type! Use the `-t` flag")
+    uname = args.username if args.username else devobj.DEF_USER
     return devobj(args.address, uname, log_level = loglvl)
 
 def connect(args, wrapper):
@@ -75,8 +95,9 @@ def update_config(args, wrapper):
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("address", help="Address (hostname or IP) of the device.")
-    parser.add_argument("type", choices=DEV_TYPE_MAP.keys(),
-                        help=f"O-RU device type (required).")
+    parser.add_argument("-t", "--type", choices=DEV_TYPE_MAP.keys(),
+                        help=f"O-RU device type. Use if the type cannot be "
+                        "inferred from the hostname.")
     parser.add_argument("-d", "--debug", action="store_true",
                         help="Turn on debug logging.")
     parser.add_argument("-u", "--username",

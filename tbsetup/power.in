@@ -781,10 +781,10 @@ foreach my $power_id (keys %outlets) {
 	    #
 	    if (defined($node)) {
 		my $node_type = $node->type();
-		if ($node_type =~ /^bt-ru\d+$/i) {
-		    require power_benetel;
-		    my $btdev = new power_benetel($node);
-		    $btdev->DoPowerPostOp($op);
+		if ($node_type =~ /^bt-ru\d+$/i or $node_type =~ /^v[lm]pru/i) {
+		    require power_oru;
+		    my $rudev = new power_oru($node);
+		    $rudev->DoPowerPostOp($op);
 		} # elsif ($node_type =~ ...) { ...
 	    }
 	}

@@ -2734,7 +2734,7 @@ use Node;
 use English;
 use Data::Dumper;
 
-package libossetup_bt_ru550;
+package libossetup_baseru;
 use base qw(libossetup_basesdr);
 
 use libdb;
@@ -2751,16 +2751,16 @@ use Data::Dumper;
 #
 # A constructor for an object to handle all nodes of this type.
 #
-sub New($$) {
-    my ($class, $parent) = @_;
+sub New($$$) {
+    my ($class, $type, $parent) = @_;
 
-    my $self = $class->SUPER::New("bt_ru550", $parent);
+    my $self = $class->SUPER::New($type, $parent);
     bless($self, $class);
     return $self;
 }
 
 #
-# Need to adjust maxwait time for Benetel RUs (which is long...)
+# Child classes should override (but also first call!) this function.
 #
 sub AddNode($$)
 {
@@ -2770,11 +2770,11 @@ sub AddNode($$)
     $self->SUPER::AddNode($node);
 
     # Set up our overrides.
-    $node->_maxwait(600);  # Benetel RUs take a loooong time...
+    $node->_maxwait(180);  # Default time to wait for device to come online.
     $node->_retrycount(0); # no retries.
     $node->_doisup(0);     # Don't send compulsory ISUP in base class.
     $node->_doevents(1);   # DO have `power` send events in base class.
-    $node->_pingwait(90);  # Higher initial ping wait time (account for boot).
+    $node->_pingwait(60);  # Default timeout for ping response at boot.
 
     # Grab any required auth params from the DB
     my ($admin_user, $admin_pass);
@@ -2855,11 +2855,11 @@ sub LightUpNodes($@)
     my @nidlist = map { $_->node_id() } @nodelist;
     my @finished = ();
     my @failed = ();
-    tbnotice("Benetel ossetup: Waiting for radios to boot: @nidlist\n");
+    tbnotice("O-RU ossetup: Waiting for radios to boot: @nidlist\n");
     if (initStateWait([TBDB_NODESTATE_ISUP(),], @nidlist) != 0 ||
 	waitForState(\@finished, \@failed, 80) != 0 ||
 	endStateWait() != 0) {
-	print STDERR "Benetel ossetup: Failed during StateWait operations!";
+	print STDERR "O-RU ossetup: Failed during StateWait operations!";
 	goto bad;
     }
     if (@failed) {
@@ -2888,11 +2888,13 @@ sub LightUpNodes($@)
 	}
 
 	# We assume that the RU connects to its DU via its 'eth0' interface.
+	# Grab the MAC address of the interface and add it to the RU params.
 	my $iface;
 	if ($node->GetInterface("eth0", \$iface)) {
 	    print STDERR "Cannot look up 'eth0' interface on $node_id!\n";
 	    goto bad;
 	}
+	$ru_params{'ru_mac'} = $iface->mac();
 
 	# Get the OFH Vlan attached to the RU.
 	my $vlan = VLan->FindVlanByInterface($experiment, $iface);
@@ -2900,24 +2902,19 @@ sub LightUpNodes($@)
 	    print STDERR "No vlan exists for $node_id, 'eth0'!\n";
 	    goto bad;
 	}
-	$ru_params{'fh_cplane_vlan'} = $vlan->GetTag();
-	$ru_params{'fh_uplane_vlan'} = $vlan->GetTag();
+	$ru_params{'ofh_vlan'} = $vlan->GetTag();
 
-	# Set the DU mac address to the attribute baseed in via the profile,
+	# Set the DU mac address to the attribute passed in via the profile,
 	# if present, otherwise look it up via adjacent node interface.
-	my $du_mac;
-	if (exists $ru_params{'du_mac'}) {
-	    $du_mac = $ru_params{'du_mac'};
-	    delete $ru_params{'du_mac'};
-	} else {
+	if (!exists $ru_params{'du_mac'}) {
+	    my $du_mac;
 	    $self->_getDUMac($vlan, $node_id, \$du_mac);
 	    if (!$du_mac) {
 		print STDERR "Could not look up MAC address of DU node adjacent to $node_id!\n";
 		goto bad;
 	    }
+	    $ru_params{'du_mac'} = $du_mac;
 	}
-	$ru_params{'du_cplane_mac'} = $du_mac;
-	$ru_params{'du_uplane_mac'} = $du_mac;
 
 	# Add OFH compression mode setting, if defined
 	if (exists $ru_params{'ofh_compression_mode'}) {
@@ -2941,8 +2938,8 @@ sub LightUpNodes($@)
 	# bringup complete" vs. just responding to pings.
 	my $json_config = to_json(\%ru_params);
 	my $auth_args = $node->_authargs();
-	tbnotice("Configuring Benetel COTS RU $node_id\n");
-	system("echo '$json_config' | $ORUCLE $node_id benetel $auth_args -j - -r");
+	tbnotice("Configuring COTS RU $node_id\n");
+	system("echo '$json_config' | $ORUCLE $node_id $auth_args -j - -r");
 	if ($?) {
 	    print STDERR "Failed to configure and reboot RU $node_id!\n";
 	    goto bad;
@@ -2964,7 +2961,7 @@ sub LightUpNodes($@)
 }
 
 #
-# Wait for Benetel RU to get to "radio bringup complete" state.
+# Wait for RU to get to "radio bringup complete" state.
 #
 sub WaitForNode($$)
 {
@@ -2979,10 +2976,10 @@ sub WaitForNode($$)
 	$node->_maxwait(0);
     }
 
-    # See if the radio has made it to the "Radio Bringup Complete" state.
+    # See if the RU has made it to the "online" state.
     my $pingwait = $node->_pingwait();
     my $auth_args = $node->_authargs();
-    system("$ORUCLE $node_id benetel $auth_args -q -P $pingwait -w 0");
+    system("$ORUCLE $node_id $auth_args -q -P $pingwait -w 0");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
@@ -2995,7 +2992,7 @@ sub WaitForNode($$)
 }
 
 #
-# Pared down version of libossetup_pc WaitDone() function for Benetel RUs.
+# Pared down version of libossetup_pc WaitDone() function for O-RUs.
 #
 sub WaitDone($@)
 {
@@ -3039,8 +3036,106 @@ sub WaitDone($@)
     return 0;
 }
 
+package libossetup_bt_ru550;
+use base qw(libossetup_baseru);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use Lan;
+use StateWait;
+use English;
+use JSON;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("bt_ru550", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+#
+# Override parent class tunables.
+#
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    # Do super class stuff first for adding the node.
+    $self->SUPER::AddNode($node);
+
+    # Set up our overrides.
+    $node->_maxwait(360);  # Time to wait for device to come online.
+    $node->_retrycount(0); # no retries.
+    $node->_doisup(0);     # Don't send compulsory ISUP in `basesdr` class.
+    $node->_doevents(1);   # DO have `power` send events in `basesdr` class.
+    $node->_pingwait(90);  # Timeout for ping response at boot.
+
+    return 0;
+}
+
 package libossetup_bt_ru650;
 use base qw(libossetup_bt_ru550);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use Lan;
+use StateWait;
+use English;
+use JSON;
+use Data::Dumper;
+
+package libossetup_vmpru_b78;
+use base qw(libossetup_baseru);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use Lan;
+use StateWait;
+use English;
+use JSON;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("vmpru_b78", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+#
+# Override parent class tunables.
+#
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    # Do super class stuff first for adding the node.
+    $self->SUPER::AddNode($node);
+
+    # Set up our overrides.
+    $node->_maxwait(180);  # Time to wait for device to come online.
+    $node->_retrycount(0); # no retries.
+    $node->_doisup(0);     # Don't send compulsory ISUP in `basesdr` class.
+    $node->_doevents(1);   # DO have `power` send events in `basesdr` class.
+    $node->_pingwait(60);  # Timeout for ping response at boot.
+
+    return 0;
+}
+
+package libossetup_vmpru_b48;
+use base qw(libossetup_baseru);
 
 use libdb;
 use libtestbed;
