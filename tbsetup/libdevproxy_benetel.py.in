@@ -221,8 +221,6 @@ class BenetelWrapper(DeviceWrapper):
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
         res = []
         stime = time.time()
-        Utilities.wait_for_ping(self.addr, self.DEF_BOOT_TIMEOUT)
-        self.lgr.info("Device pings. Waiting for radio.")
         while time.time() <= stime + timeout:
             try:
                 res = self.get_session().grep_remote_file(

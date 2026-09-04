@@ -2979,7 +2979,7 @@ sub WaitForNode($$)
     # See if the RU has made it to the "online" state.
     my $pingwait = $node->_pingwait();
     my $auth_args = $node->_authargs();
-    system("$ORUCLE $node_id $auth_args -q -P $pingwait -w 0");
+    system("$ORUCLE $node_id $auth_args -q -P $pingwait -w 1");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
@@ -3125,11 +3125,11 @@ sub AddNode($$)
     $self->SUPER::AddNode($node);
 
     # Set up our overrides.
-    $node->_maxwait(180);  # Time to wait for device to come online.
+    $node->_maxwait(300);  # Time to wait for device to come online.
     $node->_retrycount(0); # no retries.
     $node->_doisup(0);     # Don't send compulsory ISUP in `basesdr` class.
     $node->_doevents(1);   # DO have `power` send events in `basesdr` class.
-    $node->_pingwait(60);  # Timeout for ping response at boot.
+    $node->_pingwait(90);  # Timeout for ping response at boot.
 
     return 0;
 }

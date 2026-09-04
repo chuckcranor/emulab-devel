@@ -38,6 +38,7 @@ class MPlaneDefs(object):
     NS_IFTYPE = "urn:ietf:params:xml:ns:yang:iana-if-type"
     NS_IFIP = "urn:ietf:params:xml:ns:yang:ietf-ip"
     NS_HARDWARE = "urn:ietf:params:xml:ns:yang:ietf-hardware"
+    NS_SYNC = "urn:o-ran:sync:1.0"
 
     IFTYPE_ETHERNET = "ethernetCsmacd"
     IFTYPE_L2VLAN = "l2vlan"
@@ -420,8 +421,8 @@ class VVDNMPlaneSession(object):
             self._mgr.close_session()
         self._mgr = None
 
-    def get(self, filt):
-        return self.get_session().get(("subtree", filt))
+    def get(self, infilt):
+        return self.get_session().get(("subtree", infilt))
 
     def get_config(self, source = "running", refresh = False):
         if refresh or self._config is None:
@@ -492,8 +493,8 @@ class VVDNWrapper(DeviceWrapper):
     DEF_PING_TIMEOUT = 5
     DEF_BOOT_TIMEOUT = 120
     DEF_SHUTDOWN_TIME = 30
-    DEF_RADIO_ONLINE_TIMEOUT = 300
-    WAIT_ONLINE_SLEEP = 5
+    DEF_RADIO_ONLINE_TIMEOUT = 180
+    WAIT_ONLINE_SLEEP = 3
     FW_VERSION_UNKNOWN = "NN-vX.Y.Z.R"
     REBOOT_CMD = "/sbin/reboot"
 
@@ -549,22 +550,18 @@ class VVDNWrapper(DeviceWrapper):
         self._mpsess.close_session()
 
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
-        res = []
+        filt = etree.Element("sync", nsmap={None: MPlaneDefs.NS_SYNC})
+        etree.SubElement(etree.SubElement(filt, "sync-status"),
+                         "sync-state")
         stime = time.time()
-        Utilities.wait_for_ping(self.addr, self.DEF_BOOT_TIMEOUT)
-        self.lgr.info("Device pings. Waiting for radio.")
-        filt = etree.Element("hardware", nsmap={None: MPlaneDefs.NS_HARDWARE})
-        etree.SubElement(etree.SubElement(etree.SubElement(filt, "component"),
-                                          "state"),
-                         "oper-state")
         while time.time() <= stime + timeout:
             res = self.get_mplane_session().get(filt)
             if res:
-                res2 = res.data.xpath("//*[local-name()='oper-state']")
-                if len(res2) > 0:
-                    state = res2[0].text
-                    self.lgr.debug(f"Radio state: {state}")
-                    if "enabled" in state:
+                sstate = res.data.xpath("//*[local-name()='sync-state']")
+                if len(sstate) > 0:
+                    sval = sstate[0].text
+                    self.lgr.info(f"Radio sync state: {sval}")
+                    if sval.lower() == "locked":
                         self.lgr.info("Radio is ready.")
                         return True
             time.sleep(self.WAIT_ONLINE_SLEEP)
@@ -681,6 +678,8 @@ class VVDNWrapper(DeviceWrapper):
                 self._mpsess.edit_config(
                     etree.tostring(confelt, encoding=str, pretty_print=True))
                 confelt.clear()
+        # Setting the carrier to active will fail if the radio isn't ready.
+        self.wait_for_radio_online()
         self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_ACTIVE)
 
     def fetch_settings(self):

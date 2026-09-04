@@ -172,8 +172,9 @@ def main():
             return 1
     if args.wait >= 0:
         res = False
+        wait = args.wait if args.wait else wrapper.DEF_RADIO_ONLINE_TIMEOUT
         try:
-            res = wrapper.wait_for_radio_online(args.wait)
+            res = wrapper.wait_for_radio_online(wait)
         except:
             lgr.exception("Failed while waiting for radio to come online:")
             return 1
