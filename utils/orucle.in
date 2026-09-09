@@ -128,8 +128,11 @@ def parse_args():
     parser.add_argument("-w", "--wait", type=int, default=-1,
                         help="Wait for the radio on the device to become "
                         "active, timing out after WAIT seconds. Does NOT imply "
-                        "the `reboot` argument. This action is performed last "
-                        "(after all other actions complete).")
+                        "the `reboot` argument. This action is performed near "
+                        "the end of all others, aside from `activate`.")
+    parser.add_argument("-a", "--activate", action="store_true",
+                        help="Activate the radio carrier. This action is "
+                        "performed very last")
     return parser.parse_args()
 
 def main():
@@ -180,6 +183,13 @@ def main():
             return 1
         if not res:
             lgr.warning("Timed out while waiting for radio to come online.")
+            return 1
+    if args.activate:
+        lgr.info("Activating radio carrier.")
+        try:
+            wrapper.activate_carrier();
+        except:
+            lgr.exception("Failed to activate radio carrier on device:")
             return 1
     return 0
 

@@ -567,6 +567,22 @@ class VVDNWrapper(DeviceWrapper):
             time.sleep(self.WAIT_ONLINE_SLEEP)
         return False
 
+    def _set_carrier_state(self, state):
+        conf = VVDNMPlaneConfig()
+        confelt = etree.Element(f"config", nsmap={None: MPlaneDefs.NS_DEFAULT})
+        settings = { "active": state }
+        conf.mk_uplane_tx_array_carrier(settings = settings)
+        conf.mk_uplane_rx_array_carrier(settings = settings)
+        confelt.append(pybindIETFXMLEncoder.encode(conf.yupobj))
+        self._mpsess.edit_config(
+            etree.tostring(confelt, encoding=str, pretty_print=True))
+
+    def activate_carrier(self):
+        self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_ACTIVE)
+
+    def deactivate_carrier(self):
+        self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_INACTIVE)
+
     def _fetch_fwinfo(self):
         filt = etree.Element("hardware", nsmap={None: MPlaneDefs.NS_HARDWARE})
         etree.SubElement(etree.SubElement(filt, "component"), "software-rev")
@@ -656,21 +672,11 @@ class VVDNWrapper(DeviceWrapper):
         vifrm_cmds.append(ifrelt)
         return vifrm_cmds
 
-    def _set_carrier_state(self, state):
-        conf = VVDNMPlaneConfig()
-        confelt = etree.Element(f"config", nsmap={None: MPlaneDefs.NS_DEFAULT})
-        settings = { "active": state }
-        conf.mk_uplane_tx_array_carrier(settings = settings)
-        conf.mk_uplane_rx_array_carrier(settings = settings)
-        confelt.append(pybindIETFXMLEncoder.encode(conf.yupobj))
-        self._mpsess.edit_config(
-            etree.tostring(confelt, encoding=str, pretty_print=True))
-
     def _push_settings_groups(self, groups):
         confelt = etree.Element(
             f"config",
             nsmap={None: MPlaneDefs.NS_DEFAULT, 'xc': MPlaneDefs.NS_DEFAULT})
-        self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_INACTIVE)
+        self.deactivate_carrier()
         for group in groups:
             if group:
                 for cmd in group:
@@ -678,9 +684,7 @@ class VVDNWrapper(DeviceWrapper):
                 self._mpsess.edit_config(
                     etree.tostring(confelt, encoding=str, pretty_print=True))
                 confelt.clear()
-        # Setting the carrier to active will fail if the radio isn't ready.
-        self.wait_for_radio_online()
-        self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_ACTIVE)
+        # Note: caller must separately (re)activate the radio carrier!
 
     def fetch_settings(self):
         settings = VVDNConfig_MPRU_b78()

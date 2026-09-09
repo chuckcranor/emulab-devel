@@ -2832,6 +2832,80 @@ sub _getDUMac($$$$)
     return -1;
 }
 
+sub _mkRUconfig($@)
+{
+    my ($self, $node) = @_;
+    my $parent     = $self->parent();
+    my $experiment = $parent->experiment();
+    my $node_id = $node->node_id();
+    my $vname   = $node->vname();
+    my %ru_params = ();
+
+    # Define parameter "types": Numeric vs. string.
+    my @nattrs = ('center_frequency', 'bandwidth');
+    my @sattrs = ('mimo_mode', 'du_mac', 'ofh_compression_mode');
+    
+    # Extract parameters set for this RU in the profile script.
+    my $attr;
+    foreach my $key (@nattrs) {
+	$experiment->GetVirtNodeAttribute($vname, $key, \$attr);
+	# Convert to number before assignment.
+	$ru_params{$key} = $attr + 0
+	    if defined($attr);
+    }
+    foreach my $key (@sattrs) {
+	$experiment->GetVirtNodeAttribute($vname, $key, \$attr);
+	$ru_params{$key} = $attr
+	    if defined($attr);
+    }
+
+    # Get info about the companion DU nodes and the Vlans that connect them.
+    # We assume that the RU connects to its DU via its 'eth0' interface.
+    # Grab the MAC address of the interface and add it to the RU params.
+    my $iface;
+    if ($node->GetInterface("eth0", \$iface)) {
+	print STDERR "Cannot look up 'eth0' interface on $node_id!\n";
+	goto bad;
+    }
+    $ru_params{'ru_mac'} = $iface->mac();
+
+    # Get the OFH Vlan attached to the RU.
+    my $vlan = VLan->FindVlanByInterface($experiment, $iface);
+    if (!$vlan) {
+	print STDERR "No vlan exists for $node_id, 'eth0'!\n";
+	goto bad;
+    }
+    $ru_params{'ofh_vlan'} = $vlan->GetTag();
+
+    # Set the DU mac address to the attribute passed in via the profile,
+    # if present, otherwise look it up via adjacent node interface.
+    if (!exists $ru_params{'du_mac'}) {
+	my $du_mac;
+	$self->_getDUMac($vlan, $node_id, \$du_mac);
+	if (!$du_mac) {
+	    print STDERR "Could not look up MAC address of DU node adjacent to $node_id!\n";
+	    goto bad;
+	}
+	$ru_params{'du_mac'} = $du_mac;
+    }
+
+    # Add OFH compression mode setting, if defined
+    if (exists $ru_params{'ofh_compression_mode'}) {
+	my $ofhcm = $ru_params{'ofh_compression_mode'};
+	if ($ofhcm eq "static") {
+	    $ru_params{'compression'} = 'static_compressed';
+	} elsif ($ofhcm eq "dynamic") {
+	    $ru_params{'compression'} = 'dynamic_compressed';
+	} else {
+	    print STDERR "Unsupported compression mode for RU $node_id: $ofhcm\n";
+	    goto bad;
+	}
+	delete $ru_params{'ofh_compression_mode'};
+    }
+
+    return to_json($ru_params);
+}
+
 #
 # Light up nodes as with SDRs, and then conjure and send the
 # configuration to the RU devices. Reboot them as well afterward.
@@ -2841,15 +2915,12 @@ sub LightUpNodes($@)
     my ($self, @nodelist)  = @_;
     my $parent     = $self->parent();
     my $experiment = $parent->experiment();
-    my @nattrs = ('center_frequency', 'bandwidth');
-    my @sattrs = ('mimo_mode', 'du_mac', 'ofh_compression_mode');
-
-    my @cycles     = ();
-    my @ons        = ();
-    my $count      = 0;
+    my $bootwait   = $self->_pingwait();
 
     # Call LightUpNodes() in libossetup_basesdr class first to do common stuff.
-    $self->SUPER::LightUpNodes(@nodelist);
+    if ($self->SUPER::LightUpNodes(@nodelist) < 0) {
+	goto bad;
+    }
 
     # Wait for the devices (event sender proxies) to report state ISUP.
     my @nidlist = map { $_->node_id() } @nodelist;
@@ -2857,7 +2928,7 @@ sub LightUpNodes($@)
     my @failed = ();
     tbnotice("O-RU ossetup: Waiting for radios to boot: @nidlist\n");
     if (initStateWait([TBDB_NODESTATE_ISUP(),], @nidlist) != 0 ||
-	waitForState(\@finished, \@failed, 80) != 0 ||
+	waitForState(\@finished, \@failed, $bootwait) != 0 ||
 	endStateWait() != 0) {
 	print STDERR "O-RU ossetup: Failed during StateWait operations!";
 	goto bad;
@@ -2867,97 +2938,11 @@ sub LightUpNodes($@)
 	goto bad;
     }
 
-    # Get info about the companion DU nodes and the Vlans that connect them.
-    foreach my $node (@nodelist) {
-	my $node_id = $node->node_id();
-	my $vname   = $node->vname();
-	my %ru_params = ();
-
-	# Extract parameters set for this RU set via the profile script.
-	my $attr;
-	foreach my $key (@nattrs) {
-	    $experiment->GetVirtNodeAttribute($vname, $key, \$attr);
-	    # Convert to number before assignment.
-	    $ru_params{$key} = $attr + 0
-		if defined($attr);
-	}
-	foreach my $key (@sattrs) {
-	    $experiment->GetVirtNodeAttribute($vname, $key, \$attr);
-	    $ru_params{$key} = $attr
-		if defined($attr);
-	}
-
-	# We assume that the RU connects to its DU via its 'eth0' interface.
-	# Grab the MAC address of the interface and add it to the RU params.
-	my $iface;
-	if ($node->GetInterface("eth0", \$iface)) {
-	    print STDERR "Cannot look up 'eth0' interface on $node_id!\n";
-	    goto bad;
-	}
-	$ru_params{'ru_mac'} = $iface->mac();
-
-	# Get the OFH Vlan attached to the RU.
-	my $vlan = VLan->FindVlanByInterface($experiment, $iface);
-	if (!$vlan) {
-	    print STDERR "No vlan exists for $node_id, 'eth0'!\n";
-	    goto bad;
-	}
-	$ru_params{'ofh_vlan'} = $vlan->GetTag();
-
-	# Set the DU mac address to the attribute passed in via the profile,
-	# if present, otherwise look it up via adjacent node interface.
-	if (!exists $ru_params{'du_mac'}) {
-	    my $du_mac;
-	    $self->_getDUMac($vlan, $node_id, \$du_mac);
-	    if (!$du_mac) {
-		print STDERR "Could not look up MAC address of DU node adjacent to $node_id!\n";
-		goto bad;
-	    }
-	    $ru_params{'du_mac'} = $du_mac;
-	}
-
-	# Add OFH compression mode setting, if defined
-	if (exists $ru_params{'ofh_compression_mode'}) {
-	    my $ofhcm = $ru_params{'ofh_compression_mode'};
-	    if ($ofhcm eq "static") {
-		$ru_params{'compression'} = 'static_compressed';
-	    } elsif ($ofhcm eq "dynamic") {
-		$ru_params{'compression'} = 'dynamic_compressed';
-	    } else {
-		print STDERR "Unsupported compression mode for RU $node_id: $ofhcm\n";
-		goto bad;
-	    }
-	    delete $ru_params{'ofh_compression_mode'};
-	}
-
-	# Apply the configuration for the RU and reboot it. Note that
-	# we are rebooting the RU "on the sly" here, so must handle
-	# state transitions ourselves. We do this because we want an
-	# alternate interpretation of "ISUP" when starting an
-	# experiment; we want the device to get all the way to "Radio
-	# bringup complete" vs. just responding to pings.
-	my $json_config = to_json(\%ru_params);
-	my $auth_args = $node->_authargs();
-	tbnotice("Configuring COTS RU $node_id\n");
-	system("echo '$json_config' | $ORUCLE $node_id $auth_args -j - -r");
-	if ($?) {
-	    print STDERR "Failed to configure and reboot RU $node_id!\n";
-	    goto bad;
-	}
-
-	# Tell Stated that the RU is rebooting.
-	$node->SetEventState(TBDB_NODESTATE_SHUTDOWN(), 0) == 0
-	    or goto bad;
-	sleep(1);
-	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
-	    or goto bad;
-    }
-
     return 0;
 
   bad:
     $parent->noretry(1);
-    return -1;	
+    return -1;
 }
 
 #
@@ -2976,10 +2961,11 @@ sub WaitForNode($$)
 	$node->_maxwait(0);
     }
 
-    # See if the RU has made it to the "online" state.
+    # See if the RU has made it to the "online" state. Activate the
+    # carrier, and also report "ISUP" for the device if so.
     my $pingwait = $node->_pingwait();
     my $auth_args = $node->_authargs();
-    system("$ORUCLE $node_id $auth_args -q -P $pingwait -w 1");
+    system("$ORUCLE $node_id $auth_args -q -P $pingwait -w 1 -a");
     if (! $?) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
@@ -3078,6 +3064,45 @@ sub AddNode($$)
     return 0;
 }
 
+sub LightUpNodes($@)
+{
+    my ($self, @nodelist) = @_;
+    my $parent = $self->parent();
+    my $auth_args = $self->_authargs();
+
+    # Do parent class tasks, including making sure the devices get to ISUP.
+    if ($self->SUPER::LightUpNodes(@nodelist) < 0) {
+	goto bad;
+    }
+
+    # Loop through RU devices and push their configuration to them.
+    foreach my $node (@nodelist) {
+	my $node_id = $node->node_id();
+
+	# Push settings and reboot.
+	tbnotice("Configuring Benetel RU $node_id, then rebooting it.\n");
+	my $config = $self->_mkRUconfig($node);
+	system("echo '$config' | $ORUCLE $node_id $auth_args -j - -r");
+	if ($?) {
+	    tbwarn("Failed to configure and reboot $node_id!\n");
+	    goto bad;
+	}
+
+	# Tell Stated that the RU is rebooting.
+	$node->SetEventState(TBDB_NODESTATE_SHUTDOWN(), 0) == 0
+	    or goto bad;
+	sleep(1);
+	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
+	    or goto bad;
+    }
+
+    return 0;
+
+  bad:
+    $parent->noretry(1);
+    return -1;
+}
+
 package libossetup_bt_ru650;
 use base qw(libossetup_bt_ru550);
 
@@ -3132,6 +3157,37 @@ sub AddNode($$)
     $node->_pingwait(90);  # Timeout for ping response at boot.
 
     return 0;
+}
+
+sub LightUpNodes($@)
+{
+    my ($self, @nodelist) = @_;
+    my $parent = $self->parent();
+    my $auth_args = $self->_authargs();
+
+    # Do parent class tasks, including making sure the devices get to ISUP.
+    if ($self->SUPER::LightUpNodes(@nodelist) < 0) {
+	goto bad;
+    }
+
+    foreach my $node (@nodelist) {
+	my $node_id = $node->node_id();
+
+	# Push settings. VVDN RUs do not require a reboot.
+	tbnotice("Configuring VVDN RU $node_id\n");
+	my $settings = $self->_mkRUconfig($node);
+	system("echo '$settings' | $ORUCLE $node_id $auth_args -j -");
+	if ($?) {
+	    print STDERR "Failed to configure $node_id!\n";
+	    goto bad;
+	}
+    }
+
+    return 0;
+
+  bad:
+    $parent->noretry(1);
+    return -1;
 }
 
 package libossetup_vmpru_b48;

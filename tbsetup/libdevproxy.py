@@ -420,6 +420,12 @@ class DeviceWrapper(ABC):
         self.close_session()
         self.lgr.info("Device rebooted.")
 
+    def activate_carrier(self):
+        pass
+
+    def deactivate_carrier(self):
+        pass
+
     @abstractmethod
     def wait_for_radio_online(self, timeout = DEF_BOOT_TIMEOUT):
         raise RuntimeError("Child class did not define 'wait_for_radio_online()'?!")
