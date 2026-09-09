@@ -44,6 +44,7 @@ sub usage()
     print STDERR "   -r   Clear/Revoke prereserve for project\n";
     print STDERR "   -i   Show pending prereserve for project\n";
     print STDERR "   -l   List all pending prereserves\n";
+    print STDERR "   -L   List all pending prereserves with node names\n";
     print STDERR "   -s   Optional start time to begin pre reservation\n";
     print STDERR "   -e   Optional end time for pre reservation.\n";
     print STDERR "        Implies -r options at termination time.\n";
@@ -53,11 +54,12 @@ sub usage()
     print STDERR "   -A   Approve reservation that is not yet approved.\n";
     exit(-1);
 }
-my $optlist  = "hdn:ilre:s:mafPAT:cN:F:D:E:Oq";
+my $optlist  = "hdn:ilLre:s:mafPAT:cN:F:D:E:Oq";
 my $debug    = 0;
 my $quiet    = 0;
 my $info     = 0;
 my $list     = 0;
+my $shownodes= 0;
 my $revoke   = 0;
 my $sendmail = 0;
 my $activate = 0;
@@ -183,6 +185,10 @@ if (defined($options{i})) {
 }
 if (defined($options{l})) {
     $list = 1;
+}
+if (defined($options{L})) {
+    $list = 1;
+    $shownodes = 1;
 }
 if (defined($options{T})) {
     $webtask = WebTask->Lookup($options{T});
@@ -320,15 +326,23 @@ if ($list) {
 	my $current = 0;
 
 	my $current_result =
-	    DBQueryFatal("select count(*) from nodes ".
+	    DBQueryFatal("select node_id from nodes ".
 			 "where reserved_pid='$pid' and ".
 			 "      reservation_name='$name'");
 
-	($current) = $current_result->fetchrow_array()
+	$current = $current_result->numrows
 	    if ($current_result && $current_result->numrows);
 
 	printf("%-20s %-12s %-4d %-3d %-10s %-18s\n",
 	       $pid, $name, $count, $current, $creator, $created);
+
+	if ($shownodes && $current) {
+	    my @nodes = ();
+	    while (my ($node_id) = $current_result->fetchrow_array()) {
+		push @nodes, $node_id;
+	    }
+	    print "  Nodes: @nodes\n";
+	}
 
 	if (!defined($approved)) {
 	    print "  *** This prereserve is not approved yet!\n";
