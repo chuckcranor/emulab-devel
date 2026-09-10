@@ -345,7 +345,7 @@ if ($list) {
 		while (my ($node_id) = $nodes_result->fetchrow_array()) {
 		    push @nodes, $node_id;
 		}
-		print "  Nodes: @nodes\n";
+		print "  Nodes: ", join(' ', sort(@nodes)), "\n";
 	    }
 	}
 
