@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2021 University of Utah and the Flux Group.
+# Copyright (c) 2003-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -326,22 +326,27 @@ if ($list) {
 	my $current = 0;
 
 	my $current_result =
-	    DBQueryFatal("select node_id from nodes ".
+	    DBQueryFatal("select count(*) from nodes ".
 			 "where reserved_pid='$pid' and ".
 			 "      reservation_name='$name'");
 
-	$current = $current_result->numrows
+	($current) = $current_result->fetchrow_array()
 	    if ($current_result && $current_result->numrows);
 
 	printf("%-20s %-12s %-4d %-3d %-10s %-18s\n",
 	       $pid, $name, $count, $current, $creator, $created);
 
-	if ($shownodes && $current) {
-	    my @nodes = ();
-	    while (my ($node_id) = $current_result->fetchrow_array()) {
-		push @nodes, $node_id;
+	if ($shownodes) {
+	    my $nodes_result =
+		DBQueryFatal("select node_id from node_reservations ".
+			     "where pid='$pid' and reservation_name='$name'");
+	    if ($nodes_result && $nodes_result->numrows) {
+		my @nodes = ();
+		while (my ($node_id) = $nodes_result->fetchrow_array()) {
+		    push @nodes, $node_id;
+		}
+		print "  Nodes: @nodes\n";
 	    }
-	    print "  Nodes: @nodes\n";
 	}
 
 	if (!defined($approved)) {
