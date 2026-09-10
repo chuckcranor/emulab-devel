@@ -89,7 +89,7 @@ sub launchEventSender($) {
     my $self = shift;
     my $node = $self->node();
     my $node_id = $node->node_id();
-    my $waittime = $node->NodeTypeInfo()->power_delay();
+    my $waittime = $node->NodeTypeInfo()->boot_waittime();
 
     # Fork and go into the background to proxy events for device.
     my $tmpfile = TBMakeTempFile("oru-watcher");
@@ -117,7 +117,7 @@ sub launchEventSender($) {
 	    $auth_args .= " -p '$admin_pass'";
 	}
     }
-    system("$ORUCLE $node_id $auth_args -q -P $waittime");
+    system("$ORUCLE $node_id $auth_args -P $waittime");
     if (! $?) {
 	$self->log("Device is up. Sending `ISUP` event.");
 	$node->SetEventState(TBDB_NODESTATE_ISUP());

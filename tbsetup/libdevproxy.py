@@ -358,8 +358,8 @@ class DeviceWrapper(ABC):
     DEF_SHUTDOWN_TIME = 30
     DEF_BOOT_TIMEOUT = 120
     DEF_RADIO_ONLINE_TIMEOUT = 300
-    DEF_RETRIES = 3
-    DEF_RETRY_WAIT = 5
+    DEF_SSH_RETRIES = 3
+    DEF_SSH_RETRY_WAIT = 5
     REBOOT_CMD = "reboot"
     FW_VERSION_FILE = "/etc/version"
     FW_VERSION_UNKNOWN = "*UNKNOWN-FW-VERSION*"
@@ -378,7 +378,8 @@ class DeviceWrapper(ABC):
                                default_keyfile=keyfile, log_level = log_level)
 
     def connect_session(self, password = DEF_PASSWD,
-                        ping_timeout = DEF_PING_TIMEOUT, retries = DEF_RETRIES):
+                        ping_timeout = DEF_PING_TIMEOUT,
+                        retries = DEF_SSH_RETRIES):
         self._pass = password
         Utilities.wait_for_ping(self.addr, ping_timeout)
         while True:
@@ -389,7 +390,7 @@ class DeviceWrapper(ABC):
                 if retries > 0:
                     self.lgr.warning(f"SSH connection to {self.addr} failed. "
                                      "Retrying.")
-                    time.sleep(self.DEF_RETRY_WAIT)
+                    time.sleep(self.DEF_SSH_RETRY_WAIT)
                 else:
                     raise
             else:

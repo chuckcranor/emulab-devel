@@ -438,8 +438,12 @@ class VVDNMPlaneSession(object):
             raise
         return rval
 
+    # Not currently supported by VVDN devices :facepalm:
     def reboot(self):
         self.get_session().reboot_machine()
+
+    def save_config(self):
+        self.get_session().copy_config("running", "startup")
 
 ##############################################################################
 #
@@ -494,9 +498,11 @@ class VVDNWrapper(DeviceWrapper):
     DEF_BOOT_TIMEOUT = 120
     DEF_SHUTDOWN_TIME = 30
     DEF_RADIO_ONLINE_TIMEOUT = 180
+    DEF_SSH_RETRIES = 6
     WAIT_ONLINE_SLEEP = 3
     FW_VERSION_UNKNOWN = "NN-vX.Y.Z.R"
     REBOOT_CMD = "/sbin/reboot"
+    PRACH_SET_COMPRESSION_CMD = "/usr/bin/mw.l a0010024 1919"
 
     BW2PRB_MAP_30KHZ = {
         10000000:  24,
@@ -516,13 +522,15 @@ class VVDNWrapper(DeviceWrapper):
         self._mpconf = None
 
     def connect_session(self, password = DEF_PASSWD,
-                        ping_timeout = DEF_PING_TIMEOUT):
-        self.connect_ssh_session(password, ping_timeout)
+                        ping_timeout = DEF_PING_TIMEOUT,
+                        retries = DEF_SSH_RETRIES):
+        self.connect_ssh_session(password, ping_timeout, retries)
         self.connect_mplane_session(password, ping_timeout = 0)
 
     def connect_ssh_session(self, password = DEF_PASSWD,
-                            ping_timeout = DEF_PING_TIMEOUT):
-        super().connect_session(password, ping_timeout)
+                            ping_timeout = DEF_PING_TIMEOUT,
+                            retries = DEF_SSH_RETRIES):
+        super().connect_session(password, ping_timeout, retries)
 
     def connect_mplane_session(self, password = DEF_PASSWD,
                                ping_timeout = DEF_PING_TIMEOUT):
@@ -551,8 +559,7 @@ class VVDNWrapper(DeviceWrapper):
 
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
         filt = etree.Element("sync", nsmap={None: MPlaneDefs.NS_SYNC})
-        etree.SubElement(etree.SubElement(filt, "sync-status"),
-                         "sync-state")
+        etree.SubElement(etree.SubElement(filt, "sync-status"), "sync-state")
         stime = time.time()
         while time.time() <= stime + timeout:
             res = self.get_mplane_session().get(filt)
@@ -578,6 +585,14 @@ class VVDNWrapper(DeviceWrapper):
             etree.tostring(confelt, encoding=str, pretty_print=True))
 
     def activate_carrier(self):
+        # Hack: First push the PRACH compression settings via SSH before
+        # activating the carriers (VVDN derp!). These settings are lost
+        # when VVDN RUs are rebooted or power cycled.
+        stdout, stderr = self.get_ssh_session().\
+            exec(self.PRACH_SET_COMPRESSION_CMD)
+        if stderr:
+            raise RuntimeError(
+                f"Failed to set PRACH compression settings:\n{''.join(stderr)}")
         self._set_carrier_state(MPlaneDefs.ARRAY_CARRIER_ACTIVE)
 
     def deactivate_carrier(self):
@@ -681,7 +696,7 @@ class VVDNWrapper(DeviceWrapper):
             if group:
                 for cmd in group:
                     confelt.append(cmd)
-                self._mpsess.edit_config(
+                self.get_mplane_session().edit_config(
                     etree.tostring(confelt, encoding=str, pretty_print=True))
                 confelt.clear()
         # Note: caller must separately (re)activate the radio carrier!
@@ -759,3 +774,4 @@ class VVDNWrapper(DeviceWrapper):
         upcelt.append(pybindIETFXMLEncoder.encode(rxcarr))
         upc_cmds.append(upcelt)
         self._push_settings_groups([vifrm_cmds, vifmk_cmds, upc_cmds])
+        self.get_mplane_session().save_config()

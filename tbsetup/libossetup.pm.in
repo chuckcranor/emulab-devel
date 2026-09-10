@@ -2774,7 +2774,7 @@ sub AddNode($$)
     $node->_retrycount(0); # no retries.
     $node->_doisup(0);     # Don't send compulsory ISUP in base class.
     $node->_doevents(1);   # DO have `power` send events in base class.
-    $node->_pingwait(60);  # Default timeout for ping response at boot.
+    $node->_doreboot(0);   # Reboot the RU after applying the configuration?
 
     # Grab any required auth params from the DB
     my ($admin_user, $admin_pass);
@@ -2903,7 +2903,7 @@ sub _mkRUconfig($@)
 	delete $ru_params{'ofh_compression_mode'};
     }
 
-    return to_json($ru_params);
+    return \%ru_params;
 }
 
 #
@@ -2915,7 +2915,7 @@ sub LightUpNodes($@)
     my ($self, @nodelist)  = @_;
     my $parent     = $self->parent();
     my $experiment = $parent->experiment();
-    my $bootwait   = $self->_pingwait();
+    my $bootwait   = 90; # bad magic number.
 
     # Call LightUpNodes() in libossetup_basesdr class first to do common stuff.
     if ($self->SUPER::LightUpNodes(@nodelist) < 0) {
@@ -2936,6 +2936,29 @@ sub LightUpNodes($@)
     if (@failed) {
 	print STDERR "RU devices '". join(", ", @failed) ."' failed to boot!";
 	goto bad;
+    }
+
+    # Loop through RU devices and push their configuration to them.
+    foreach my $node (@nodelist) {
+	my $node_id    = $node->node_id();
+	my $auth_args  = $node->_authargs();
+	my $reboot_arg = $node->_doreboot() ? "-r" : "";
+
+	# Push settings and reboot, if that is indicated.
+	tbnotice("Configuring O-RU $node_id\n");
+	my $config = to_json($self->_mkRUconfig($node));
+	system("echo '$config' | $ORUCLE $node_id $auth_args -j - $reboot_arg");
+	if ($?) {
+	    tbwarn("Failed to configure and reboot $node_id!\n");
+	    goto bad;
+	}
+
+	# Tell Stated that the RU is rebooting (or effectively still booting...)
+	$node->SetEventState(TBDB_NODESTATE_SHUTDOWN(), 0) == 0
+	    or goto bad;
+	sleep(1);
+	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
+	    or goto bad;
     }
 
     return 0;
@@ -2963,16 +2986,16 @@ sub WaitForNode($$)
 
     # See if the RU has made it to the "online" state. Activate the
     # carrier, and also report "ISUP" for the device if so.
-    my $pingwait = $node->_pingwait();
     my $auth_args = $node->_authargs();
-    system("$ORUCLE $node_id $auth_args -q -P $pingwait -w 1 -a");
-    if (! $?) {
+    system("$ORUCLE $node_id $auth_args -w 1 -a");
+    if ($? == 0) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
 	    $parent->noretry(1);
 	    return -1;
 	}
+	# Give the state change a bit of time to propagate.
+	sleep(1);
     }
-    $node->_pingwait(5); # Reset pingwait to default after first call.
 
     return $self->SUPER::WaitForNode($node);
 }
@@ -2986,7 +3009,8 @@ sub WaitDone($@)
     my $parent     = $self->parent();
 
     #
-    # Must call the generic WaitDone handler too.
+    # Must call the generic WaitDone handler too. Return value is not
+    # meaningful (in general in the libossetup API).
     #
     $self->SUPER::WaitDone(@nodelist);
 
@@ -3006,17 +3030,16 @@ sub WaitDone($@)
 	    # Set this so we know a successful reboot was done.
 	    $node->_rebooted(1)
 		if ($node->_setupoperation() != $libossetup::NOSTATE);
-
-	    next;
-	}
-	# Fall through on failure.
-	if ($eventstate eq TBDB_NODESTATE_TBFAILED()) {
-	    tbwarn("$node_id reported a TBFAILED event\n");
 	}
 	else {
-	    tbwarn("$node_id failed to boot\n");
+	    if ($eventstate eq TBDB_NODESTATE_TBFAILED()) {
+		tbwarn("$node_id reported a TBFAILED event\n");
+	    }
+	    else {
+		tbwarn("$node_id failed to boot\n");
+	    }
+	    $node->SetBootStatus(NODEBOOTSTATUS_FAILED);
 	}
-	$node->SetBootStatus(NODEBOOTSTATUS_FAILED);
     }
 
     return 0;
@@ -3056,51 +3079,9 @@ sub AddNode($$)
 
     # Set up our overrides.
     $node->_maxwait(360);  # Time to wait for device to come online.
-    $node->_retrycount(0); # no retries.
-    $node->_doisup(0);     # Don't send compulsory ISUP in `basesdr` class.
-    $node->_doevents(1);   # DO have `power` send events in `basesdr` class.
-    $node->_pingwait(90);  # Timeout for ping response at boot.
+    $node->_doreboot(1);   # Reboot the RU after applying the configuration.
 
     return 0;
-}
-
-sub LightUpNodes($@)
-{
-    my ($self, @nodelist) = @_;
-    my $parent = $self->parent();
-    my $auth_args = $self->_authargs();
-
-    # Do parent class tasks, including making sure the devices get to ISUP.
-    if ($self->SUPER::LightUpNodes(@nodelist) < 0) {
-	goto bad;
-    }
-
-    # Loop through RU devices and push their configuration to them.
-    foreach my $node (@nodelist) {
-	my $node_id = $node->node_id();
-
-	# Push settings and reboot.
-	tbnotice("Configuring Benetel RU $node_id, then rebooting it.\n");
-	my $config = $self->_mkRUconfig($node);
-	system("echo '$config' | $ORUCLE $node_id $auth_args -j - -r");
-	if ($?) {
-	    tbwarn("Failed to configure and reboot $node_id!\n");
-	    goto bad;
-	}
-
-	# Tell Stated that the RU is rebooting.
-	$node->SetEventState(TBDB_NODESTATE_SHUTDOWN(), 0) == 0
-	    or goto bad;
-	sleep(1);
-	$node->SetEventState(TBDB_NODESTATE_BOOTING(), 0) == 0
-	    or goto bad;
-    }
-
-    return 0;
-
-  bad:
-    $parent->noretry(1);
-    return -1;
 }
 
 package libossetup_bt_ru650;
@@ -3151,43 +3132,8 @@ sub AddNode($$)
 
     # Set up our overrides.
     $node->_maxwait(300);  # Time to wait for device to come online.
-    $node->_retrycount(0); # no retries.
-    $node->_doisup(0);     # Don't send compulsory ISUP in `basesdr` class.
-    $node->_doevents(1);   # DO have `power` send events in `basesdr` class.
-    $node->_pingwait(90);  # Timeout for ping response at boot.
 
     return 0;
-}
-
-sub LightUpNodes($@)
-{
-    my ($self, @nodelist) = @_;
-    my $parent = $self->parent();
-    my $auth_args = $self->_authargs();
-
-    # Do parent class tasks, including making sure the devices get to ISUP.
-    if ($self->SUPER::LightUpNodes(@nodelist) < 0) {
-	goto bad;
-    }
-
-    foreach my $node (@nodelist) {
-	my $node_id = $node->node_id();
-
-	# Push settings. VVDN RUs do not require a reboot.
-	tbnotice("Configuring VVDN RU $node_id\n");
-	my $settings = $self->_mkRUconfig($node);
-	system("echo '$settings' | $ORUCLE $node_id $auth_args -j -");
-	if ($?) {
-	    print STDERR "Failed to configure $node_id!\n";
-	    goto bad;
-	}
-    }
-
-    return 0;
-
-  bad:
-    $parent->noretry(1);
-    return -1;
 }
 
 package libossetup_vmpru_b48;

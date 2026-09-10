@@ -183,7 +183,7 @@ def main():
             return 1
         if not res:
             lgr.warning("Timed out while waiting for radio to come online.")
-            return 1
+            return 2
     if args.activate:
         lgr.info("Activating radio carrier.")
         try:
