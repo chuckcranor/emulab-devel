@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2025 University of Utah and the Flux Group.
+# Copyright (c) 2010-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,7 +95,7 @@ usage()
     if (@ARGV);
 
 my $query_result =
-    DBQueryFatal("select u.uid from users as u ".
+    DBQueryFatal("select u.uid,weblogin_last,exptstart_last,last_activity from users as u ".
 		 "left join user_stats as s on s.uid_idx=u.uid_idx ".
 		 "where u.status='active' and ".
 		 "    u.usr_created<DATE_SUB(curdate(), INTERVAL $interval MONTH) and ".
@@ -106,13 +106,18 @@ my $query_result =
 		 "    (s.last_activity is null or ".
 		 "     s.last_activity<DATE_SUB(curdate(), INTERVAL $interval MONTH)) and ".
 		 "    u.admin=0 and u.foreign_admin=0 and u.stud=0 ".
-		 "order by weblogin_last asc limit 1");
+		 "order by s.last_activity asc");
 
-while (my ($uid) = $query_result->fetchrow_array()) {
+while (my ($uid,$lw,$le,$la) = $query_result->fetchrow_array()) {
     if ($doit) {
 	system("$SUDO -u $PROTOUSER $WAP $TBACCT -s -u deactivate $uid");
     }
-    else {
+    elsif ($debug) {
+	$lw = "never" if (!$lw);
+	$le = "never" if (!$le);
+	$la = "never" if (!$la);
+	print "$uid: web=$lw, expt=$le, activity=$la\n";
+    } else {
 	print "$uid\n";
     }
 }
