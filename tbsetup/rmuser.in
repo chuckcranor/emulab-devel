@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,7 @@ sub usage()
 {
     print STDOUT "Usage: rmuser [-F] [-p <pid> [-n]] uid\n" .
 	"Options:\n" .
-	" -s pid  - Remove user from specific project\n".
+	" -p pid  - Remove user from specific project\n".
 	" -n      - Web option; nuke user account during project denial\n".
 	" -s      - Silence email\n".
 	" -F      - Force removal by terminating user's experiments\n".
