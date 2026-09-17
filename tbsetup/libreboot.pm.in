@@ -875,7 +875,8 @@ sub RebootNode {
 	if ($nodeobject->type() =~ /^bt-ru\d+$/ or $nodeobject->type() =~ /^v[lm]pru/) {
 	    require power_oru;
 	    my $rudev = new power_oru($nodeobject);
-	    $rudev->launchEventSender();
+	    # Wait for "radio online" and activate carrier
+	    $rudev->launchEventSender(1);
 	}
 	exit(0);
     }

@@ -569,6 +569,7 @@ class VVDNWrapper(DeviceWrapper):
                     sval = sstate[0].text
                     self.lgr.info(f"Radio sync state: {sval}")
                     if sval.lower() == "locked":
+                        time.sleep(self.WAIT_ONLINE_SLEEP) # Settling time...
                         self.lgr.info("Radio is ready.")
                         return True
             time.sleep(self.WAIT_ONLINE_SLEEP)

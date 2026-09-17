@@ -72,11 +72,13 @@ sub DESTROY($) {
 sub node($) { return $_[0]->{'NODE'}; }
 
 # Do any required post-power operations.
-sub DoPowerPostOp($$) {
-    my ($self, $op) = @_;
+sub DoPowerPostOp($$;$) {
+    my ($self, $op, $dowait) = @_;
+    $dowait = 0
+	if (!defined($dowait));
 
     if ($op eq "on" || $op eq "cycle") {
-	$self->launchEventSender();
+	$self->launchEventSender($dowait);
     }
     elsif ($op eq "off") {
 	# Nothing to do for the "off" operation.
@@ -85,11 +87,13 @@ sub DoPowerPostOp($$) {
     return;
 }
 
-sub launchEventSender($) {
-    my $self = shift;
+sub launchEventSender($;$) {
+    my ($self, $dowait) = @_;
+    $dowait = 0
+	if (!defined($dowait));
     my $node = $self->node();
     my $node_id = $node->node_id();
-    my $waittime = $node->NodeTypeInfo()->boot_waittime();
+    my $pingtime = $node->NodeTypeInfo()->boot_waittime();
 
     # Fork and go into the background to proxy events for device.
     my $tmpfile = TBMakeTempFile("oru-watcher");
@@ -117,7 +121,11 @@ sub launchEventSender($) {
 	    $auth_args .= " -p '$admin_pass'";
 	}
     }
-    system("$ORUCLE $node_id $auth_args -P $waittime");
+    # Wait for "radio ready" and activate if $dowait is true. The "0"
+    # value for the "-w" argument indicates waiting the default amount
+    # of time for the "radio ready" state, as defined for the device.
+    my $waitargs = $dowait ? "-w 0 -a" : "";
+    system("$ORUCLE $node_id $auth_args -P $pingtime $waitargs");
     if (! $?) {
 	$self->log("Device is up. Sending `ISUP` event.");
 	$node->SetEventState(TBDB_NODESTATE_ISUP());

@@ -81,6 +81,7 @@ Usage: $0 [-v n] [-e] [-a] [-W] <on|off|cycle|status> <node ...>
 -v n   Run with verbosity level n
 -a     Skip the access check, caller is knows what it is doing
 -W     Skip the timeout check, caller knows what it is doing.
+-n     Skip extra wait/activate actions for some devices (e.g., O-RUs)
 END
     1;
 }
@@ -111,7 +112,7 @@ sub logit($);
 # Process command-line arguments
 #
 my %opt = ();
-getopts("v:heaW",\%opt);
+getopts("v:heaWn",\%opt);
 
 if ($opt{h}) {
     exit usage();
@@ -124,8 +125,13 @@ if ($opt{v}) {
 }
 print "VERBOSE ON: Set to level $verbose\n" if $verbose;
 
+my $dowait = 1;
+if ($opt{"n"}) {
+    $dowait = 0;
+}
+
 my $sendevent = 1;
-if ($opt{e}) {
+if ($opt{"e"}) {
     $sendevent = 0;
 }
 my $nopermcheck = 0;
@@ -784,7 +790,7 @@ foreach my $power_id (keys %outlets) {
 		if ($node_type =~ /^bt-ru\d+$/i or $node_type =~ /^v[lm]pru/i) {
 		    require power_oru;
 		    my $rudev = new power_oru($node);
-		    $rudev->DoPowerPostOp($op);
+		    $rudev->DoPowerPostOp($op, $dowait);
 		} # elsif ($node_type =~ ...) { ...
 	    }
 	}
