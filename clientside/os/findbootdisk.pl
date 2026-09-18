@@ -61,7 +61,12 @@ my $debug = 0;
 my %hints = ();
 foreach my $hint (@ARGV) {
     if ($hint =~ /^(prefix|serial|size|parts)=(.*)$/) {
-	$hints{$1} = $2;
+	my ($k,$v) = ($1,$2);
+	if ($k eq "size" && $v !~ /^\d+$/) {
+	    print STDERR "Non-numeric size hint ignored.\n";
+	    next;
+	}
+	$hints{$k} = $v;
     }
 }
 
@@ -169,6 +174,24 @@ if (exists($hints{'serial'}) && $hints{'serial'} ne "none") {
 	push @bdisk, $snlist{$tlist[0]};
     }
     goto done;
+}
+
+#
+# Next look at size, but only use if we find a single matching unit
+# XXX could also do "smallest"
+#
+if (exists($hints{'size'})) {
+    my $tsize = $hints{'size'};
+    print STDERR "Looking for disk size of $tsize sectors to ID boot disk.\n";
+    foreach my $disk (keys(%disks)) {
+	if (exists(${$disks{$disk}}[0]) &&
+	    ${$disks{$disk}}[0] == $hints{'size'}) {
+	    push @bdisk, $disk;
+	}
+    }
+    if (@bdisk == 1) {
+	goto done;
+    }
 }
 
 if (exists($hints{'parts'})) {
