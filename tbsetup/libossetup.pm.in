@@ -60,7 +60,7 @@ my $ELABINELAB  = "$TB/sbin/elabinelab";
 my $IMAGEINFO   = "$TB/sbin/imageinfo";
 my $TBADB       = "$TB/bin/tbadb";
 my $RFSWITCHER  = "$TB/sbin/powder-rfswitcher";
-my $ORUCLE   = "$TB/sbin/orucle";
+my $ORUCLE      = "$TB/sbin/orucle";
 
 # Setup Operation Flags
 $NOSTATE    = 0x00;
@@ -2539,6 +2539,14 @@ sub New($$$) {
 
     my $self = $class->SUPER::New($type, $parent);
     bless($self, $class);
+
+    # Send compulsory ISUP by default, if need be, for the radio.
+    $self->_doisup(1);
+    # By default, do not send events from `power` when power cycling.
+    $self->_doevents(0);
+    # By default, don't wait for "radio ready" after power on/cycle.
+    $self->_skipready(1);
+
     return $self;
 }
 
@@ -2551,12 +2559,6 @@ sub AddNode($$)
     # Need something, should be in ISUP by the time we get there
     # but stated might be delayed.
     $node->_maxwait(60);
-    # By default, send "ISUP" at the end of LightUpNodes()
-    $self->_doisup(1);
-    # By default, do not sent events from `power` when power cycling.
-    $self->_doevents(0);
-    # By default, don't wait for "radio ready" after power on/cycle.
-    $self->_skipready(1);
     return 0;
 }
 
@@ -2573,6 +2575,7 @@ sub LightUpNodes($@)
     my $parent     = $self->parent();
     my @cycles     = ();
     my @ons        = ();
+    my @reboots    = ();
     my $count      = 0;
 
     #
@@ -2602,48 +2605,54 @@ sub LightUpNodes($@)
 	sleep(1);
     }
 
+    #
+    # Figure out which radios we can power on/cycle, or reboot.
+    #
     foreach my $node (@nodelist) {
 	next
 	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 
-	if (!$node->HasOutlet()) {
-	    my $node_id = $node->node_id();
-	    tbnotice("Radio $node_id does not have a power outlet, skipping\n");
-	    next;
+	if ($node->HasOutlet()) {
+	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+		push(@ons, $node->node_id());
+	    }
+	    else {
+		push(@cycles, $node->node_id());
+	    }
 	}
-
-	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
-	    push(@ons, $node->node_id())
+	elsif ($node->rebootable()) {
+	    push(@reboots, $node->node_id());
 	}
 	else {
-	    push(@cycles, $node->node_id())
+	    tbwarn("No power control for radio $node, and cannot reboot... Good luck!\n");
 	}
     }
+
+    #
+    # Now execute the `power {on|cycle}` and `reboot` operations.
+    #
     my $rdyflag = $self->_skipready() ? "-n" : "";
     if (@ons) {
 	tbnotice("Power on radios: @ons\n");
 	# We need the event state change here.
 	system("$POWER $rdyflag on @ons");
-	my $exitval = $?;
-
-	if ($exitval) {
-	    # This is very unusual.
-	    $parent->noretry(1);
-	    return -1;
-	}
+ 	goto bad
+	    if ($?);
     }
     if (@cycles) {
 	my $evt_flag = $self->_doevents() ? "" : "-e";
 	tbnotice("Power cycling radios: @cycles\n");
 	system("$POWER $evt_flag $rdyflag cycle @cycles");
-	my $exitval = $?;
-
-	if ($exitval) {
-	    # This is very unusual.
-	    $parent->noretry(1);
-	    return -1;
-	}
+ 	goto bad
+	    if ($?);
     }
+    if (@reboots) {
+	tbnotice("Attempting to reboot radios w/o power control: @reboots\n");
+	system("$NODEREBOOT @reboots");
+	goto bad
+	    if ($?);
+    }
+
     #
     # If the eventstate somewhow managed to get out of ISUP, send it.
     #
@@ -2661,6 +2670,10 @@ sub LightUpNodes($@)
 	}
     }
     return 0;
+
+  bad:
+    $parent->noretry(1);
+    return -1;
 }
 
 package libossetup_sdr;
@@ -2759,6 +2772,11 @@ sub New($$$) {
 
     my $self = $class->SUPER::New($type, $parent);
     bless($self, $class);
+
+    $self->_doisup(0);     # Don't send compulsory ISUP in base class.
+    $self->_doevents(1);   # DO have `power` send events in base class.
+    $self->_doreboot(0);   # Do not reboot RU by default after configuring it.
+
     return $self;
 }
 
@@ -2775,10 +2793,6 @@ sub AddNode($$)
     # Set up our overrides.
     $node->_maxwait(180);  # Default time to wait for device to come online.
     $node->_retrycount(0); # no retries.
-    $node->_doisup(0);     # Don't send compulsory ISUP in base class.
-    $node->_doevents(1);   # DO have `power` send events in base class.
-    $node->_doreboot(0);   # Reboot the RU after applying the configuration?
-    $node->_skipready(1);  # Don't wait for "radio ready" after power on/cycle.
 
     # Grab any required auth params from the DB
     my ($admin_user, $admin_pass);
@@ -2919,6 +2933,7 @@ sub LightUpNodes($@)
     my ($self, @nodelist)  = @_;
     my $parent     = $self->parent();
     my $experiment = $parent->experiment();
+    my $reboot_arg = $self->_doreboot() ? "-r" : "";
     my $bootwait   = 90; # bad magic number.
 
     # Call LightUpNodes() in libossetup_basesdr class first to do common stuff.
@@ -2938,7 +2953,7 @@ sub LightUpNodes($@)
 	goto bad;
     }
     if (@failed) {
-	print STDERR "RU devices '". join(", ", @failed) ."' failed to boot!";
+	print STDERR "O-RU devices '". join(", ", @failed) ."' failed to boot!";
 	goto bad;
     }
 
@@ -2946,12 +2961,11 @@ sub LightUpNodes($@)
     foreach my $node (@nodelist) {
 	my $node_id    = $node->node_id();
 	my $auth_args  = $node->_authargs();
-	my $reboot_arg = $node->_doreboot() ? "-r" : "";
 
 	# Push settings and reboot, if that is indicated.
 	tbnotice("Configuring O-RU $node_id\n");
 	my $config = to_json($self->_mkRUconfig($node));
-	system("echo '$config' | $ORUCLE $node_id $auth_args -j - $reboot_arg");
+	system("echo '$config' | $ORUCLE $node_id $auth_args $reboot_arg -j -");
 	if ($?) {
 	    tbwarn("Failed to configure and reboot $node_id!\n");
 	    goto bad;
@@ -2994,6 +3008,15 @@ sub WaitForNode($$)
     system("$ORUCLE $node_id $auth_args -w 1 -a");
     if ($? == 0) {
 	if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+	    $parent->noretry(1);
+	    return -1;
+	}
+	# Give the state change a bit of time to propagate.
+	sleep(1);
+    }
+    elsif ($? == 1) {
+	# Something other than a timeout occurred when running `orucle`
+	if ($node->SetEventState(TBDB_NODESTATE_TBFAILED(), 0)) {
 	    $parent->noretry(1);
 	    return -1;
 	}
@@ -3068,6 +3091,9 @@ sub New($$) {
 
     my $self = $class->SUPER::New("bt_ru550", $parent);
     bless($self, $class);
+
+    $self->_doreboot(1);   # Reboot the RU after applying the configuration.
+
     return $self;
 }
 
@@ -3083,7 +3109,6 @@ sub AddNode($$)
 
     # Set up our overrides.
     $node->_maxwait(360);  # Time to wait for device to come online.
-    $node->_doreboot(1);   # Reboot the RU after applying the configuration.
 
     return 0;
 }

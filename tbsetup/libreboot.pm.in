@@ -872,7 +872,8 @@ sub RebootNode {
 	my $state = TBDB_NODESTATE_SHUTDOWN;
 	TBSetNodeEventState($pc,$state);
 	# Fire off RU boot watch / event sending proxy, if needed.
-	if ($nodeobject->type() =~ /^bt-ru\d+$/ or $nodeobject->type() =~ /^v[lm]pru/) {
+	my $node_type = $nodeobject->type();
+	if ($node_type =~ /^bt-ru\d+$/i or $node_type =~ /^v[lm]pru/i) {
 	    require power_oru;
 	    my $rudev = new power_oru($nodeobject);
 	    # Wait for "radio online" and activate carrier

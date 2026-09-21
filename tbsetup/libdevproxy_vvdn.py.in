@@ -560,8 +560,8 @@ class VVDNWrapper(DeviceWrapper):
     def wait_for_radio_online(self, timeout = DEF_RADIO_ONLINE_TIMEOUT):
         filt = etree.Element("sync", nsmap={None: MPlaneDefs.NS_SYNC})
         etree.SubElement(etree.SubElement(filt, "sync-status"), "sync-state")
-        stime = time.time()
-        while time.time() <= stime + timeout:
+        timeout_time = time.time() + timeout
+        while True:
             res = self.get_mplane_session().get(filt)
             if res:
                 sstate = res.data.xpath("//*[local-name()='sync-state']")
@@ -572,6 +572,8 @@ class VVDNWrapper(DeviceWrapper):
                         time.sleep(self.WAIT_ONLINE_SLEEP) # Settling time...
                         self.lgr.info("Radio is ready.")
                         return True
+            if time.time() > timeout_time:
+                break
             time.sleep(self.WAIT_ONLINE_SLEEP)
         return False
 
