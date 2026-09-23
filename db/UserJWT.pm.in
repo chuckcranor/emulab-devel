@@ -51,6 +51,8 @@ my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $MAINSITE    = @TBMAINSITE@;
 my $OURDOMAIN	= "@OURDOMAIN@";
+my $CLUSTER_PORTAL = "@CLUSTER_PORTAL@";
+my $ISSUER      = "https://${CLUSTER_PORTAL}:43794";
 my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $EMULAB_CERT = "$TB/etc/emulab.pem";
 my $EMULAB_KEY  = "$TB/etc/emulab.key";
@@ -129,6 +131,7 @@ sub Create($$$$;$$$$)
     chomp($jti);
 
     my $payload = {
+        "iss"    => $ISSUER,
 	"sub"    => $uid_uuid,
 	"name"   => $uid_uid,
 	"jti"    => $jti,
