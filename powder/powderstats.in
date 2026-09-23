@@ -37,14 +37,16 @@ sub ShowActive();
 sub usage()
 {
     print STDERR "Usage: powderstats [-A] [-s YYYY-MM-DD] -e YYYY-MM-DD\n";
-    print STDERR "    Print stats for projects/users/experiments created\n";
-    print STDERR "    during the time period.\n";
-    print STDERR "    -A   Print stats for projects/users/experiments that\n";
-    print STDERR "         were active at any point in the time period.\n";
-    print STDERR "    -d   Debug output\n";
+    print STDERR "  Print stats for projects/users/experiments created\n";
+    print STDERR "  during the time period.\n";
+    print STDERR "  -A        Print stats for projects/users/experiments that\n";
+    print STDERR "            were active at any point in the time period.\n";
+    print STDERR "  -P <list> Comma-separated list of projects to exclude\n";
+    print STDERR "  -U <list> Comma-separated list of users to exclude\n";
+    print STDERR "  -d   Debug output\n";
     exit(-1);
 }
-my $optlist   = "Ade:s:";
+my $optlist   = "AP:U:de:s:";
 my $STARTTIME;
 my $ENDTIME;
 my $showactive = 0;
@@ -66,12 +68,13 @@ my $EPOCH = "2017-10-26";
 # Projects to exclude from consideration. These are largely projects
 # where we do debugging and development of the infrastructure.
 #
-#my @EXPROJ = ("emulab-ops", "testbed", "PMonitor");
-my @EXPROJ = ("emulab-ops", "testbed", "PMonitor", "openzms-demo");
+#my @EXPROJ = ("emulab-ops", "testbed", "PMonitor", "openzms-demo");
+my @EXPROJ = ("emulab-ops", "testbed", "PMonitor");
 
 #
 # Users who should not be included.
 #
+#my @EXUSER = ("zmstest", "dmjuser");
 my @EXUSER = ();
 
 #
@@ -119,6 +122,12 @@ if (defined($options{"d"})) {
 if (defined($options{"A"})) {
     $showactive = 1;
 }
+if (defined($options{"P"})) {
+    @EXPROJ = split(',', $options{"P"});
+}
+if (defined($options{"U"})) {
+    @EXUSER = split(',', $options{"U"});
+}
 if (defined($options{"s"})) {
     $STARTTIME = $options{"s"};
     if (!str2time($STARTTIME)) {
@@ -148,7 +157,14 @@ if ($start > time()) {
     print STDERR "Start date in the future\n";
     exit(1);
 }
-print "Stats from $STARTTIME to $ENDTIME\n\n";
+print "Stats from $STARTTIME to $ENDTIME\n";
+print "Excluded projects: ", join(' ', @EXPROJ), "\n"
+    if (@EXPROJ > 0);
+print "Excluded users:    ", join(' ', @EXUSER), "\n"
+    if (@EXUSER > 0);
+print "Excluded emails:   ", join(' ', @EXMAIL), "\n"
+    if (@EXMAIL > 0);
+print "\n";
 
 if ($showactive) {
     exit(ShowActive());
