@@ -1,0 +1,15 @@
+[Unit]
+Description=Powder control NUC capture process for Arduino sensors
+Before=multi-user.target
+Before=graphical.target
+After=network.target network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/capture-nossl -I -i -L -T 15 -s 9600 -l /var/log/tiplogs powduino ttyACM0
+KillMode=process
+Restart=on-failure
+Type=forking
+PIDFile=/var/log/tiplogs/powduino.pid
+
+[Install]
+WantedBy=multi-user.target

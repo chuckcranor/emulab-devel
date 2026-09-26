@@ -1,0 +1,19 @@
+#!/usr/bin/expect
+spawn /usr/local/sbin/console-nossl -l powduino
+set timeout 5
+expect "Connected to localhost\." {
+    send "\r"
+    expect -re ".*power> " {
+        send "temp\r"
+        expect -re "^(\d*\.\d*).*power> " {
+            send_user -- $expect_out(1,string)
+        } timeout {
+            error "powduino unresponsive"
+        } eof {
+            error "powduino terminated"
+        }
+    }
+} timeout {
+    error "powduino unresponsive"
+}
+exit
