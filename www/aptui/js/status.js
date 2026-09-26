@@ -3042,6 +3042,11 @@ $(function ()
 			    });
 			    $('#txgraph_button').removeClass("hidden");
 			}
+
+			// Show the experiment wide RDZ menu button.
+			if ($('#rdz-menu-btn').hasClass("hidden")) {
+			    $('#rdz-menu-btn').removeClass("hidden");
+			}
 		    }
 
 		    if (flashable.length) {

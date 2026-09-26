@@ -293,6 +293,25 @@ pre {
 			       hardware used in this experiment.'>
  		Performance History</a>
 	      <% if (!isfadmin) { %>
+                <div id="rdz-menu-btn" class="dropdown hidden"
+                     style="margin-right: 10px; display: inline-block;"
+                     data-toggle='tooltip' data-bs-toggle='tooltip'
+                     title="Powder RDZ and Spectrum Data">
+                  <button class="btn btn-xs text-white dropdown-toggle" type="button"
+                          data-toggle="dropdown" data-bs-toggle="dropdown" aria-expanded="false"
+                          style="background-color: #dd6031;">
+                    <span class='glyphicon glyphicon-stats'></span> 
+                  </button>
+                  <ul class="dropdown-menu" role="menu"
+                      style='cursor: pointer; cursor: hand'>
+                    <li id="zms-map">
+                      <a href="https://rdz.powderwireless.net/zone" target="_blank" rel="noopener" name="zms-map" class='dropdown-item'>Powder RDZ Map</a></li>
+                    <li id="zms-powder-monitors">
+                      <a href="https://rdz.powderwireless.net/elements/45ce852f-1fb2-4f93-bbe5-2f6522cbb258/dashboard" target="_blank" rel="noopener" name="zms-powder-monitors" class='dropdown-item'>RDZ Live Spectrum Data</a></li>
+                    <li id="zms-observation-history">
+                      <a href="https://rdz.powderwireless.net/elements/45ce852f-1fb2-4f93-bbe5-2f6522cbb258/observations" target="_blank" rel="noopener" name="zms-powder-observations" class='dropdown-item'>RDZ Historical Spectrum Data</a></li>
+                  </ul>
+                </div>
 		<button class='btn btn-sm btn-info hidden'
 			id='txgraph_button' type=button
 			style='margin-right: 10px;'
