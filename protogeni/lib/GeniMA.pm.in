@@ -544,11 +544,20 @@ sub LookupKeys($$)
         foreach my $member_urn (@$match_member_urns) {
             my $geniuser = GeniUser->Lookup($member_urn, 1);
 
-    my @keys;
+            if (! defined($geniuser)) {
+                print STDERR "User \"$member_urn\" is not known\n";
+                #return GeniResponse->MalformedArgsResponse(
+                #    "User \"$member_urn\" is not known");
+                next;
+            }
+
+            my @keys;
             if ($geniuser->GetKeyBundle(\@keys) != 0) {
-                print STDERR "Could not get keys for $geniuser\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR);	
-    }
+                print STDERR "Could not get keys for $member_urn\n";
+                #return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+                #   "Could not get keys for \"$member_urn\"");	
+                next;
+            }
 
             my ($server_auth, $server_type, $server_authname) = GeniHRN::Parse( $ENV{'MYURN'} );
 
