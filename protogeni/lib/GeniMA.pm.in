@@ -254,10 +254,10 @@ sub LookupMembers($$)
     return $credential if (GeniResponse::IsResponse($credential));
     return GeniResponse->MalformedArgsResponse("Missing self credential when looking up member") if (!defined($credential));
    
-    my $this_user = GeniUser->Lookup((defined($speaksfor) ?
+    my $authorized_user = GeniUser->Lookup((defined($speaksfor) ?
 			  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
 
-    my $is_local_user = defined($this_user);
+    my $is_local_user = defined($authorized_user);
 
     $is_local_user = 0 unless 
     $credential->HasPrivilege( "authority" ) or
@@ -379,10 +379,10 @@ sub LookupPrivate($$)
     # allows anyone with a credential for this registry to lookup anyone
     # else. Good feature of the Geni API.
     #
-    my $this_user =
+    my $authorized_user =
 	GeniUser->Lookup((defined($speaksfor) ?
 			  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
+    if (!defined($authorized_user)) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Permission denied. Only local users are allowed ".
 				    "to make private lookups.");
@@ -421,10 +421,10 @@ sub LookupIdentifying($$)
     # allows anyone with a credential for this registry to lookup anyone
     # else. Good feature of the Geni API.
     #
-    my $this_user =
+    my $authorized_user =
 	GeniUser->Lookup((defined($speaksfor) ?
 			  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
+    if (!defined($authorized_user)) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Permission denied. Only local users are allowed ".
 				    "to make identifying lookups.");
@@ -509,23 +509,10 @@ sub LookupKeys($$)
 {
     my ($credential_args, $options) = @_;
 
-    my ($credential,$speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return GeniStd::WrapResponse($credential, 'lookup KEY encountered an error: ') if (GeniResponse::IsResponse($credential));
-    return GeniResponse->MalformedArgsResponse("Missing self credential") if (0 && !defined($credential));
-   
-    my $this_user = GeniUser->Lookup((defined($speaksfor) ?
-			  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
-				    "Permission denied.");
+    my $authorized_user = GeniStd::RequireUserAuthorization($credential_args, $options);
+    if (GeniResponse::IsResponse($authorized_user)) {
+        return $authorized_user;
     }
-
-    defined($credential) && 
-	($credential->HasPrivilege( "authority" ) or
-	 $credential->HasPrivilege( "resolve" ) or
-	 return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				      "Insufficient privilege" ));
 
     my ($match, $filter) = GeniStd::GetMatchFilter($options);
 

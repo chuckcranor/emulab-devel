@@ -38,7 +38,7 @@ use Exporter;
 use vars qw(@ISA @EXPORT);
 
 @ISA    = "Exporter";
-@EXPORT = qw ( FilterCredentials auto_add_sa CheckCredentials AddUserCredWhenSpeaksForOnly FilterFields WrapResponse CheckMatchAllowed CheckFieldsAllowed GetMatchFilter GetMatchFilterNew CheckFieldsRequired );
+@EXPORT = qw ( FilterCredentials auto_add_sa CheckCredentials AddUserCredWhenSpeaksForOnly FilterFields WrapResponse CheckMatchAllowed CheckFieldsAllowed GetMatchFilter GetMatchFilterNew CheckFieldsRequired RequireAuthorizationForSlice RequireUserAuthorization );
 
 use GeniSA;
 use GeniResponse;
@@ -615,6 +615,188 @@ sub RFC3339StringToDateTime($)
         return $when;
     }
     return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, "No date found");
+}
+
+#This checks if an API caller is authorized to use a specified slice.
+#It returns the slice object, ar an error.
+#
+#arguments:
+#  - $credential_args: the credentials argument provided to the 
+#    Geni Federation API SA/MA call
+#  - $options the options argument provided to the Geni Federation 
+#    API SA/MA call
+#  - $slice_urn: the slice for which authorization must be checked
+#  - $return_slice: if true (or ommitted) the slice is looked up and returned,
+#    otherwise, undef is returned on successfull authorization. 
+#
+#returns:
+#  - the Slice object or undef (see $return_slice), if authorization is OK
+#  - a GeniResponse when the caller is not authorized to use the provided 
+#    slice, or if there is another error.
+#
+sub RequireAuthorizationForSlice($$$$) {
+    my ($credential_args, $options, $slice_urn, $return_slice) = @_;
+
+    if (!defined($return_slice)) {
+        $return_slice = 1;
+    }
+
+    if (! defined($credential_args))
+    {
+        return GeniResponse->MalformedArgsResponse(
+            'call requires a list of credentials argument');
+    }
+
+    if (!defined($slice_urn)) {
+        print STDERR 'server bug: ' .
+            'RequireAuthorizationForSlice called without $slice_urn';
+        return GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef, 
+            'server bug: ' . 
+            'RequireAuthorizationForSlice called without $slice_urn');
+    }
+
+    my ($first_credential, $speaksfor, @other_credentials) = GeniStd::CheckCredentials(
+        GeniStd::FilterCredentials($credential_args));
+    if (GeniResponse::IsResponse($first_credential)) {
+        return $first_credential;
+    }
+
+    if (!defined($first_credential)) {
+	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, 
+            "Did not find needed credential" );
+    }
+
+    my $best_credential = $first_credential;
+    foreach my $cred (@other_credentials) {
+        my $cur_ok = $best_credential->target_urn() eq $slice_urn;
+        my $new_ok = $cred->target_urn() eq $slice_urn;
+        if (!$cur_ok and $new_ok) {
+            #this is a better one
+            $best_credential = $cred;
+        } else {
+            if ($cur_ok) {
+                $cur_ok = $best_credential->HasPrivilege( "pi" ) 
+                    or $best_credential->HasPrivilege( "bind" );
+                $new_ok = $cred->HasPrivilege( "pi" ) 
+                    or $cred->HasPrivilege( "bind" );
+                if (!$cur_ok and $new_ok) {
+                    #this is a better one
+                    $best_credential = $cred;
+                }
+            }
+        }
+    }
+    my $credential = $best_credential;
+
+    if ((!$credential->HasPrivilege( "pi" )) and
+        (!$credential->HasPrivilege( "bind" ))) {
+	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, 
+            "Insufficient privilege" );
+    }
+
+    if ($credential->target_urn() ne $slice_urn) {
+        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, 
+            "You gave a credential for " . $credential->target_urn() . 
+            " but need a credential for slice ". $slice_urn);
+    }
+
+    if (!$return_slice) {
+        return undef;
+    }
+
+    my $slice = GeniSlice->Lookup($slice_urn);
+    if (!defined($slice)) {
+        return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+            "No such slice here: " . $slice_urn)
+    }
+
+    return $slice;
+}
+
+# This check if the API caller is authorized as a local user.
+# Checks for a specific user can be added. 
+# The authorized user is returned.
+# Note: in theory, a non local user with a speaksfor for a local user can 
+#       be supported.
+#
+# Arguments:
+#   - $credential_args: the credentials argument provided to the 
+#     Geni Federation API SA/MA call
+#   - $options the options argument provided to the Geni Federation 
+#     API SA/MA call
+#   - $return_user: if true (or undef), return the authorized user
+#   - $match_user_urn: optionally, you can specify a user URN. This will cause
+#     failure if that user is not authorized. If this is not specified, any
+#     authorized (local) user is ok.
+#   - $allow_nonlocal_user: if defined and true, allow non local users. 
+#     otherwise, fail on non local user. This implies $return_user is false.
+#
+# Returns:
+#   - if authorized, undef or the authorized user (GeniUser object). 
+#     (see also argument $return_user)
+#   - if not authorized, or some other error, a GeniResponse with the error
+#
+sub RequireUserAuthorization($$$$$) {
+    my ($credential_args, $options, $return_user, $match_user_urn, $require_local_user, $allow_nonlocal_user) = @_;
+
+    if (!defined($return_user)) {
+        $return_user = 1;
+    }
+
+    if (!defined($allow_nonlocal_user)) {
+        $allow_nonlocal_user = 0;
+    }
+
+    if ($allow_nonlocal_user && $return_user) {
+        print STDERR 'server bug: ' .
+            'RequireUserAuthorization called with $allow_nonlocal_user=' . 
+            $allow_nonlocal_user.' and $return_user=' . $return_user. '';
+        return GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef, 
+            'server bug: ' . 
+            'RequireUserAuthorization called with $allow_nonlocal_user=' . 
+            $allow_nonlocal_user.' and $return_user=' . $return_user. '');
+    }
+
+    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
+    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
+    if (GeniResponse::IsResponse($credential)) {
+        return $credential;
+    }
+
+    if (!defined($credential)) {
+	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, 
+            "Did not find needed credential" );
+    }
+
+    $credential->HasPrivilege( "authority" ) or
+	$credential->HasPrivilege( "resolve" ) or
+	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
+				     "Insufficient privilege" );
+
+    my $authorized_user_urn = defined($speaksfor) ? $speaksfor->target_urn() : $ENV{'GENIURN'};
+
+    if (defined($match_user_urn)) {
+        if ($authorized_user_urn ne $match_user_urn) {
+            return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+                "Authorization for user \"$match_user_urn\" is required, ".
+            "you are authorized as user \"$authorized_user_urn\"");
+        }
+    }
+
+    if ($allow_nonlocal_user) {
+        return undef;
+    }
+
+    my $authorized_user = GeniUser->Lookup($authorized_user_urn, 1);
+    if (!defined($authorized_user)) {
+        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, "Who are you? No local record");
+    }
+
+    if ($return_user) {
+        return $authorized_user;
+    } else {
+        return undef;
+    }
 }
 
 1;

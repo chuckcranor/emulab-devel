@@ -444,19 +444,9 @@ sub LookupSlices()
 {
     my ($credential_args, $options) = @_;
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential
-	if (GeniResponse::IsResponse($credential));
-
-    $credential->HasPrivilege( "authority" ) or
-	$credential->HasPrivilege( "resolve" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				     "Insufficient privilege" );
-
-    my $this_user = GeniUser->Lookup((defined($speaksfor) ?  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, "Who are you? No local record");
+    my $authorized_user = GeniStd::RequireUserAuthorization($credential_args, $options);
+    if (GeniResponse::IsResponse($authorized_user)) {
+        return $authorized_user;
     }
 
     my ($match, $filter) = GeniStd::GetMatchFilter($options);
@@ -527,7 +517,7 @@ sub LookupSlices()
             if (defined($slice)) {
                 #check if user is allowed to access slice
                 my $allowed = 0;
-                if ($slice->creator_urn() ne $this_user->urn() && !$slice->IsBound($this_user)) {
+                if ($slice->creator_urn() ne $authorized_user->urn() && !$slice->IsBound($authorized_user)) {
                     #user is not allowed to access this slice
                     $allowed = 0; 
                 } else {
@@ -603,23 +593,9 @@ sub UpdateSlice()
         return $slice_urn_check_reply; 
     }
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				     "Insufficient privilege" );
-    if ($credential->target_urn() ne $slice_urn) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, 
-            "You gave a credential for " . $credential->target_urn() . " but tried to update another slice: ". $slice_urn);
-    }
-
-    my $slice = GeniSlice->Lookup($slice_urn);
-    if (!defined($slice)) {
-        return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-            "No such Slice")
+    my $slice = GeniStd::RequireAuthorizationForSlice($credential_args, $options, $slice_urn); 
+    if (GeniResponse::IsResponse($slice)) {
+        return $slice;
     }
 
     my $fields = $options->{'fields'};
@@ -719,6 +695,14 @@ sub ModifySliceMembership()
         return $slice_urn_check_reply; 
     }
 
+    my $slice = GeniStd::RequireAuthorizationForSlice($credential_args, $options, $slice_urn); 
+    if (GeniResponse::IsResponse($slice)) {
+        return $slice;
+    }
+    #slice credential checks are done below by GeniSA BindToSlice, but
+    #  we did them above too, so they can never be forgotten when the 
+    #  implementation below changes
+
     my $adding = $options->{'members_to_add'};
     my $removing = $options->{'members_to_remove'};
     my $changing = $options ->{'members_to_change'};
@@ -769,32 +753,9 @@ sub LookupSliceMembers()
         return $slice_urn_check_reply; 
     }
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    return $credential if (GeniResponse::IsResponse($credential));
-
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				     "Insufficient privilege" );
-    
-    my $this_user =
-	GeniUser->Lookup((defined($speaksfor) ?
-			  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
-				    "Who are you? No local record");
-    }
-
-    my $cred_target_urn = $credential->target_urn();
-    if ($cred_target_urn ne $slice_urn) {
-        return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-            "Slice URN ($slice_urn) does not match credential URN ($cred_target_urn)");
-    }
-
-    my $slice = GeniSlice->Lookup($slice_urn);
-    if (!defined($slice)) {
-	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-				    "Unknown slice for this credential");
+    my $slice = GeniStd::RequireAuthorizationForSlice($credential_args, $options, $slice_urn); 
+    if (GeniResponse::IsResponse($slice)) {
+        return $slice;
     }
 
     my $uuids = [];
@@ -803,7 +764,6 @@ sub LookupSliceMembers()
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to lookup member bindings");
     }
-    #was this, but I think this is not correct: push(@{ $uuids }, $this_user->uuid());
     push(@{ $uuids }, $slice->creator_uuid());
 
     my $result = [];
@@ -830,27 +790,20 @@ sub LookupSlicesForMember($$$)
         return GeniResponse->MalformedArgsResponse('lookup SLICE for member requires a member urn, a list of credentials, and an options field');
     }
 
-    my ($credential, $speaksfor) =
-	GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-
-    my $this_user =
-	GeniUser->Lookup((defined($speaksfor) ?
-			  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
-				    "Who are you? No local record");
+    my $authorized_user = GeniStd::RequireUserAuthorization($credential_args, $options, 1, $member_urn);
+    if (GeniResponse::IsResponse($authorized_user)) {
+        return $authorized_user;
     }
-    if ($this_user->urn() ne $member_urn) {
+    #double check
+    if ($authorized_user->urn() ne $member_urn) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "You are not allowed to lookup slices for other members");
     }
 
     my $result = [];
 
-    my @created = GeniSlice->LookupByCreator($this_user);
-    my @bound = GeniSlice->BoundToUser($this_user);
+    my @created = GeniSlice->LookupByCreator($authorized_user);
+    my @bound = GeniSlice->BoundToUser($authorized_user);
 
     addSlicesToMemberList(\@created, $result) if (@created);
     addSlicesToMemberList(\@bound, $result) if (@bound);
@@ -922,32 +875,16 @@ sub CreateSliverInfo($$$$)
         return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, 'SLIVER_INFO_URN is not a sliver URN');
     }
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    #not needed, because needs slice credential instead of user cred: ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, "Insufficient privilege" );
-    if ($credential->target_urn() ne $slice_urn) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, 
-            "You gave a credential for " . $credential->target_urn() . " but tried to create SLIVER_INFO for slice ". $slice_urn);
-    }
-
-    my $slice = GeniSlice->Lookup($slice_urn);
-    if (!defined($slice)) {
-        return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-            "No such slice here: " . $slice_urn)
+    my $slice = GeniStd::RequireAuthorizationForSlice($credential_args, $options, $slice_urn); 
+    if (GeniResponse::IsResponse($slice)) {
+        return $slice;
     }
 
     my $user = GeniUser->Lookup($fields->{'SLIVER_INFO_CREATOR_URN'}, 1);
     if (!defined($user)) {
         return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef, 'No user ' . $fields->{'SLIVER_INFO_CREATOR_URN'} . ' here');
     } else {
-        #is this needed?
-        #$user = GeniUser->CreateFromLocal($user);
-
-        #TODO: check if user is in slice
+        #check if user is in slice
         my $uuids = [];
         my $error = $slice->UserBindings($uuids);
         if ($error != 0) {
@@ -1047,15 +984,6 @@ sub UpdateSliverInfo($$)
 {
     my ($sliver_urn, $credential_args, $options) = @_;
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				     "Insufficient privilege" );
-
     my $sliver = GeniSlice::ClientSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {
         return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
@@ -1072,9 +1000,9 @@ sub UpdateSliverInfo($$)
 
     my $slice_urn = $slice->urn();
 
-    if ($credential->target_urn() ne $slice_urn) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, 
-            "You gave a credential for " . $credential->target_urn() . " but tried to update SLIVER_INFO for another slice: ". $slice_urn);
+    my $slice_authorization = GeniStd::RequireAuthorizationForSlice($credential_args, $options, $slice_urn, 0); 
+    if (GeniResponse::IsResponse($slice_authorization)) {
+        return $slice_authorization;
     }
 
 
@@ -1117,11 +1045,6 @@ sub DeleteSliverInfo()
         return GeniResponse->MalformedArgsResponse('delete SLIVER_INFO requires a sliver urn, a list of credentials, and an options field');
     }
 
-    my ($credential, $speaksfor) =
-	GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-
     my $sliver = GeniSlice::ClientSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {
         return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
@@ -1138,12 +1061,9 @@ sub DeleteSliverInfo()
 
     my $slice_urn = $slice->urn();
 
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, "Insufficient privilege" );
-    if ($credential->target_urn() ne $slice_urn) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, 
-            "You gave a credential for " . $credential->target_urn() . " but tried to delete SLIVER_INFO for slice ". $slice_urn);
+    my $slice_authorization = GeniStd::RequireAuthorizationForSlice($credential_args, $options, $slice_urn, 0); 
+    if (GeniResponse::IsResponse($slice_authorization)) {
+        return $slice_authorization;
     }
 
     if ($slice->Lock() != 0) {
@@ -1164,7 +1084,7 @@ sub DeleteSliverInfo()
 
 sub CheckIfUserIsSliceMember($$)
 {
-    my ($this_user, $slice) = @_; 
+    my ($authorized_user, $slice) = @_; 
 
     #check if user has access to slice
     my $uuids = [];
@@ -1175,7 +1095,7 @@ sub CheckIfUserIsSliceMember($$)
     }
     push(@{ $uuids }, $slice->creator_uuid());
 
-    my $user_uuid = $this_user->uuid();
+    my $user_uuid = $authorized_user->uuid();
 
     foreach my $uuid (@$uuids) {
         if ($uuid eq $user_uuid) {
@@ -1214,14 +1134,9 @@ sub LookupSliverInfo($$)
 	return
 	    GeniResponse->MalformedArgsResponse('lookup SLIVER_INFO requires a list of credentials, and an options field');
     }
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-    return GeniResponse->MalformedArgsResponse('lookup SLIVER_INFO: no credential found') if (!defined($credential));
-
-    my $this_user = GeniUser->Lookup((defined($speaksfor) ? $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, "Who are you? No local record");
+    my $authorized_user = GeniStd::RequireUserAuthorization($credential_args, $options);
+    if (GeniResponse::IsResponse($authorized_user)) {
+        return $authorized_user;
     }
 
     my ($match, $filter) = GeniStd::GetMatchFilter($options);
@@ -1254,7 +1169,7 @@ sub LookupSliverInfo($$)
 
             my $slice = GeniSlice->Lookup($slice_urn);
             if (defined($slice)) {
-                my $is_slice_member = CheckIfUserIsSliceMember($this_user, $slice);
+                my $is_slice_member = CheckIfUserIsSliceMember($authorized_user, $slice);
                 if (!$is_slice_member) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
                         "Only members of a slice can list all slivers for that slice. And you are not a member of slice " . $slice_urn);
@@ -1278,7 +1193,7 @@ sub LookupSliverInfo($$)
             if (defined($sliver)) {
                 my $slice = GeniSlice->Lookup($sliver->slice_idx());;
                 if (defined($slice)) {
-                    my $is_slice_member = CheckIfUserIsSliceMember($this_user, $slice);
+                    my $is_slice_member = CheckIfUserIsSliceMember($authorized_user, $slice);
                     if (!$is_slice_member) {
                         return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
                             "Only members of a slice can list all slivers for that slice. And you are not a member of slice " . $sliver_urn);
@@ -1328,20 +1243,11 @@ sub LookupProjectMembers()
         ! defined($options))
     {
         return GeniResponse->MalformedArgsResponse('lookup PROJECT members requires a project urn, a list of credentials, and an options field');
-}
+    }
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				     "Insufficient privilege" );
-    
-    my $this_user = GeniUser->Lookup((defined($speaksfor) ?  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, "Who are you? No local record");
+    my $authorized_user = GeniStd::RequireUserAuthorization($credential_args, $options);
+    if (GeniResponse::IsResponse($authorized_user)) {
+        return $authorized_user;
     }
 
     if(! GeniHRN::IsValid( $project_urn ) ) {
@@ -1377,7 +1283,7 @@ sub LookupProjectMembers()
         return undef if (!defined($user));
         my $geni_user=GeniUser->CreateFromLocal($user);
         if (defined($geni_user)) {
-            if ($geni_user->urn() eq $this_user->urn()) {
+            if ($geni_user->urn() eq $authorized_user->urn()) {
                 $is_member = 1;
             }
 
@@ -1412,22 +1318,9 @@ sub LookupProjectsForMember()
         return GeniResponse->MalformedArgsResponse('lookup PROJECT for member requires a member urn, a list of credentials, and an options field. Missing: ' . $missing);
     }
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(GeniStd::FilterCredentials($credential_args));
-    ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
-    if (! defined($credential) ) {
-        return GeniResponse->MalformedArgsResponse('No valid credential found credential_list argument.');
-    }
-
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
-	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
-				     "Insufficient privilege" );
-    
-    my $this_user = GeniUser->Lookup((defined($speaksfor) ?  $speaksfor->target_urn() : $ENV{'GENIURN'}), 1);
-    if (!defined($this_user)) {
-        return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
-            "Who are you? No local record");
+    my $authorized_user = GeniStd::RequireUserAuthorization($credential_args, $options);
+    if (GeniResponse::IsResponse($authorized_user)) {
+        return $authorized_user;
     }
 
     if(! GeniHRN::IsValid( $member_urn ) ) {
@@ -1443,7 +1336,7 @@ sub LookupProjectsForMember()
         return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, 'member_urn "' . $member_urn . '" has invalid username');
     }
 
-    if ($this_user->urn() ne $member_urn) {
+    if ($authorized_user->urn() ne $member_urn) {
         return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
             "You are forbidden to request project membership for other members");
     }
