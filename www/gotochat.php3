@@ -33,7 +33,7 @@ $this_user = CheckLoginOrDie();
 $uid       = $this_user->uid();
 
 $password  = $this_user->mailman_password();
-$url       = "${OPSJETIURL}?user=$uid&password=$password";
+$url       = "{$OPSJETIURL}?user=$uid&password=$password";
 
-header("Location: ${url}");
+header("Location: {$url}");
 ?>

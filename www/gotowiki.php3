@@ -48,8 +48,8 @@ $optargs = OptionalPageArguments("redurl", PAGEARG_STRING);
 if (isset($_COOKIE[$WIKICOOKIENAME])) {
     $wikihash = $_COOKIE[$WIKICOOKIENAME];
     
-    header("Location: ${WIKIURL}?username=${uid}&bosscred=${wikihash}" .
-	   (isset($redurl) ? "&redurl=${redurl}" : ""));
+    header("Location: {$WIKIURL}?username={$uid}&bosscred={$wikihash}" .
+	   (isset($redurl) ? "&redurl={$redurl}" : ""));
     return;
 }
 
@@ -62,6 +62,6 @@ $wikihash = GENHASH();
 SUEXEC("nobody", "nobody", "wikixlogin $uid $wikihash", SUEXEC_ACTION_DIE);
 
 setcookie($WIKICOOKIENAME, $wikihash, 0, "/", $TBAUTHDOMAIN, $TBSECURECOOKIES);
-header("Location: ${WIKIURL}?username=${uid}&bosscred=${wikihash}" .
-	   (isset($redurl) ? "&redurl=${redurl}" : ""));
+header("Location: {$WIKIURL}?username={$uid}&bosscred={$wikihash}" .
+	   (isset($redurl) ? "&redurl={$redurl}" : ""));
 ?>
