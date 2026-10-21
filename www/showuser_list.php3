@@ -95,7 +95,7 @@ echo "<br><br>\n";
 
 if (isset($searchfor) && strcmp($searchfor, "")) {
     $clause  = "";
-    $search  = addslashes("%${searchfor}%");
+    $search  = addslashes("%{$searchfor}%");
     $where   = "where (u.usr_name like '$search' or ".
 	"u.usr_email like '$search' or u.uid like '$search') ";
     $showtag = "matching";

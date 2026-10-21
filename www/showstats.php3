@@ -108,7 +108,7 @@ if ($showby == "user") {
 	$target_user = $this_user;
     }
     elseif (! $target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
-	USERERROR("You do not have permission to view ${user}'s stats!", 1);
+	USERERROR("You do not have permission to view {$user}'s stats!", 1);
     }
     $wclause = "where (t.uid_idx='" . $target_user->uid_idx() . "')";
 }
@@ -329,7 +329,7 @@ if (1) {
 	$args .= "&verbose=$verbose";
     }
     echo "<center>".
-	"<a href='showstats.php3${args}'>".
+	"<a href='showstats.php3{$args}'>".
 	"More Entries</a></center><br>\n";
 }
 

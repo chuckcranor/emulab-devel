@@ -688,7 +688,7 @@ if ($thumb && !$idle) {
 	    #}
 	    if ($swapreq > 0) {
 	      $foo .= "$swapreq&nbsp;sent<br>".
-	              "<font size=-2>(${lastswapreq}&nbsp;hrs&nbsp;ago)</font>\n";
+	              "<font size=-2>({$lastswapreq}&nbsp;hrs&nbsp;ago)</font>\n";
 	    }
 	    #$foo .= "</td>".$fooswap."\n"; 
 	    if (!$swappable) { $foo .= "unswap.\n"; }
@@ -821,7 +821,7 @@ if ($thumb && !$idle) {
     foreach ($total_usage as $type => $count) {
 	    $total += $count;
 	    echo "<tr>
-                    <td align=right>${type}:</td>
+                    <td align=right>{$type}:</td>
                     <td>&nbsp; &nbsp; &nbsp; &nbsp;</td>
                     <td align=center>$count</td>
                   </tr>\n";

@@ -128,7 +128,7 @@ if ($query_result && mysql_num_rows($query_result)) {
     list ($html, $button) = TableRender($table, $rows);
     echo $html;
     echo "<center>
-            <a href='showslicelogs.php?${urlarg}&download=1'>
+            <a href='showslicelogs.php?{$urlarg}&download=1'>
             Download All Logs</a></center>";
 }
 

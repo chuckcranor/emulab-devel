@@ -194,7 +194,7 @@ function showsummary ($showby) {
 			 "exptswapin_count+exptstart_count as expt_swapins, ".
 			 "exptpreload_count+exptstart_count as expt_new, ".
 			 "exptswapmod_count as expt_swapmods, ".
-			 "${which}_idx ".
+			 "{$which}_idx ".
 			 "from $table  ".
 			 "$wclause ".
 			 "order by $order");
@@ -272,7 +272,7 @@ function showsummary ($showby) {
     mysql_data_seek($query_result, 0);    
     while ($row = mysql_fetch_assoc($query_result)) {
 	$heading = $row[$which];
-	$idx     = $row["${which}_idx"];
+	$idx     = $row["{$which}_idx"];
 	$pnodes  = $row["allexpt_pnodes"];
 	$phours  = $row["pnode_days"];
 	$ehours  = $row["expt_days"];
@@ -292,14 +292,14 @@ function showsummary ($showby) {
 		if ($status == TBDB_USERSTATUS_ARCHIVED) {
 		    $extra = "(a)";
 		}
-		echo "<td><A href='$link${idx}'>$heading $extra</A></td>";
+		echo "<td><A href='$link{$idx}'>$heading $extra</A></td>";
 	    }
 	    else {
 		echo "<td>$heading</td>";
 	    }
 	}
 	else {
-	    echo "<td><A href='$link${heading}'>$heading</A></td>";
+	    echo "<td><A href='$link{$heading}'>$heading</A></td>";
 	}
 	echo "  <td>$pnodes</td>
                 <td>$phours</td>
@@ -780,14 +780,14 @@ function showrange ($showby, $range) {
 		if ($status == TBDB_USERSTATUS_ARCHIVED) {
 		    $extra = "(a)";
 		}
-		echo "<td><A href='$link${key}'>$heading $extra</A></td>";
+		echo "<td><A href='$link{$key}'>$heading $extra</A></td>";
 	    }
 	    else {
 		echo "<td>$heading</td>";
 	    }
 	}
 	else {
-	    echo "<td><A href='$link${heading}'>$heading $current</A></td>";
+	    echo "<td><A href='$link{$heading}'>$heading $current</A></td>";
 	}
         echo "  <td>$pnodes</td>
                 <td>$pdays</td>
