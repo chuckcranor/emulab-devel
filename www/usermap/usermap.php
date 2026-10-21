@@ -33,7 +33,7 @@ $USERMAP_TYPE_FULLSCREEN = 2;
 
 $USERMAP_JSONFILE = "all-emulab-cities.json";
 
-$USERMAP_LOC = "${TBBASE}/usermap";
+$USERMAP_LOC = "{$TBBASE}/usermap";
 
 #
 # The headers to load the javascript files
@@ -43,13 +43,13 @@ $USERMAP_SCRIPTHEADERS = <<<EOH
               type="text/javascript">
 </script>
 
-<script src="${USERMAP_LOC}/markerclusterer.js" type="text/javascript">
+<script src="{$USERMAP_LOC}/markerclusterer.js" type="text/javascript">
 </script>
 
-<script src="${USERMAP_LOC}/$USERMAP_JSONFILE" type="text/javascript">
+<script src="{$USERMAP_LOC}/$USERMAP_JSONFILE" type="text/javascript">
 </script>
 
-<script src="${USERMAP_LOC}/usermap.js" type="text/javascript">
+<script src="{$USERMAP_LOC}/usermap.js" type="text/javascript">
 </script>
 
 <script type="text/javascript" language="javascript">
@@ -124,7 +124,7 @@ function draw_usermap($type) {
     if (isset($fullscreen)) {
         echo "</body></html>";
     } else {
-        echo "<a href=\"${USERMAP_LOC}/?fullscreen=true\">larger version</a>";
+        echo "<a href=\"{$USERMAP_LOC}/?fullscreen=true\">larger version</a>";
         if ($type != $USERMAP_TYPE_EMBED) {
             PAGEFOOTER();
         }

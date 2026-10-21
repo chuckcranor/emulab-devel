@@ -247,7 +247,7 @@ function Do_Reserve()
     if ($webtask->TaskValue("uuid")) {
         $uuid = $webtask->TaskValue("uuid");
         $nickname = $aggregate->nickname();
-        $url = "reserve.php?edit=1&cluster=${nickname}&uuid=${uuid}";
+        $url = "reserve.php?edit=1&cluster={$nickname}&uuid={$uuid}";
         $result["url"] = $url;
     }
     $webtask->Delete();
@@ -451,7 +451,7 @@ function Do_InfoOrWarn($warning = false)
 	return;
 
     }
-    $url = "${APTBASE}/reserve.php?edit=1&cluster=$nickname&uuid=$uuid\n";
+    $url = "{$APTBASE}/reserve.php?edit=1&cluster=$nickname&uuid=$uuid\n";
     
     if ($warning) {
         $subject = "Unused Reservation Warning";
