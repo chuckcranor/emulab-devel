@@ -118,7 +118,7 @@ function SPITFORM($target_user, $key, $failed, $simple, $view)
 			    "key", urlencode($key), "simple", $simple);
 	
     echo "<table align=center border=1>
-          <form action='${TBBASE}/$chpass_url' method=post>\n";
+          <form action='{$TBBASE}/$chpass_url' method=post>\n";
 
     echo "<tr>
               <td>Password:</td>

@@ -281,7 +281,7 @@ if (isset($target_project)) {
 	}
 	else {
 	    echo "You can 
-                  <A href='${url}&request=1'>request</a>
+                  <A href='{$url}&request=1'>request</a>
                      that we delete this user from the testbed</a></b>\n";
 	}
     }

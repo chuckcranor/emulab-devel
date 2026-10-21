@@ -172,7 +172,7 @@ function SPITFORM($uid, $key, $error, $adminmode, $simple, $view)
 	$pagearg .= (($adminmode == 1) ? "&" : "?") . "key=$key";
 
     echo "<table align=center border=1>
-          <form action='${TBBASE}/login.php3${pagearg}' method=post>
+          <form action='{$TBBASE}/login.php3{$pagearg}' method=post>
           <tr>
               <td>Email Address:<br>
                    <font size=-2>(or UserName)</font></td>

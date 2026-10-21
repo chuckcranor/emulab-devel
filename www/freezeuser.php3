@@ -166,7 +166,7 @@ if (!isset($confirmed_twice)) {
 # Change the DB first; backend requires it.
 $target_user->SetStatus($dbaction);
 
-STARTBUSY("User '$target_uid' is being ${tag}!");
+STARTBUSY("User '$target_uid' is being {$tag}!");
 SUEXEC($uid, $TBADMINGROUP, "webtbacct $action $target_uid",SUEXEC_ACTION_DIE);
 STOPBUSY();
 

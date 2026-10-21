@@ -136,11 +136,11 @@ SendProjAdminMail(
        "This message is to notify you that your project '$pid'\n".
        "has been approved.  We recommend that you save this link so that\n".
        "you can send it to people you wish to have join your project.\n".
-       "Otherwise, tell them to go to ${TBBASE} and join it.\n".
+       "Otherwise, tell them to go to {$TBBASE} and join it.\n".
        "\n".
-       "    ${TBBASE}/joinproject.php3?target_pid=$pid\n".
+       "    {$TBBASE}/joinproject.php3?target_pid=$pid\n".
        "\n".
-       ($message != "" ? "${message}\n\n" : "") .
+       ($message != "" ? "{$message}\n\n" : "") .
        "Thanks,\n".
        "Testbed Operations\n");
 

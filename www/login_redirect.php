@@ -69,6 +69,6 @@ SUEXEC("nobody", "nobody", "xlogin $redirect_host $uid $authhash",
 #
 # Now redirect the user over, passing along the hash in the URL.
 # 
-header("Location: ${redirect_to}?user=${uid}&auth=${authhash}");
+header("Location: {$redirect_to}?user={$uid}&auth={$authhash}");
 
 ?>
