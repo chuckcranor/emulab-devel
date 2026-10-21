@@ -79,6 +79,7 @@ define("GENIRESPONSE_SETUPFAILURE_BOOTFAILED", 151);
 class Instance
 {
     var	$instance;
+    var	$slivers;
     
     #
     # Constructor by lookup on unique index.
