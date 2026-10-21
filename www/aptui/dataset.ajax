@@ -215,7 +215,7 @@ function Do_CreateDataSet()
                         $errors["dataset_instance"] = "No such instance";
                     }
                 }
-                $options .= " -I ${nodeid},${bsname}";
+                $options .= " -I {$nodeid},{$bsname}";
             }
         }
     }

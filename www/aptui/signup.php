@@ -167,7 +167,7 @@ if (isset($finished) && $finished) {
     SPITHEADER(1);
     echo "Thank you! Stay tuned for email notifying you that your account has ".
 	"been activated. Please be sure ".
-	"to set your spam filter to allow all email from '@${OURDOMAIN}' and ".
+	"to set your spam filter to allow all email from '@{$OURDOMAIN}' and ".
 	"'@flux.utah.edu'.".
     SPITNULLREQUIRE();
     SPITFOOTER();
@@ -279,7 +279,7 @@ if (!$this_user || $promoting) {
                        "network", "mininet");
 
         foreach ($bogos as $bogo) {
-            if (preg_match("/^${bogo}\d*$/i", $formfields["uid"])) {
+            if (preg_match("/^{$bogo}\d*$/i", $formfields["uid"])) {
                 $errors["uid"] = "Improper user name. Pick another";
             }
         }
@@ -630,7 +630,7 @@ if (!$this_user) {
     #
     if (! ($newuser_xml = User::NewNewUserXML($args, $error)) != 0) {
 	$errors["error"] = $error;
-	TBERROR("Error Creating new APT user XML:\n${error}\n\n" .
+	TBERROR("Error Creating new APT user XML:\n{$error}\n\n" .
 		print_r($args, TRUE), 0);
 	SPITFORM($formfields, 0, $errors);
 	return;
@@ -703,7 +703,7 @@ if (isset($formfields["proj_nsf"])) {
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["error"] = $error;
     if ($suexec_retval < 0) {
-	TBERROR("Error Creating New Project\n${error}\n\n" .
+	TBERROR("Error Creating New Project\n{$error}\n\n" .
 		print_r($args, TRUE), 0);
 
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);

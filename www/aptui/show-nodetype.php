@@ -187,12 +187,12 @@ else {
                 
                 if ($image) {
                     $name = $image->imagename();
-                    $url  = "show-image.php?imageid=${osid}&version=${vers}";
+                    $url  = "show-image.php?imageid={$osid}&version={$vers}";
                 }
                 else {
                     $osinfo = OSInfo::Lookup($osid,$vers);
                     if ($osinfo) {
-                        $url  = "$TBBASE/showosinfo.php3?osid=${osid}";
+                        $url  = "$TBBASE/showosinfo.php3?osid={$osid}";
                         $name = $osinfo->osname();
                     }
                 }

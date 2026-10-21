@@ -119,7 +119,7 @@ if ($which == "rfmonitor" ||
     $url = $aggregate->weburl();
 }
 else {
-    $url = "https://${USERNODE}";
+    $url = "https://{$USERNODE}";
 }
 
 if (isset($range)) {

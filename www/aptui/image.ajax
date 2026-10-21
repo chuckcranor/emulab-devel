@@ -95,7 +95,7 @@ function Do_GetInfo()
     if ($image->metadata_url()) {
         if ($image->origin_urn() && $image->origin_name()) {
             list ($auth,$type,$ignore) = Instance::ParseURN($image->origin_urn());
-            $urn = "urn:publicid:IDN+${auth}+";
+            $urn = "urn:publicid:IDN+{$auth}+";
             if ($image->isdataset()) {
                 $urn .= "imdataset+" . $image->origin_name();
             }
@@ -106,14 +106,14 @@ function Do_GetInfo()
     }
     else {
         if ($image->isdataset()) {
-            $domain .= ":${pid}";
+            $domain .= ":{$pid}";
             if ($pid != $gid) {
-                $domain .= ":${gid}";
+                $domain .= ":{$gid}";
             }
-            $urn = "urn:publicid:IDN+${domain}+imdataset+${name}";
+            $urn = "urn:publicid:IDN+{$domain}+imdataset+{$name}";
         }
         else {
-            $urn = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
+            $urn = "urn:publicid:IDN+{$domain}+image+{$pid}//{$name}";
         }
     }
 
@@ -142,7 +142,7 @@ function Do_GetInfo()
     $blob["released"]     = $image->released() ? 1 : 0;
     $blob["isdataset"]    = $image->isdataset() ? 1 : 0;
     $blob["hash"]         = $image->hash();
-    $blob["version_url"]  = "show-image.php?imageid=${id}&version=${vers}";
+    $blob["version_url"]  = "show-image.php?imageid={$id}&version={$vers}";
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
     }
@@ -189,8 +189,8 @@ function Do_GetInfo()
             if ($n_image) {
                 $n_imageid = $n_image->imageid();
                 $n_version = $n_image->version();
-                $n_url = "show-image.php?imageid=${n_imageid}" .
-                   "&version=${n_version}";
+                $n_url = "show-image.php?imageid={$n_imageid}" .
+                   "&version={$n_version}";
                 if ($embedded) {
                     $n_url .= "&embedded=1";
                 }
@@ -205,7 +205,7 @@ function Do_GetInfo()
         }
         $xenflip = ($blob["xen_capable"] ? 0 : 1);
         $blob["xen_capable_url"] = 
-                 "toggle.php?imageid=${id}&type=imagedoesxen&value=$xenflip";
+                 "toggle.php?imageid={$id}&type=imagedoesxen&value=$xenflip";
         if ($image->notes() && $image->notes() != "") {
             $blob["notes"] = $image->notes();
         }
@@ -233,8 +233,8 @@ function Do_GetInfo()
         # if it came in at creation time.
         if ($p_image) {
             $p_imagename = $p_image->imagename();
-            $p_url = "show-image.php?imageid=${p_imageid}" .
-                   "&version=${p_version}";
+            $p_url = "show-image.php?imageid={$p_imageid}" .
+                   "&version={$p_version}";
             if ($embedded) {
                 $p_url .= "&embedded=1";
             }
@@ -249,7 +249,7 @@ function Do_GetInfo()
          ($image->parent_imageid() &&
           $image->parent_imageid() != $image->imageid()))) {
         $pvers = $image->version() - 1;
-        $purl  = "show-image.php?imageid=${id}&version=${pvers}";
+        $purl  = "show-image.php?imageid={$id}&version={$pvers}";
         if ($embedded) {
             $purl .= "&embedded=1";
         }
@@ -259,7 +259,7 @@ function Do_GetInfo()
     $next = $image->LookupNextVersion();
     if ($next) {
         $nvers = $next->version();
-        $nurl  = "show-image.php?imageid=${id}&version=${nvers}";
+        $nurl  = "show-image.php?imageid={$id}&version={$nvers}";
         if ($embedded) {
             $nurl .= "&embedded=1";
         }
@@ -360,7 +360,7 @@ function Do_Modify()
             $safe_value = "'" . $safe_value . "'";
         }
         $query_result = 
-            DBQueryWarn("update os_info_versions set ${field}=$safe_value ".
+            DBQueryWarn("update os_info_versions set {$field}=$safe_value ".
                         "where osid='$imageid' and vers='$version'");
     }
     elseif ($field == "architecture" && $value == "") {
@@ -382,12 +382,12 @@ function Do_Modify()
         $imageid = $image->imageid();
 
         $query_result =
-            DBQueryWarn("update images set ${field}='$safe_value' ".
+            DBQueryWarn("update images set {$field}='$safe_value' ".
                         "where imageid='$imageid'");
     }
     else {
         $query_result =
-            DBQueryWarn("update image_versions set ${field}='$safe_value' ".
+            DBQueryWarn("update image_versions set {$field}='$safe_value' ".
                         "where uuid='$uuid'");
     }
     if (!$query_result) {
@@ -484,10 +484,10 @@ function Do_SetTypes()
     # Build the mtype args for the backend script.
     $args = array();
     foreach ($alltypes as $type) {
-        $args["mtype_${type}"] = 0;
+        $args["mtype_{$type}"] = 0;
     }
     foreach ($typelist as $type) {
-        $args["mtype_${type}"] = 1;
+        $args["mtype_{$type}"] = 1;
     }
     # Send to the backend for more checking, and eventually, to update the DB.
     if (! Image::EditImageid($image, $args, $errors)) {

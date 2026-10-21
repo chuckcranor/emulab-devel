@@ -65,7 +65,7 @@ function getFileList($dir)
             continue;
         }
         if ($node_id) {
-            if (!preg_match("/^${node_id}/", $entry)) {
+            if (!preg_match("/^{$node_id}/", $entry)) {
                 continue;
             }
         }

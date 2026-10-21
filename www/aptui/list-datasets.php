@@ -96,7 +96,7 @@ function SPITTABLE($which, $results, $where) {
         echo "<input class='form-control search' type='search' data-column='all'
              id='dataset_search' placeholder='Search'>\n";
     }
-    echo "  <table class='tablesorter' id='${which}_table'>
+    echo "  <table class='tablesorter' id='{$which}_table'>
              <thead>
               <tr>
                <th>Name</th>
@@ -124,7 +124,7 @@ function SPITTABLE($which, $results, $where) {
             }
             elseif ($type == "lease") {
                 $dataset = Lease::Lookup($uuid);
-            }     
+            }
             elseif ($type == "dataset") {
                 $dataset = Dataset::Lookup($uuid);
             }
@@ -139,7 +139,7 @@ function SPITTABLE($which, $results, $where) {
             $size    = $dataset->size() ? $dataset->size() : 0;
             # Convert to GB.
             $size     = sprintf('%0.2f', $size * 0.00104858);
-            
+
             #
             # The state is a bit of a problem, since local leases do not have
             # an "allocating" state. For a remote dataset, we get set to busy.
@@ -153,7 +153,7 @@ function SPITTABLE($which, $results, $where) {
             else {
                 $state = $dataset->state();
             }
-            
+
             echo " <tr>
                 <td><a href='show-dataset.php?uuid=$uuid&embedded=$embedded'>
                 $name</a></td>\n";

@@ -113,7 +113,7 @@ function Do_EditTable()
             $content = "'" . $content . "'";
         }
         if (!DBQueryWarn("update apt_aggregate_radio_info set ".
-                          "     ${dbfield}=$content ".
+                          "     {$dbfield}=$content ".
                           "where aggregate_urn='$urn' and ".
                           "      node_id='$node_id'")) {
              SPITAJAX_ERROR(-1, "Internal DB error");
@@ -122,7 +122,7 @@ function Do_EditTable()
     }
     else {
          if (!DBQueryWarn("update apt_aggregate_radio_frontends set ".
-                          "     ${dbfield}='$content' ".
+                          "     {$dbfield}='$content' ".
                           "where aggregate_urn='$urn' and ".
                           "      node_id='$node_id' and ".
                           "      iface='$iface'")) {

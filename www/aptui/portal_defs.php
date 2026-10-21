@@ -56,7 +56,7 @@ $PORTAL_PASSWORD_HELP   = "Emulab Username or Email";
 $PORTAL_NSFNUMBER       = "1513121";
 $PORTAL_GENESIS         = "emulab";
 $DEFAULT_AGGREGATE      = "Emulab";
-$DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+$DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+{$OURDOMAIN}+authority+cm";
 $PORTAL_NAME            = "Emulab";
 
 #

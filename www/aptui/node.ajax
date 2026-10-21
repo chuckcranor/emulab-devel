@@ -167,7 +167,7 @@ function Do_GetInfo()
     if (isset($def_boot_image)) {
         $imageid = $def_boot_image->imageid();
         $version = $def_boot_image->version();
-        $url = "show-image.php?imageid=${imageid}&version=${version}";
+        $url = "show-image.php?imageid={$imageid}&version={$version}";
 
         $blob["def_boot_image_uuid"] = $def_boot_image->uuid();
         $blob["def_boot_image_name"] = $def_boot_image->imagename();
@@ -181,7 +181,7 @@ function Do_GetInfo()
     elseif (isset($def_boot_osinfo)) {
         $osid   = $def_boot_osinfo->osid();
         # We need an OsInfo portal page I guess.
-        $url = "$TBBASE/showosinfo.php3?osid=${osid}";
+        $url = "$TBBASE/showosinfo.php3?osid={$osid}";
         
         $blob["def_boot_image_uuid"] = $def_boot_osinfo->uuid();
         $blob["def_boot_image_name"] = $def_boot_osinfo->osname();
@@ -193,7 +193,7 @@ function Do_GetInfo()
         $vers   = $node->next_boot_osid_vers();
         $osinfo = OSInfo::Lookup($osid, $vers);
         if ($osinfo) {
-            $url = "$TBBASE/showosinfo.php3?osid=${osid}&version=${vers}";
+            $url = "$TBBASE/showosinfo.php3?osid={$osid}&version={$vers}";
 
             $blob["next_boot_osinfo_uuid"] = $osinfo->uuid();
             $blob["next_boot_osinfo_name"] = $osinfo->osname();
@@ -210,7 +210,7 @@ function Do_GetInfo()
         $vers   = $node->temp_boot_osid_vers();
         $osinfo = OSInfo::Lookup($osid, $vers);
         if ($osinfo) {
-            $url = "$TBBASE/showosinfo.php3?osid=${osid}&version=${vers}";
+            $url = "$TBBASE/showosinfo.php3?osid={$osid}&version={$vers}";
 
             $blob["temp_boot_osinfo_uuid"] = $osinfo->uuid();
             $blob["temp_boot_osinfo_name"] = $osinfo->osname();
@@ -226,7 +226,7 @@ function Do_GetInfo()
     }
     if ($PROTOGENI) {
         $node_id = $node->node_id();
-        $blob["urn"] = "urn:publicid:IDN+${OURDOMAIN}+node+${node_id}";
+        $blob["urn"] = "urn:publicid:IDN+{$OURDOMAIN}+node+{$node_id}";
     }
     SPITAJAX_RESPONSE($blob);
 }

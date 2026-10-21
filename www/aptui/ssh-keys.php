@@ -48,7 +48,7 @@ $nonlocal   = ($target_user->IsNonLocal() ? "true" : "false");
 
 if (! ($target_user->SameUser($this_user) ||
        $target_user->AccessCheck($this_user, $TB_USERINFO_READINFO))) {
-    USERERROR("You do not have permission to view ${target_uid}' keys!", 1);
+    USERERROR("You do not have permission to view {$target_uid}' keys!", 1);
 }
 
 $query_result =

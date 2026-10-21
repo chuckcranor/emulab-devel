@@ -73,9 +73,9 @@ if (!$isadmin &&
     SPITUSERERROR("You do not have permission to download the tarball!");
     return;
 }
-$baseurl    = "https://${USERNODE}/getfilebyurl";
+$baseurl    = "https://{$USERNODE}/getfilebyurl";
 $pid        = $project->pid();
-$path       = "/proj/$pid/wbstore/${uuid}.tgz";
+$path       = "/proj/$pid/wbstore/{$uuid}.tgz";
 $webtask    = WebTask::CreateAnonymous();
 $webtask_id = $webtask->task_id();
 
