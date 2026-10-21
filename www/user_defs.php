@@ -490,7 +490,7 @@ class User
 	    # Grab all root matches from the DB.
 	    $query_result =
 		DBQueryFatal("select uid from users ".
-			     "where uid like '${token}%'");
+			     "where uid like '{$token}%'");
 
 	    if (!$query_result)
 		return null;
@@ -615,7 +615,7 @@ class User
        "This is your account verification key: $key\n\n".
        "Please use this link to verify your user account:\n".
        "\n".
-       "    ${TBBASE}/login.php3?vuid=$uid&key=$key\n".
+       "    {$TBBASE}/login.php3?vuid=$uid&key=$key\n".
        "\n".
        ($wikionly ?
 	"Once you have verified your account, you will be able to access\n".
