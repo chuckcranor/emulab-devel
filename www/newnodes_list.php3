@@ -178,7 +178,7 @@ if (isset($research)) {
     while ($row = mysql_fetch_array($query_result)) {
 	$type  = $row["type"];
 	$card  = $row["card"];
-	$iface = "eth${card}";
+	$iface = "eth{$card}";
 
 	# Figure out if this interface is the control interface for the type.
 	NodeTypeAttribute($type, "control_interface", $control_iface);
@@ -409,7 +409,7 @@ while ($row = mysql_fetch_array($nodes_result)) {
 	# Search through to find the control interface.
 	while ($irow = mysql_fetch_array($ifaces_result)) {
 	    $card  = $irow["card"];
-	    $iface = "eth${card}";
+	    $iface = "eth{$card}";
 	    $role = $irow["role"];
 	    if (!isset($role)) {
 		$role = "";
@@ -423,7 +423,7 @@ while ($row = mysql_fetch_array($nodes_result)) {
 		    $switch_card = $irow["switch_card"];
 		    $switch_port = $irow["switch_port"];
 			
-		    $port = "${switch_id}.${switch_card}/${switch_port}";
+		    $port = "{$switch_id}.{$switch_card}/{$switch_port}";
 		}
 		else {
 		    $port = "unknown";

@@ -613,7 +613,7 @@ function SPITFORM($formfields, $errors)
 	$footnote = "";
     }
     echo "<tr>
-              <td>Node Types${footnote}:</td>
+              <td>Node Types{$footnote}:</td>
               <td>\n";
 
     foreach ($types_list as $type => $value) {
@@ -760,7 +760,7 @@ function SPITFORM($formfields, $errors)
 	$footnote = "";
     }
     echo "<tr>
-	      <td>Reboot Waittime (seconds)${footnote}:</td>
+	      <td>Reboot Waittime (seconds){$footnote}:</td>
 	      <td class=left>
 		  <input type=text
 		         name=\"formfields[reboot_waittime]\"
@@ -965,7 +965,7 @@ if (!isset($submit)) {
 	# Same types as the parent.
 	#
 	foreach ($baseimage->Types() as $type) {
-	    $defaults["mtype_${type}"] = "Yep";
+	    $defaults["mtype_{$type}"] = "Yep";
 	}
     }
     elseif (isset($imagetype) && $imagetype == "openvz") {
@@ -987,7 +987,7 @@ if (!isset($submit)) {
 	#
 	if ($baseosinfo->osfeatures()) {
 	    foreach (preg_split("/,/", $baseosinfo->osfeatures()) as $feature) {
-		$defaults["os_feature_${feature}"] = "checked";
+		$defaults["os_feature_{$feature}"] = "checked";
 	    }
 	}
 	$defaults["reboot_waittime"] = $baseosinfo->reboot_waittime();

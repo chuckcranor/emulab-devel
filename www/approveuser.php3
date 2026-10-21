@@ -99,7 +99,7 @@ foreach ($_POST as $header => $value) {
     # There should be a corresponding trust variable in the POST vars.
     # Note that we construct the variable name and indirect to it.
     #
-    $foo      = "U${user}\$\$trust-$project/$group";
+    $foo      = "U{$user}\$\$trust-$project/$group";
     #echo "$foo<br>\n";
     
     $newtrust = $_POST[$foo];
@@ -224,8 +224,8 @@ foreach ($_POST as $header => $value) {
     #
     # Create and indirect through post var for project approval value.
     #
-    $foo = "U${user}\$\$approval-$project/$project";
-    $bar = "U${user}\$\$trust-$project/$project";
+    $foo = "U{$user}\$\$approval-$project/$project";
+    $bar = "U{$user}\$\$trust-$project/$project";
     $default_approval = (isset($_POST[$foo]) ? $_POST[$foo] : "");
     
     if ($default_approval == "") {
@@ -328,7 +328,7 @@ foreach ($POST_VARS_COPY as $header => $value) {
     #
     # Corresponding trust value.
     #
-    $foo      = "U${user}\$\$trust-$project/$group";
+    $foo      = "U{$user}\$\$trust-$project/$group";
     $newtrust = $_POST[$foo];
 
     #

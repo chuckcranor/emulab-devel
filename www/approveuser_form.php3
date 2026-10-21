@@ -190,7 +190,7 @@ foreach ($approvelist as $uid_idx => $grouplist) {
               <td rowspan=2>$gid</td>
               <td rowspan=2>$date_applied</td>
               <td rowspan=2>
-                  <select name=\"U${uid_idx}\$\$approval-$pid/$gid\">
+                  <select name=\"U{$uid_idx}\$\$approval-$pid/$gid\">
                           <option value='postpone'>Postpone </option>
                           <option value='approve'>Approve </option>
                           <option value='deny'>Deny </option>
@@ -198,7 +198,7 @@ foreach ($approvelist as $uid_idx => $grouplist) {
                   </select>
               </td>
               <td rowspan=2>
-                  <select name=\"U${uid_idx}\$\$trust-$pid/$gid\">\n";
+                  <select name=\"U{$uid_idx}\$\$trust-$pid/$gid\">\n";
      
     if ($group->CheckTrustConsistency($user, TBDB_TRUSTSTRING_USER, 0)) {
 	echo  "<option value='user'>User </option>\n";

@@ -250,7 +250,7 @@ function SPITFORM($formfields, $returning, $errors)
 	if ($WIKISUPPORT) {
 	    echo "<tr>
                       <td colspan=2>*
-                          <a href=${WIKIHOME}/bin/view/TWiki/WikiName
+                          <a href={$WIKIHOME}/bin/view/TWiki/WikiName
                             target=_blank>WikiName</a>:<td class=left>
                           <input type=text
                                  name=\"formfields[wikiname]\"
@@ -1076,7 +1076,7 @@ if (!$returning) {
     #
     if (! ($newuser_xml = User::NewNewUserXML($args, $error)) != 0) {
 	$errors["Error Creating User XML"] = $error;
-	TBERROR("B\n${error}\n\n" . print_r($args, TRUE), 0);
+	TBERROR("B\n{$error}\n\n" . print_r($args, TRUE), 0);
 	SPITFORM($formfields, $returning, $errors);
 	PAGEFOOTER();
 	return;
@@ -1128,7 +1128,7 @@ if (isset($formfields["proj_ronpcs"]) &&
 
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["Error Creating Project"] = $error;
-    TBERROR("C\n${error}\n\n" . print_r($args, TRUE), 0);
+    TBERROR("C\n{$error}\n\n" . print_r($args, TRUE), 0);
     SPITFORM($formfields, $returning, $errors);
     PAGEFOOTER();
     return;

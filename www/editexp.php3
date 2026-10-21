@@ -120,7 +120,7 @@ function SPITFORM($experiment, $formfields, $errors)
 
     echo "<tr>
 	      <td class='pad4'>
-		  <a href='${swaplink}#swapping'>Swapping:
+		  <a href='{$swaplink}#swapping'>Swapping:
               </td>
 	      <td>
 	          <table cellpadding=0 cellspacing=0 border=0>\n";
@@ -235,7 +235,7 @@ function SPITFORM($experiment, $formfields, $errors)
     echo ">
                   </td>
 	          <td>
-                      <a href='${swaplink}#autoswap'>
+                      <a href='{$swaplink}#autoswap'>
 	                 <b>Max. Duration [1]:</b></a>
                       Swap out after
                         <input type='text'
@@ -263,7 +263,7 @@ function SPITFORM($experiment, $formfields, $errors)
     echo ">
                   </td>
                   <td>
-                      <a href='${swaplink}#swapstatesave'>
+                      <a href='{$swaplink}#swapstatesave'>
 		         <b>State Saving:</b></a>
                       Save disk state on swapout
 		  </td>

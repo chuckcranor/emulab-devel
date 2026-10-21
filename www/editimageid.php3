@@ -368,7 +368,7 @@ $defaults = $image->DBData();
 if (!isset($submit)) {
     # Generate the current types array for the form.
     foreach ($image->Types() as $type) {
-	$defaults["mtype_${type}"] = "Yep";
+	$defaults["mtype_{$type}"] = "Yep";
     }
     $defaults["def_parentosid"] = "";
     if ($image->ezid() && $osinfo->def_parentosid()) {
@@ -506,7 +506,7 @@ else {
     $osid_array = array();
     for ($i = 1; $i <= 4; $i++) {
         # Local variable dynamically created.    
-        $foo      = "part${i}_osid";
+        $foo      = "part{$i}_osid";
 
         if (isset($defaults[$foo])) {
             if (isset($osidclause))

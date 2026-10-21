@@ -255,7 +255,7 @@ function SPITFORM($formfields, $returning, $errors)
 	if ($WIKISUPPORT) {
 	    echo "<tr>
                       <td colspan=2>*<a
-                            href=${WIKIHOME}/bin/view/TWiki/WikiName
+                            href={$WIKIHOME}/bin/view/TWiki/WikiName
                             target=_blank>WikiName</a>:<td class=left>
                           <input type=text
                                  name=\"formfields[wikiname]\"
