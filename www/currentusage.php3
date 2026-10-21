@@ -245,7 +245,7 @@ function SHOWFREENODES()
 	$output .= "<td class=usagefreenodes align=right>
                      <a target=_parent href=shownodetype.php3?node_type=$key>
                         $key</a></td>
-                    <td class=usagefreenodes align=left>${freecount}</td>\n";
+                    <td class=usagefreenodes align=left>{$freecount}</td>\n";
 
 	$cols++;
 	$newrow = 0;

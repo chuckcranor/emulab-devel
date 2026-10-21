@@ -247,7 +247,7 @@ if (1) {
 		    rawurlencode($searchfor);
 	    }
 	    echo "<center>".
-	      "<a href='genihistory.php?index=${myindex}${opts}'>".
+	      "<a href='genihistory.php?index={$myindex}{$opts}'>".
 	      "More Entries</a></center><br>\n";
 	}
     }

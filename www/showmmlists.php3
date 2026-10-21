@@ -122,7 +122,7 @@ if (count($suexec_output_array)) {
 	}
 
 	echo "<tr>
-                  <td><a href='mailto:$listname@${OURDOMAIN}'>$listname</a>
+                  <td><a href='mailto:$listname@{$OURDOMAIN}'>$listname</a>
                        </td>
                   <td align=center>
                        <a href='gotommlist.php3?listname=$listname'>
@@ -174,8 +174,8 @@ if (mysql_num_rows($query_result)) {
     $showmmlists_url = CreateUrl("showmmlists", $target_user);
 
     echo "<tr>
-              <th><a href='${showmmlists_url}&sortby=listname'>List Name</th>
-              <th><a href='${showmmlists_url}&sortby=uid'>Owner</th>
+              <th><a href='{$showmmlists_url}&sortby=listname'>List Name</th>
+              <th><a href='{$showmmlists_url}&sortby=uid'>Owner</th>
               <th>Admin Page</th>
               <th>Reset Password</th>
               <th>Delete List</th>
@@ -184,7 +184,7 @@ if (mysql_num_rows($query_result)) {
     while ($row = mysql_fetch_array($query_result)) {
 	$listname  = $row['listname'];
 	$owner_uid = $row['owner_uid'];
-	$mmurl     = "gotommlist?listname=${listname}";
+	$mmurl     = "gotommlist?listname={$listname}";
 
 	if (! ($owner_user = User::Lookup($owner_uid))) {
 	    TBERROR("Could not lookup object for user $owner_uid", 1);
@@ -192,14 +192,14 @@ if (mysql_num_rows($query_result)) {
 	$showuser_url = CreateURL("showuser", $owner_user);
 	
 	echo "<tr>
-                  <td><a href='mailto:$listname@${OURDOMAIN}'>$listname</a>
+                  <td><a href='mailto:$listname@{$OURDOMAIN}'>$listname</a>
                        </td>
                   <td><A href='$showuser_url'>$owner_uid</A></td>
-                  <td align=center><A href='${mmurl}&wantadmin=1'>
+                  <td align=center><A href='{$mmurl}&wantadmin=1'>
                          <img src=\"arrow4.ico\"
                               border=0 alt='admin'></A></td>
                   <td align=center>
-                       <A href='${mmurl}&wantadmin=1&link=passwords'>
+                       <A href='{$mmurl}&wantadmin=1&link=passwords'>
                            <img src='/autostatus-icons/yellowball.gif'
                                 border=0 alt=passwd>
                         </A></td>

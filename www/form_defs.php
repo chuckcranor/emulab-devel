@@ -732,7 +732,7 @@ function FormTextDumpElement($name, $attributes, $values, $label_width, $parent_
       $res .= "$label: \n";
       $res .= $value;
     } else {
-      $res .= sprintf("%-${label_width}s %s\n", "$label:", $value);
+      $res .= sprintf("%-{$label_width}s %s\n", "$label:", $value);
     }
     return $res;
 }

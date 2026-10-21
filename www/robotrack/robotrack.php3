@@ -129,7 +129,7 @@ if (isset($withwebcams) && $withwebcams) {
 
     while ($row = mysql_fetch_array($query_result)) {
 	$id      = $row["id"];
-	$camurl  = "../webcamimg.php3?webcamid=${id}&applet=1&fromtracker=1";
+	$camurl  = "../webcamimg.php3?webcamid={$id}&applet=1&fromtracker=1";
 	$webcams[] = $camurl;
     }
 }
@@ -170,7 +170,7 @@ echo "<table cellspacing=5 cellpadding=5 border=0 class=\"stealth\">
                          info page. See below for instructions on how to
                          use the <b>drag and drop</b> features. If you are on
                          a <b>high speed</b> connection, you can try the
-                         <a href=${REQUEST_URI}&withwebcams=1>WithWebCams</a>
+                         <a href={$REQUEST_URI}&withwebcams=1>WithWebCams</a>
                          option.
         </td>
       </tr>
@@ -237,8 +237,8 @@ if (count($webcams)) {
     for ($i = 0; $i < $camcount; $i++) {
 	$camurl = $webcams[$i];
 
-	echo "<param name='WebCam${i}' value='$camurl'>
-              <param name='WebCam${i}XY' value='$x,$y'>";
+	echo "<param name='WebCam{$i}' value='$camurl'>
+              <param name='WebCam{$i}XY' value='$x,$y'>";
 
 	$x += ($camwidth + 20);
 

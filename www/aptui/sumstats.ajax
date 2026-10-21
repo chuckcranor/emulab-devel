@@ -77,7 +77,7 @@ function Do_GetStats()
     }
 
     $query_result =
-        DBQueryFatal("(select i.${target},a.aggregate_urn,count(i.creator) as ecount, ".
+        DBQueryFatal("(select i.{$target},a.aggregate_urn,count(i.creator) as ecount, ".
                      "   sum(i.physnode_count) as pcount, ".
                      "   truncate(sum(i.physnode_count * ".
                      "     ((UNIX_TIMESTAMP(i.destroyed) - ".
@@ -90,9 +90,9 @@ function Do_GetStats()
                      "join projects as p on p.pid=i.pid ".
                        $whereclause . " and ".
                      "FIND_IN_SET('cloudlab', aa.portals) ".
-                     " group by i.${target},a.aggregate_urn) ".
+                     " group by i.{$target},a.aggregate_urn) ".
                      "union ".
-                     "(select i.${target},a.aggregate_urn,count(i.creator) as ecount,".
+                     "(select i.{$target},a.aggregate_urn,count(i.creator) as ecount,".
                      "   sum(i.physnode_count) as pcount, ".
                      "   truncate(sum(i.physnode_count * ".
                      "     ((UNIX_TIMESTAMP(now()) - ".
@@ -105,7 +105,7 @@ function Do_GetStats()
                      "join projects as p on p.pid=i.pid ".
                        $whereclause . " and " .
                      "FIND_IN_SET('cloudlab', aa.portals) ".
-                     " group by i.${target},aggregate_urn)");
+                     " group by i.{$target},aggregate_urn)");
 
     while ($row = mysql_fetch_array($query_result)) {
         $key    = $row[$target];

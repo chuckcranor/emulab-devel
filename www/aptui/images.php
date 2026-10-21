@@ -249,7 +249,7 @@ else {
 	$imageid = $row["imageid"];
         $name    = $row["imagename"];
         $pid     = $row["pid"];
-        $urn     = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
+        $urn     = "urn:publicid:IDN+{$domain}+image+{$pid}//{$name}";
         $blob    = array();
 
         $blob["imageid"]     = $imageid;

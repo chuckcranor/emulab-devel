@@ -51,7 +51,7 @@ if (isset($target_user)) {
 }
 
 echo "<br>\n";
-echo "<iframe src='apt/ssh-keys.php?embedded=1${target_opt}'
+echo "<iframe src='apt/ssh-keys.php?embedded=1{$target_opt}'
               id='embedded' class='embedded'></iframe>";
 
 $bodyclosestring =

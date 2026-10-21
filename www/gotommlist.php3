@@ -79,7 +79,7 @@ if (isset($target_project) || isset($target_group)) {
     
     $cookietype = "user";
     $listiface  = "private";
-    $optargs    = "?username=${user_email}";
+    $optargs    = "?username={$user_email}";
 
     if (isset($wantadmin) && $isadmin) {
 	$cookietype = "admin";
@@ -125,7 +125,7 @@ if (isset($target_project) || isset($target_group)) {
 
     setcookie($matches[1], $matches[2], 0, $matches[3], $TBAUTHDOMAIN, 0);
 
-    $url = "${MAILMANURL}/$listiface/$listname/$optargs";
+    $url = "{$MAILMANURL}/$listiface/$listname/$optargs";
 }
 elseif (isset($listname) && $listname != "") {
     #
@@ -173,12 +173,12 @@ elseif (isset($listname) && $listname != "") {
     elseif (isset($wantconfig)) {
 	$cookietype = "user";
 	$listiface  = "options";
-	$optargs    = "?email=${user_email}";
+	$optargs    = "?email={$user_email}";
     }
     else {
 	$cookietype = "user";
 	$listiface  = "private";
-	$optargs    = "?username=${user_email}";
+	$optargs    = "?username={$user_email}";
     }
 
     SUEXEC($uid, "nobody", "mmxlogin $uid $listname $cookietype",
@@ -196,7 +196,7 @@ elseif (isset($listname) && $listname != "") {
     }
     setcookie($matches[1], $matches[2], 0, $matches[3], $TBAUTHDOMAIN, 0);
 
-    $url = "${MAILMANURL}/$listiface/$listname/$optargs";
+    $url = "{$MAILMANURL}/$listiface/$listname/$optargs";
 
     if (isset($link)) {
 	$url .= $link;
@@ -206,5 +206,5 @@ else {
     USERERROR("You are not a member of any mailing projects!", 1);
 }
 
-header("Location: ${url}");
+header("Location: {$url}");
 ?>

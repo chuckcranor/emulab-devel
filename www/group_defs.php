@@ -793,9 +793,9 @@ class Group
                 "in project $pid.\n";
 	    $instructions =
 		"You can approve or reject this user:\n\n".
-		"Approve:  ${url}&action=approve\n".
+		"Approve:  {$url}&action=approve\n".
 		"or\n".
-		"Deny:     ${url}&action=deny\n";
+		"Deny:     {$url}&action=deny\n";
 	    $from = $project->ApprovalEmailAddress();
             $fields =
                 "Name:            $usr_name\n".

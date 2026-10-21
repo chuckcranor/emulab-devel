@@ -107,7 +107,7 @@ function SPITFORM($email, $phone, $failed, $simple, $view)
     }
 
     echo "<table align=center border=1>
-          <form action=${TBBASE}/password.php3 method=post>
+          <form action={$TBBASE}/password.php3 method=post>
           <tr>
               <td>Email Address:</td>
               <td><input type=text
@@ -250,7 +250,7 @@ TBMAIL("$uid_name <$uid_email>",
        "password. If the link expires, you can request a new one from the\n".
        "web interface.\n".
        "\n".
-       "    ${TBBASE}/chpasswd.php3?user=$uid&key=$keyB&simple=$simple\n".
+       "    {$TBBASE}/chpasswd.php3?user=$uid&key=$keyB&simple=$simple\n".
        "\n".
        "The request originated from IP: " . $_SERVER['REMOTE_ADDR'] . "\n".
        "\n".

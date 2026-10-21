@@ -230,7 +230,7 @@ if ($speclocal) {
     }
     if (!VALIDUSERPATH($exp_localnsfile)) {
 	USERERROR("NS File: You must specify a server resident file in " .
-		  "one of: ${TBVALIDDIRS}.", 1);
+		  "one of: {$TBVALIDDIRS}.", 1);
     }
     
     $nsfile = $exp_localnsfile;

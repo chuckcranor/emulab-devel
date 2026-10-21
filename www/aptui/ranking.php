@@ -117,7 +117,7 @@ function SpitRankList($target, $days, $allusers)
         $blob["portal"]     = $row["portal"];
         $results[$row[0]] = $blob;
     }
-    echo "<script type='text/plain' id='${target}-json'>\n";
+    echo "<script type='text/plain' id='{$target}-json'>\n";
     echo json_encode($results);
     echo "</script>\n";
 }

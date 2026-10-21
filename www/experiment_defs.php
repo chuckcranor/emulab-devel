@@ -1131,7 +1131,7 @@ class Experiment
 
 		echo "<tr>
                       <td>DataBase User: </td>
-                      <td class=\"left\">E${exptidx}</td>
+                      <td class=\"left\">E{$exptidx}</td>
                   </tr>\n";
 
 		echo "<tr>
@@ -1661,7 +1661,7 @@ function MakeLink($which, $args, $text)
     elseif ($which == "experiment") {
 	$page = "showexp.php3";
     }
-    return "<a href=${page}?${args}>$text</a>";
+    return "<a href={$page}?{$args}>$text</a>";
 }
 
 ?>

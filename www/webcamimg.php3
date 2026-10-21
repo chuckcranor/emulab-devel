@@ -78,13 +78,13 @@ if (isset($fromtracker)) {
     if (! isset($camfps) || !TBvalid_integer($camfps)) {
 	$camfps = 2;
     }
-    $URL .= "&resolution=${camwidth}x${camheight}";
+    $URL .= "&resolution={$camwidth}x{$camheight}";
 
     if (preg_match("/fps=\d*/", $URL)) {
-	$URL = preg_replace("/fps=\d*/", "fps=${camfps}", $URL);
+	$URL = preg_replace("/fps=\d*/", "fps={$camfps}", $URL);
     }
     else {
-	$URL .= "&fps=${camfps}";
+	$URL .= "&fps={$camfps}";
     }
 }
 

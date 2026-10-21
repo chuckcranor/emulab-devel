@@ -59,7 +59,7 @@ TBMAIL("$usr_name '$target_uid' <$usr_email>",
        "This is your account verification key: $key\n\n".
        "Please use this link to verify your user account:\n".
        "\n".
-       "    ${TBBASE}/login.php3?vuid=$target_uid&key=$key\n".
+       "    {$TBBASE}/login.php3?vuid=$target_uid&key=$key\n".
        "\n".
        "You will then be verified as a user.\n".
        "\n".

@@ -84,7 +84,7 @@ if ($yourpcs) {
 # Standard Testbed Header, now that we know what we want to say.
 #
 if (! $this_user->SameUser($target_user)) {
-    PAGEHEADER("${target_uid}'s $FLAVOR", null, null, $notice);
+    PAGEHEADER("{$target_uid}'s $FLAVOR", null, null, $notice);
 }
 else {
     PAGEHEADER("My $FLAVOR", null, null, $notice);

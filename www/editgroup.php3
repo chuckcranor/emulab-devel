@@ -194,7 +194,7 @@ function SPITFORM($formfields, $errors)
 	    }
 
 	    echo "   <td align=center>
-			<select name=\"formfields[U${target_idx}\$\$trust]\">\n";
+			<select name=\"formfields[U{$target_idx}\$\$trust]\">\n";
 
 	    #
 	    # We want to have the current trust value selected in the menu.
@@ -252,7 +252,7 @@ function SPITFORM($formfields, $errors)
 		     </td>\n";
 
 	    echo "   <td align=center>
-		       <select name=\"formfields[U${target_idx}\$\$trust]\">\n";
+		       <select name=\"formfields[U{$target_idx}\$\$trust]\">\n";
 
 	    if ($group->CheckTrustConsistency($target_user,
 					      TBDB_TRUSTSTRING_USER, 0)) {

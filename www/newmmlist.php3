@@ -376,7 +376,7 @@ if (! ($result = NewMmList($uid, $project, $args, $errors))) {
 #
 # Okay, redirect the user over to the listadmin page to finish configuring.
 #
-header("Location: ${MAILMANURL}/admin/${listname}/?adminpw=${formfields["password1"]}");
+header("Location: {$MAILMANURL}/admin/{$listname}/?adminpw={$formfields["password1"]}");
 
 #
 # When there's an MmList class, this will be a Class function to make a new one...

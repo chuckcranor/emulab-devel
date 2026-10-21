@@ -65,7 +65,7 @@ function Do_SearchUsers()
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }
-    $safe_text = addslashes("%${text}%");
+    $safe_text = addslashes("%{$text}%");
     
     $query_result =
         DBQueryFatal("select u.uid,usr_name,usr_affil,usr_email,".
@@ -115,7 +115,7 @@ function Do_SearchProjects()
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }
-    $safe_text = addslashes("%${text}%");
+    $safe_text = addslashes("%{$text}%");
     $query_result =
         DBQueryFatal("select pid,u.uid,u.usr_name,u.usr_affil,p.portal ".
                      "  from projects as p ".

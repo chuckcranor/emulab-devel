@@ -103,7 +103,7 @@ if ($source || $rspec) {
         $filename = $profile->name() . ".py";
     }
     header("Content-Type: text/plain");
-    header("Content-Disposition: attachment; filename='${filename}'");
+    header("Content-Disposition: attachment; filename='{$filename}'");
     echo $stuff;
     return;
 }

@@ -63,7 +63,7 @@ else {
 #
 if (!$isadmin && 
     !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
-    USERERROR("You do not have permission to view ${uid}'s information!", 1);
+    USERERROR("You do not have permission to view {$uid}'s information!", 1);
 }
 
 #

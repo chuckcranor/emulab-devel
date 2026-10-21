@@ -513,7 +513,7 @@ function Do_SendotaAgreement()
     $leader = $target_project->GetLeader();
     $email  = $leader->email();
     $name   = $leader->name();
-    $url    = $APTBASE . "/ota-agreement.php?pid=${pid}";
+    $url    = $APTBASE . "/ota-agreement.php?pid={$pid}";
 
     if (0) {
         SPITAJAX_RESPONSE(1);

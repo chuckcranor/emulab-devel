@@ -42,7 +42,7 @@ if (isset($xref_tag) && $xref_tag != "") {
     $idx = $row['idx'];
 }
 if (isset($idx)) {
-    header("Location: $WIKIDOCURL/kb${idx}", TRUE, 301);
+    header("Location: $WIKIDOCURL/kb{$idx}", TRUE, 301);
 }
 else {
     header("Location: $WIKIDOCURL/KnowledgeBase", TRUE, 301);

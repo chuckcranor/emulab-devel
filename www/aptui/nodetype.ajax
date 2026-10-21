@@ -116,7 +116,7 @@ function ConvertOSID($osid)
 
     if ($osinfo) {
         $blob = array();
-        $url  = "$TBBASE/showosinfo.php3?osid=${osid}";
+        $url  = "$TBBASE/showosinfo.php3?osid={$osid}";
 
         $blob["osid"] = $osinfo->osid();
         $blob["uuid"] = $osinfo->uuid();
@@ -136,7 +136,7 @@ function ConvertImageID($imageid)
 
     if ($image) {
         $blob = array();
-        $url = "show-image.php?imageid=${imageid}";
+        $url = "show-image.php?imageid={$imageid}";
 
         $blob["osid"] = $image->imageid();
         $blob["uuid"] = $image->uuid();
@@ -290,7 +290,7 @@ function SaveRow($which)
                 SPITAJAX_ERROR(-1, "Invalid attribute type");
                 return -1;
             }
-            if (!TBcheck_dbslot($value, "node_types", "attr_${attrtype}",
+            if (!TBcheck_dbslot($value, "node_types", "attr_{$attrtype}",
                             TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
                 SPITAJAX_ERROR(-1, "Attribute is not a/an $attrtype");
                 return -1;
@@ -310,7 +310,7 @@ function SaveRow($which)
     }
     if ($which == "flag") {
         $query_result =
-            DBQueryWarn("update node_types set ${name}='$value' ".
+            DBQueryWarn("update node_types set {$name}='$value' ".
                         "where type='$type'");
     }
     elseif ($isnew) {

@@ -70,7 +70,7 @@ if ($this_user) {
             $TUTORIALPROFILE != "") {
         # For TUTORIALPID
         header("Location: show-profile.php".
-               "?project=${TUTORIALPID}&profile=${TUTORIALPROFILE}");
+               "?project={$TUTORIALPID}&profile={$TUTORIALPROFILE}");
     }
     elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php");

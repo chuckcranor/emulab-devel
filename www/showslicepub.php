@@ -46,7 +46,7 @@ $slice_idx = $slice->idx();
 #
 if (ISADMIN()) {
     header("Location: ".
-           "$TBBASE/showslice.php?slice_idx=${slice_idx}&showtype=cm");
+           "$TBBASE/showslice.php?slice_idx={$slice_idx}&showtype=cm");
     return;
 }
 

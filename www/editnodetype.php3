@@ -433,7 +433,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
                       <td align=center>
                             <input type=checkbox value=checked
                                     name=\"deletes[$key]\" $deletes[$key]></td>
-                      <td>${key}:</td>
+                      <td>{$key}:</td>
                       <td class=left>
                           <input type=text
                                  name=\"attributes[$key]\"
@@ -743,9 +743,9 @@ if (isset($formfields["isswitch"]) && $formfields["isswitch"] != "") {
 # Existing attributes.
 foreach ($attributes as $attr_key => $attr_val) {
     if (isset($deletes[$attr_key]) && $deletes[$attr_key] == "checked") 
-	$args["delete_${attr_key}"] = "1";
+	$args["delete_{$attr_key}"] = "1";
     $attr_type = $attribute_types[$attr_key];
-    $args["attr_${attr_type}_${attr_key}"] = $attr_val;
+    $args["attr_{$attr_type}_{$attr_key}"] = $attr_val;
 }
 
 #
@@ -758,7 +758,7 @@ if (isset($newattribute_name) && $newattribute_name != "" &&
     $args["new_attr"] = $newattribute_name;
     # The following is matched by wildcards on the other side of XML,
     # including checking its type and value, just like existing attributes.
-    $args["attr_${newattribute_type}_$newattribute_name"] = $newattribute_value;
+    $args["attr_{$newattribute_type}_$newattribute_name"] = $newattribute_value;
 }
 
 # Restricted checkbox.

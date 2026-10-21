@@ -100,7 +100,7 @@ if ($retval) {
 #
 # Now spit it back.
 # 
-if (($fp = fopen("${prefix}.jpg", "r"))) {
+if (($fp = fopen("{$prefix}.jpg", "r"))) {
     header("Content-type: image/jpg");
     fpassthru($fp);
 }

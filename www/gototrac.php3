@@ -80,8 +80,8 @@ elseif ($wiki != "emulab") {
     USERERROR("Unknown Trac wiki $wiki!", 1);
 }
 else {
-    $TRACURL    = "https://${USERNODE}/trac/$wiki";
-    $COOKIENAME = "trac_auth_${wiki}";
+    $TRACURL    = "https://{$USERNODE}/trac/$wiki";
+    $COOKIENAME = "trac_auth_{$wiki}";
     if (ISADMINISTRATOR() || STUDLY()) {
 	$priv = 1;
     }
@@ -119,6 +119,6 @@ if ($priv) {
     setcookie($COOKIENAME . "_priv",
 	      $hash, 0, "/", $TBAUTHDOMAIN, $TBSECURECOOKIES);
 }
-header("Location: ${TRACURL}/xlogin?user=$uid&hash=$hash" .
-       (isset($do) ? "&goto=${do}" : ""));
+header("Location: {$TRACURL}/xlogin?user=$uid&hash=$hash" .
+       (isset($do) ? "&goto={$do}" : ""));
 

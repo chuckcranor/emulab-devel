@@ -88,7 +88,7 @@ function Do_GetFrequencyData()
     }
     $url = $aggregate->weburl() . "/rfmonitor/" .
         ($archived ? "/archive/" : "") .
-        "${node_id}:${iface}${logid}.csv.gz";
+        "{$node_id}:{$iface}{$logid}.csv.gz";
     $url = preg_replace("/^https:/i","http:", $url);
 
     $socket = fopen($url, "r");
@@ -103,7 +103,7 @@ function Do_GetFrequencyData()
             header($v);
         }
         header("Content-Disposition: inline; ".
-               "filename='${node_id}:${iface}${logid}.csv.gz'");
+               "filename='{$node_id}:{$iface}{$logid}.csv.gz'");
     }
     fpassthru($socket);
     fclose($socket);

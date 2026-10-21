@@ -370,15 +370,15 @@ function StartConsole(id, authobject)
 </script>
 
 <?php
-echo "<div id='${node_id}_console' style='width: 100%;'></div>";
+echo "<div id='{$node_id}_console' style='width: 100%;'></div>";
 if (!$noclose) {
     echo "<center><button type=button
-                          id='${node_id}_console_kill'>Close</button>" .
+                          id='{$node_id}_console_kill'>Close</button>" .
 	 "</center>\n";
 }
 echo "<script language=JavaScript>
         window.onload = function() {
-            StartConsole('${node_id}_console', '$console_auth');
+            StartConsole('{$node_id}_console', '$console_auth');
         }
       </script>\n";
 

@@ -352,7 +352,7 @@ function CreateURL($page_id)
             # Use whatever it was we got.
 	    ;
 	}
-	$url_args[] = "${key}=${val}";
+	$url_args[] = "{$key}={$val}";
     }
     $newurl .= "?" . implode("&", $url_args);
     return $newurl;

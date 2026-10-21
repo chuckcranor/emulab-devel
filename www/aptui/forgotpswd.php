@@ -194,7 +194,7 @@ TBMAIL("$uid_name <$uid_email>",
        "password. If the link expires, you can request a new one from the\n".
        "web interface.\n".
        "\n".
-       "    ${APTBASE}/changepswd.php?user=$uid&key=$keyB\n".
+       "    {$APTBASE}/changepswd.php?user=$uid&key=$keyB\n".
        "\n".
        "The request originated from IP: " . $_SERVER['REMOTE_ADDR'] . "\n".
        "\n".

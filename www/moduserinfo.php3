@@ -144,7 +144,7 @@ function SPITFORM($formfields, $errors)
 	# Title/Position:
 	# 
 	echo "<tr>
-                  <td colspan=2>${optfield}Job Title/Position:</td>
+                  <td colspan=2>{$optfield}Job Title/Position:</td>
                   <td class=left>
                       <input type=text
                              name=\"formfields[usr_title]\"
@@ -219,7 +219,7 @@ function SPITFORM($formfields, $errors)
 	#
 	# Postal Address
         #
-	echo "<tr><td colspan=3>${optfield}Address:<br /><center>
+	echo "<tr><td colspan=3>{$optfield}Address:<br /><center>
 	      <table>
 		  <tr><td>Line 1</td><td colspan=3>
                     <input type=text
@@ -273,7 +273,7 @@ function SPITFORM($formfields, $errors)
 	# Phone
 	#
 	echo "<tr>
-                  <td colspan=2>${optfield}Phone #:</td>
+                  <td colspan=2>{$optfield}Phone #:</td>
                   <td class=left>
                       <input type=text
                              name=\"formfields[usr_phone]\"

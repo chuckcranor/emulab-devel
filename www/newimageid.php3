@@ -758,7 +758,7 @@ for ($i = 1; $i < count($mtypes_array); $i++) {
 unset($osidclause);
 for ($i = 1; $i <= 4; $i++) {
     # Local variable dynamically created.    
-    $foo      = "part${i}_osid";
+    $foo      = "part{$i}_osid";
 
     if (isset($formfields[$foo])) {
 	if (isset($osidclause))

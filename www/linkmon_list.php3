@@ -127,7 +127,7 @@ function SPITTRACELINK($vlan, $vnode, $action, $color)
     $url  = CreateURL("linkmon_ctl", $experiment, "linklan", $vlan,
 		      "action", $action, "vnode", $vnode);
     $link = "<a href='$url'>";
-    $link .= "<img border=0 src='/autostatus-icons/${color}ball.gif' ".
+    $link .= "<img border=0 src='/autostatus-icons/{$color}ball.gif' ".
 	           "alt='$action'>";
     $link .= "</a>\n";
     return $link;

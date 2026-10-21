@@ -615,13 +615,13 @@ foreach ($formfields as $header => $value) {
 	if (! array_key_exists("allnodes", $changes["$lan"])) {
 	    $changes["$lan"]["allnodes"] = "";
 	}
-	$changes["$lan"]["allnodes"] .= "${param}=${value} $qlimitarg ";
+	$changes["$lan"]["allnodes"] .= "{$param}={$value} $qlimitarg ";
     }
     else {
 	if (! array_key_exists("$vnode", $changes["$lan"])) {
 	    $changes["$lan"]["$vnode"] = "";
 	}
-	$changes["$lan"]["$vnode"] .= "${param}=${value} $qlimitarg ";
+	$changes["$lan"]["$vnode"] .= "{$param}={$value} $qlimitarg ";
     }
 }
 

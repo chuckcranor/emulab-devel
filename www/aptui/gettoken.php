@@ -80,7 +80,7 @@ else {
     $token = $webtask->TaskValue("result");
 }
 header("Content-Type: text/plain");
-header("Content-Disposition: attachment; filename=\"${FILENAME}.jwt\"");
+header("Content-Disposition: attachment; filename=\"{$FILENAME}.jwt\"");
 echo $token;
 echo "\n";
 
