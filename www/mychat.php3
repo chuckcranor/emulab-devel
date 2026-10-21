@@ -76,7 +76,7 @@ echo "If you decide to use your own Jabber client (which we recommend), then
 echo "<blockquote><ul>
        <li><b>Protocol</b>: Jabber
        <li><b>Screen Name</b>: your Emulab user ID
-       <li><b>Server</b>: jabber.${OURDOMAIN}
+       <li><b>Server</b>: jabber.{$OURDOMAIN}
        <li><b>Password</b>: your Emulab jabber password (see above)
        <li><b>Protocol</b>: Jabber
        <li><b>Jabber Options</b>: 'Use TLS if available'

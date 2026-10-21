@@ -345,7 +345,7 @@ if (! strcmp($showtype, "summary")) {
 	else
 	    echo "<td><a href=shownodetype.php3?node_type=$key>\n";
 	echo "           $key</a></td>
-              <td align=center>${freecount}${ast}</td>
+              <td align=center>{$freecount}{$ast}</td>
               <td align=center>$value</td>
               </tr>\n";
     }

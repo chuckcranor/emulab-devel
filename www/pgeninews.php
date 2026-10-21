@@ -5,6 +5,6 @@ if ($_SERVER["QUERY_STRING"]) {
 else {
     $query_string = "protogeni=1";
 }
-header("Location: news.php3?${query_string}");
+header("Location: news.php3?{$query_string}");
 ?>
 

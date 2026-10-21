@@ -72,7 +72,7 @@ register_shutdown_function("CLEANUP");
 # Spit the areamap contained in the file out; it is fully formatted and
 # called "floormap".
 #
-if (($fp = fopen("${prefix}.jpg", "r"))) {
+if (($fp = fopen("{$prefix}.jpg", "r"))) {
     header("Content-type: image/jpg");
     fpassthru($fp);
 }

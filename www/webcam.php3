@@ -113,8 +113,8 @@ if (isset($applet)) {
     
     while ($row = mysql_fetch_array($query_result)) {
 	$id  = $row["id"];
-	$url = "webcamimg.php3?webcamid=${id}&nocookieuid=${uid}".
-	    "&nocookieauth=${auth}&applet=1" . $extra_url;
+	$url = "webcamimg.php3?webcamid={$id}&nocookieuid={$uid}".
+	    "&nocookieauth={$auth}&applet=1" . $extra_url;
 
 	if (!isset($camera) || $camera == $id) {
 	    echo "<applet archive=WebCamApplet.jar
@@ -134,7 +134,7 @@ else {
 	if (!isset($camera) || $camera == $id) {
 	    echo "<tr><td align=center>Web Cam $id</td></tr>
         	  <tr><td align=center class='stealth'>
-                	<img src='webcamimg.php3?webcamid=${id}${extra_url}'
+                	<img src='webcamimg.php3?webcamid={$id}{$extra_url}'
                         	align=center></td></tr>
 	          <tr><tr>\n";
 	}

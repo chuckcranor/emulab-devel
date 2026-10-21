@@ -175,7 +175,7 @@ PAGEHEADER("Resource Usage Visualization");
 #
 # Pull in some style sheets.
 #
-echo "<link type=text/css rel=stylesheet href=${TBBASE}/rusage_viz.css />\n";
+echo "<link type=text/css rel=stylesheet href={$TBBASE}/rusage_viz.css />\n";
 
 if (! $isadmin) {
     USERERROR("You do not have permission to view the resource usage viz!", 1);
@@ -225,9 +225,9 @@ echo "</script>\n\n";
 #
 # add some other javascripts
 #
-echo "<script language=javascript type=text/javascript src=${TBBASE}/js/mootools-core.js></script>";
-echo "<script language=javascript type=text/javascript src=${TBBASE}/js/mootools-tips.js></script>";
-echo "<script language=javascript type=text/javascript src=${TBBASE}/js/treemap.js></script>";
+echo "<script language=javascript type=text/javascript src={$TBBASE}/js/mootools-core.js></script>";
+echo "<script language=javascript type=text/javascript src={$TBBASE}/js/mootools-tips.js></script>";
+echo "<script language=javascript type=text/javascript src={$TBBASE}/js/treemap.js></script>";
 
 #
 # An inline bit...

@@ -78,8 +78,8 @@ if (!$isadmin && !$target_user->SameUser($this_user)) {
 if ($p12) {
     if ($fp = popen("$TBSUEXEC_PATH $target_uid nobody webspewcert", "r")) {
 	header("Content-Type: application/octet-stream;".
-	       "filename=\"${FILENAME}.p12\";");
-        header("Content-Disposition: attachment; filename='${FILENAME}.p12'");
+	       "filename=\"{$FILENAME}.p12\";"");
+        header("Content-Disposition: attachment; filename='{$FILENAME}.p12'");
 	header("Cache-Control: no-cache, must-revalidate");
 	header("Pragma: no-cache");
 #       header("Content-Type: application/x-x509-user-cert");
@@ -107,7 +107,7 @@ $key  = $row["privkey"];
 
 if ($ssh) {
     $serial  = $row['idx'];
-    $comment = "sslcert:${serial}";
+    $comment = "sslcert:{$serial}";
     $pubkey_result =& $target_user->TableLookUp("user_pubkeys",
 						"pubkey",
 						"comment='$comment'");
@@ -119,7 +119,7 @@ if ($ssh) {
     $pubkey = $row['pubkey'];
     
     header("Content-Type: text/plain");
-    header("Content-Disposition: attachment; filename=\"${FILENAME}.pem\"");
+    header("Content-Disposition: attachment; filename=\"{$FILENAME}.pem\"");
     echo "-----BEGIN RSA PRIVATE KEY-----\n";
     echo $key;
     echo "-----END RSA PRIVATE KEY-----\n";
@@ -131,7 +131,7 @@ if ($ssh) {
 }
 else {
     header("Content-Type: text/plain");
-    header("Content-Disposition: attachment; filename=\"${FILENAME}.pem\"");
+    header("Content-Disposition: attachment; filename=\"{$FILENAME}.pem\");
     echo "-----BEGIN RSA PRIVATE KEY-----\n";
     echo $key;
     echo "-----END RSA PRIVATE KEY-----\n";

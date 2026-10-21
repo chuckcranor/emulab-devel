@@ -35,7 +35,7 @@ if (! $isadmin) {
 }
 
 if ($PORTAL_ENABLE || $CLUSTER_PORTAL != "") {
-    header("Location: ${TBBASE}/portal/sitevars.php");
+    header("Location: {$TBBASE}/portal/sitevars.php");
     return;
 }
 

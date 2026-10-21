@@ -314,9 +314,9 @@ function CLEANUP()
     global $prefix;
     
     if (isset($prefix) && (connection_aborted())) {
-	unlink("${prefix}.jpg");
-	unlink("${prefix}.map");
-	unlink("${prefix}.state");
+	unlink("{$prefix}.jpg");
+	unlink("{$prefix}.map");
+	unlink("{$prefix}.state");
 	unlink($prefix);
     }
     exit();
@@ -373,8 +373,8 @@ if ($retval) {
 # Spit the areamap contained in the file out; it is fully formatted and
 # called "floormap".
 #
-if (! readfile("${prefix}.map")) {
-    TBERROR("Could not read ${prefix}.map", 1);
+if (! readfile("{$prefix}.map")) {
+    TBERROR("Could not read {$prefix}.map", 1);
 }
 
 echo "<font size=+1>For more info on using wireless nodes, see the
@@ -520,8 +520,8 @@ if (isset($building)) {
 }
 
 # The last_* items come from a .state file with the map, from the Perl script.
-if (! readfile("${prefix}.state")) {
-    TBERROR("Could not read ${prefix}.state", 1);
+if (! readfile("{$prefix}.state")) {
+    TBERROR("Could not read {$prefix}.state", 1);
 }
 
 echo "</form>\n";

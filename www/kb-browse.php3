@@ -96,10 +96,10 @@ while ($row = mysql_fetch_array($search_result)) {
     }
     echo "<li>";
     if (isset($xref_tag) && $xref_tag != "") {
-	echo "<a href=#${xref_tag}>$title</a>\n";
+	echo "<a href=#{$xref_tag}>$title</a>\n";
     }
     else {
-	echo "<a href=#${idx}>$title</a>\n";
+	echo "<a href=#{$idx}>$title</a>\n";
     }
 }
 mysql_data_seek($search_result, 0);

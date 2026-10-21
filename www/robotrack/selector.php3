@@ -133,7 +133,7 @@ while (($row = mysql_fetch_array($query_result))) {
     $floor = $row['floor'];
     $ppm   = $row['pixels_per_meter'];
     
-    echo "  <param name='floor_${index}' value='$floor'>\n";
+    echo "  <param name='floor_{$index}' value='$floor'>\n";
     $index++;
 }
 echo "      <param name='ppm' value='$ppm'>";
