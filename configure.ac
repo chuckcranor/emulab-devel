@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2025 University of Utah and the Flux Group.
+# Copyright (c) 2000-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ AC_SUBST(PATH)
 CPPFLAGS="-I/usr/local/include"
 
 # BEGIN Python detection. For the event library.
-AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9 python3.11)
+AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9 python3.11 python3.12)
 
 if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
