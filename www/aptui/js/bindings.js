@@ -77,7 +77,7 @@ window.GetBindingsTable = (function ()
 		    html += doMultiItem(d, bindings[name], defval);
 		}
 		else {
-		    html += doItem(d, defval, bindings[name], undefined);
+		    html += doItem(d, defval, (bindings && _.has(bindings, name)) ? bindings[name] : undefined, undefined);
 		}
 	    });
 	    return html;
