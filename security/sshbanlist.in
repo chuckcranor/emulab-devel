@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2025 University of Utah and the Flux Group.
+# Copyright (c) 2008-2026 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -45,7 +45,7 @@ sub usage()
     print "Usage: sshbanlist [-d] [-n]\n";
     exit(1);
 }
-my $optlist   = "dnsvUC";
+my $optlist   = "dDnsvUC";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
@@ -72,6 +72,7 @@ my $WHITELIST        = "$TB/etc/sshwhitelist.txt";
 my $CIDRWHITELIST    = "$TB/etc/sshwhitelist-cidr.txt";
 my $BLOCKINGSET      = "$TB/etc/sshblockset.txt";
 my $DATAFILE         = "$TB/etc/sshbanlist.json";
+my $DATAFILE_TIMEOUT = 300;
 my $THRESHOLD	     = 10;
 my $UPDATE_THRESHOLD = 10;
 my $FAIL2BAN_TIMEOUT = 3600 * 24;
@@ -107,6 +108,11 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"D"})) {
+    $DATAFILE_TIMEOUT = 30;
+    $FAIL2BAN_TIMEOUT = 60;
+    $debug = 2;
 }
 if (defined($options{"n"})) {
     $impotent = 1;
@@ -146,7 +152,10 @@ if (! $impotent) {
 logit("Starting up. pid:$PID");
 
 #
-# Setup a signal handler for newsyslog.
+# Setup a signal handler:
+# SIGHUP: roll the logfile (for newsyslog)
+# SIGUSR1: write out the current banlist and JSON datafile
+# SIGTERM: write out the current banlist and JSON datafile and exit
 #
 sub handler($)
 {
@@ -196,6 +205,14 @@ my $control_netmask = unpack("N", inet_aton($CONTROL_NETMASK));
 my $control_network = unpack("N", inet_aton($CONTROL_NETWORK));
 
 #
+# For restarting without reparsing the entire logins file.
+# This is not just an efficiency thing, it prevents us from reusing
+# potentially stale data as well.
+#
+my $saved_ino = 0;
+my $saved_offset = 0;
+
+#
 # The datafile stores the banned IPs and the timestamp they were banned (as
 # for timing them out).
 #
@@ -230,7 +247,7 @@ if (defined($options{"U"})) {
     }
     WriteDataFile();
 }
-logit("There are " . scalar(keys(%{$counts})) . " in the initial block list");
+logit("There are ". scalar(keys(%{$counts})). " in the initial IP block list");
 
 #
 # Process the logins file, generating a hash of all the IPs
@@ -241,11 +258,19 @@ while (1) {
 	fatal("Cannot open $LOGINS: $!");
 
     # We want the inode number so we know when it gets rolled.
-    my (undef,$ino) = stat(IN);
+    my (undef,$ino,undef,undef,undef,undef,undef,$isize) = stat(IN);
+
+    # See if the logins file has rolled since we last ran
+    if ($saved_ino == $ino && $saved_offset > 0) {
+	seek(*IN, $saved_offset, 0);
+    }
+    $saved_ino = $ino;
+    $saved_offset = tell(*IN);
 
     if ($debug) {
-	logit("opened file, inode:$ino");
+	logit("(re)opened file: inode:$ino, size:$isize, offset:$saved_offset");
     }
+
     while (1) {
 	ProcessLoginFile(*IN);
 
@@ -255,11 +280,12 @@ while (1) {
 
 	if ($ino != $inoN) {
 	    if ($debug) {
-		print "Inode has changed from $ino to $inoN\n";
+		logit("Inode has changed from $ino to $inoN");
 	    }
 	    # Process the last part of the file since we have it open.
 	    ProcessLoginFile(*IN);
 	    close(IN);
+	    $saved_ino = 0;
 	    # Might as well.
 	    WriteBanList();
 	    last;
@@ -268,12 +294,14 @@ while (1) {
 	
 	#
 	# We want to periodically update so that we are not holding
-	# to many offenders in memory and not in the list.
+	# too many offenders in memory and not in the list.
 	#
 	if ($outstandingCount) {
+	    $saved_offset = tell(*IN);
 	    WriteBanList();
 	}
-	elsif (!$impotent && (time() - $lastdatawrite) > 300) {
+	elsif (!$impotent && (time() - $lastdatawrite) > $DATAFILE_TIMEOUT) {
+	    $saved_offset = tell(*IN);
 	    WriteDataFile();
 	}
 
@@ -290,7 +318,8 @@ sub ProcessLoginFile($)
     my ($IN) = @_;
 
     if ($debug > 1) {
-	logit("Processing file");
+	my $off = tell($IN);
+	logit("Processing $LOGINS starting at $off");
     }
 
     #
@@ -343,22 +372,30 @@ sub ProcessLoginFile($)
 	my $ip;
 	my $date;
 	my $user;
+	my $when = time();
+	chomp;
 	
+	if ($debug > 1) {
+	    my $off = tell($IN);
+	    #logit("Got line '$_', new offset $off");
+	}
+
 	if ($_ =~ /^${datere} .*\]: Invalid user ([^\s]+) from $ipre/i ||
 	    $_ =~ /^${datere} .*\]: Failed password for ([^\s]+) from $ipre/i) {
 	    $date = $1;
 	    $user = $2;
 	    $ip   = $3;
 	    if ($debug > 1) {
-		logit("$date:$ip $user")
+		logit("Found bad login $date:$ip $user")
 	    }
 	}
 	elsif ($_ =~ /^${datere} .*\]: Did not receive identification.*$ipre/i ||
-	    $_ =~ /^${datere} .*\]: Bad protocol version.*$ipre/i) {
+	       $_ =~ /^${datere} .*\]: Bad protocol version.*$ipre/i ||
+	       $_ =~ /^${datere} .*\]: reverse mapping checking.*\[$ipre\] failed/) {
 	    $date = $1;
 	    $ip   = $2;
 	    if ($debug > 1) {
-		logit("$date:$ip")
+		logit("Login from bad host $date:$ip")
 	    }
 	}
 	next
@@ -401,13 +438,20 @@ sub ProcessLoginFile($)
 		"ip"    => $ip,
 		"banned"=> 0,
 		"count" => 1,
-		"when"  => time(),
+		"when"  => $when,
 		"type"  => $TYPE_FAIL2BAN,
 	    };
+	    if ($verbose) {
+		logit("First entry for new $ip at $when");
+	    }
 	}
 	else {
 	    $counts->{$ip}->{"count"} = $counts->{$ip}->{"count"} + 1;
-	    $counts->{$ip}->{"when"}  = time();
+	    $counts->{$ip}->{"when"}  = $when;
+	    if ($verbose) {
+		logit("Found newer entry for $ip at $when, count now " .
+		      $counts->{$ip}->{"count"});
+	    }
 	}
 	my $ipinfo = $counts->{$ip};
 	
@@ -417,7 +461,10 @@ sub ProcessLoginFile($)
 	# it is still being a bad actor.
 	#
 	if ($ipinfo->{'banned'}) {
-	    $ipinfo->{"when"} = time();
+	    $ipinfo->{"when"} = $when;
+	    if ($verbose) {
+		logit("IP $ip still banned at $when");
+	    }
 	    next;
 	}
 
@@ -469,9 +516,11 @@ sub ProcessLoginFile($)
 	    }
 	}
     }
+    seek($IN, 0, 1);
 
     if ($debug > 1) {
-	logit("Processing file done");
+	my $off = tell($IN);
+	logit("Done processing at $off");
     }
     return 0;
 }
@@ -671,6 +720,7 @@ sub ReadDataFile()
 		    "banned" => 1,
 		};
 	    }
+	    $saved_ino = 0;
 	    if ($impotent) {
 		WriteBanList();
 	    }
@@ -692,13 +742,34 @@ sub ReadDataFile()
     if ($@) {
 	fatal("Could not decode $DATAFILE");
     }
+    if (exists($counts->{'inode'})) {
+	$saved_ino = $counts->{'inode'};
+	$saved_offset = $counts->{'offset'};
+	delete $counts->{'inode'};
+	delete $counts->{'offset'};
+	if ($debug) {
+	    logit("Read saved ino:$saved_ino, offset:$saved_offset");
+	}
+    }
     return 0;
 }
 sub WriteDataFile()
 {
     my $tempname = $DATAFILE . "XXXXX";
     
-    my $json = eval { encode_json($counts); };
+    # XXX remember logins file inode and offset
+    if ($saved_ino > 0) {
+	$counts->{'inode'} = $saved_ino;
+	$counts->{'offset'} = $saved_offset;
+	if ($debug) {
+	    logit("Wrote saved ino:$saved_ino, offset:$saved_offset");
+	}
+    } else {
+	delete $counts->{'inode'};
+	delete $counts->{'offset'};
+    }
+    #my $json = eval { encode_json($counts); };
+    my $json = eval { JSON::PP->new->utf8->canonical->encode($counts); };
     if ($@) {
 	fatal("Could not encode the list data");
     }
@@ -711,6 +782,11 @@ sub WriteDataFile()
     }
     print $fp $json;
     close($fp);
+
+    if ($saved_ino) {
+	delete $counts->{'inode'};
+	delete $counts->{'offset'};
+    }
 
     if (! chmod(0644, $filename)) {
 	logit("Could not chmod $filename to 0644: $!");
