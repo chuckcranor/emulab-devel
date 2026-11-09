@@ -386,16 +386,18 @@ sub ProcessLoginFile($)
 	    $user = $2;
 	    $ip   = $3;
 	    if ($debug > 1) {
-		logit("Found bad login $date:$ip $user")
+		logit("Found bad login $date:$ip $user");
 	    }
 	}
+	# XXX was catching "reverse mapping" failure but that seems to
+	# happen even on successful logins possibly due to hostname mismatch
+	# in NAT scenarios.
 	elsif ($_ =~ /^${datere} .*\]: Did not receive identification.*$ipre/i ||
-	       $_ =~ /^${datere} .*\]: Bad protocol version.*$ipre/i ||
-	       $_ =~ /^${datere} .*\]: reverse mapping checking.*\[$ipre\] failed/) {
+	       $_ =~ /^${datere} .*\]: Bad protocol version.*$ipre/i) {
 	    $date = $1;
 	    $ip   = $2;
 	    if ($debug > 1) {
-		logit("Login from bad host $date:$ip")
+		logit("Login from bad host $date:$ip");
 	    }
 	}
 	next
