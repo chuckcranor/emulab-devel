@@ -595,23 +595,39 @@ if ($clear || $clear_idx) {
     exit( 0 );
 }
 
+#
+# Do not allow this as root; we want proper history.
+#
+if ($UID == 0) {
+    fatal("Please do not run this as root!");
+}
+my $uid = $target_user->uid();
+my $uid_idx = $target_user->uid_idx();
+
 # For now, auto-approve reservation requests up to some number node-hours
-# as defined by a nifty site variable.
-# Later we'll probably want this threshold to vary based on the node type,
-# how far into the future the reservation starts, existing approved
-# reservations for the same project, the phase of the moon...
-# who knows.
+# as defined by a nifty site variable.  Count any similar existing approved
+# reservations against the limit, so many small reservations are judged
+# like one big one.
 #
 # If they said "-p", don't approve no matter what.
 # If an admin said to force approval, that overrides $pending and limits.
 #
 if (! ($pending || $approve)) {
+    my $query = "SELECT IFNULL( SUM( r.nodes * ( UNIX_TIMESTAMP( r.end ) - " .
+	"UNIX_TIMESTAMP( r.start ) ) / 3600 ), 0 ) FROM " .
+	"future_reservations AS r, projects AS p WHERE r.pid=p.pid AND " .
+	"r.pid='$pid' AND ( r.uid='$uid' OR p.shared_reservations ) AND " .
+	"r.approved AND r.type='$type'";
+    my $query_result = DBQueryFatal( $query );
+    my ($existing) = $query_result->fetchrow_array();
+
     my $approval_threshold;
     if (! GetSiteVar("reservations/approval_threshold", \$approval_threshold)) {
 	$approval_threshold = 128;
     }
     if ($approval_threshold == 0 ||
-	($count * ( $endtime - $starttime ) / 3600 <= $approval_threshold)) {
+	($existing +
+	 $count * ( $endtime - $starttime ) / 3600 <= $approval_threshold)) {
 	$approve = 1;
     }
     #
@@ -638,20 +654,11 @@ if (! ($pending || $approve)) {
 	}
     }
     if (defined($limit)) {
-	if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
+	if ($existing + ($count * ( $endtime - $starttime ) / 3600) > $limit) {
 	    $approve = 0;
 	}
     }
 }
-
-#
-# Do not allow this as root; we want proper history.
-#
-if ($UID == 0) {
-    fatal("Please do not run this as root!");
-}
-my $uid = $target_user->uid();
-my $uid_idx = $target_user->uid_idx();
 
 my $res;
 if( defined( $modify_idx ) ) {
