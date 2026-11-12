@@ -16,7 +16,12 @@ EMULAB_PORTVERSION=	UNSUPPORTED
 .endif
 
 .if ${OSMAJOR} > 13
-.error "only support FBSD 13"
+.  if (${OSMAJOR} == 14 && $(OSMINOR) == 5)
+# enough with the (OSversion-4) version numbering!
+EMULAB_PORTVERSION=	14.5
+.  else
+.error "only support FBSD 14.5 for FBSD > 13"
+.  endif
 .else
 .  if ${OSMINOR} < 5
 EMULAB_PORTVERSION=	9.3
@@ -24,6 +29,7 @@ EMULAB_PORTVERSION=	9.3
 EMULAB_PORTVERSION=	9.5
 .  endif
 .endif
+
 .endif
 
 #
@@ -33,7 +39,21 @@ EMULAB_PORTVERSION=	9.5
 PHP_MAJ=5
 PHP_VER=56
 PY_VER=2.7
-.if (${EMULAB_PORTVERSION} == "9.3")
+BIND_VER=918
+.if (${EMULAB_PORTVERSION} == "14.5")
+# Note that mysql is really mariadb
+PY_VER=3.12
+DEFAULT_VERSIONS= perl5=5.42 python=3.12 python3=3.12 tcltk=8.6 php=8.2 mysql=10.11m apache=2.4
+APACHE_PORT=www/apache24
+APACHEMODDIR=libexec/apache24
+MYSQL_VER=1011
+SWIG_VER=
+SWIG_PORT=devel/swig
+PHP_MAJ=8
+PHP_VER=82
+BIND_VER=920
+.else
+.  if (${EMULAB_PORTVERSION} == "9.3")
 # Note that mysql is really mariadb
 PY_VER=3.9
 DEFAULT_VERSIONS= perl5=5.36 python=3.9 python3=3.9 tcltk=8.6 php=8.1 mysql=10.6m apache=2.4
@@ -44,8 +64,8 @@ SWIG_VER=
 SWIG_PORT=devel/swig
 PHP_MAJ=8
 PHP_VER=81
-.else
-.  if (${EMULAB_PORTVERSION} == "9.5")
+.  else
+.    if (${EMULAB_PORTVERSION} == "9.5")
 # Note that mysql is really mariadb
 PY_VER=3.11
 DEFAULT_VERSIONS= perl5=5.36 python=3.11 python3=3.11 tcltk=8.6 php=8.1 mysql=10.6m apache=2.4
@@ -56,5 +76,6 @@ SWIG_VER=
 SWIG_PORT=devel/swig
 PHP_MAJ=8
 PHP_VER=81
+.    endif
 .  endif
 .endif

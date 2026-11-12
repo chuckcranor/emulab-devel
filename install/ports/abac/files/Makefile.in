@@ -515,7 +515,7 @@ swig_perl_ABAC_la_LIBADD = $(top_builddir)/libabac/libabac.la -lssl
 INCLUDES = -I$(top_builddir)/libabac \
            $(XMLSEC1_INCLUDES) $(XML2_INCLUDES) $(OPENSSL_INCLUDES)
 
-AM_CFLAGS = -DABAC_VERSION=\""$(VERSION)\"" -Wall -Werror
+AM_CFLAGS = -DABAC_VERSION=\""$(VERSION)\"" -Wall -Werror -Wno-error=deprecated-declarations
 ACLOCAL_AMFLAGS = -I m4
 CLEANFILES = $(perl_SCRIPTS)
 library_includedir = $(includedir)

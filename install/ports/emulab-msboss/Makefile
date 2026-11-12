@@ -32,7 +32,8 @@ RUN_DEPENDS+=	\
 # XXX we require a specific version of UHD so don't include it here
 #	uhd_find_devices:${PORTSDIR}/comms/uhd
 RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi
+	${PYTHON_PKGNAMEPREFIX}fastapi>=0.115:www/py-fastapi \
+	${PYTHON_PKGNAMEPREFIX}ncclient>0:net-mgmt/py-ncclient
 
 # Things we like
 RUN_DEPENDS+=	\
@@ -73,14 +74,25 @@ RUN_DEPENDS+=	\
 	p5-URI-Encode>=0.09:${PORTSDIR}/www/p5-URI-Encode \
 	p5-WWW-Curl>=4.17:${PORTSDIR}/www/p5-WWW-Curl \
 	p5-XML-Entities>=1.002:${PORTSDIR}/textproc/p5-XML-Entities \
-	${PYTHON_PKGNAMEPREFIX}ecdsa>=0.11:${PORTSDIR}/security/py-ecdsa \
+	${PYTHON_PKGNAMEPREFIX}ecdsa>=0.11:${PORTSDIR}/security/py-ecdsa
+
+.if (${EMULAB_PORTVERSION} == "14.5")
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}pyjwt>=2.14.0:${PORTSDIR}/www/py-pyjwt
+.else
+RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}pyjwt1>=1.4.0:${PORTSDIR}/www/py-pyjwt1
+.endif
 
 # XXX for old binaries
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/ldconfig/compat10x-amd64:${PORTSDIR}/misc/compat10x \
 	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x \
 	${LOCALBASE}/libdata/ldconfig/compat12x-amd64:${PORTSDIR}/misc/compat12x
+.if (${EMULAB_PORTVERSION} == "14.5")
+RUN_DEPENDS+=	\
+	${LOCALBASE}/libdata/ldconfig/compat13x-amd64:${PORTSDIR}/misc/compat13x
+.endif
 
 USES=		perl5 python:$(PY_VER) php
 

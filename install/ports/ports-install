@@ -7,7 +7,7 @@
 PORTSDIR=${PORTSDIR:-/usr/ports}
 PORTSUBDIR=misc
 SRCDIR=`dirname $0`
-PORTS="abac emulab-boss emulab-extras emulab-fs emulab-genilib emulab-medusa emulab-ops emulab-protogeni emulab-pubsub emulab-tftp-hpa emulab-tipserv emulab-ipmitool-old libtelnet otcl xerces-c2 p5-IO-EventMux p5-IO-EventMux-Socket-MsgHdr p5-Privileges-Drop p5-RPC-Async emulab-msboss emulab-msops"
+PORTS="abac emulab-boss emulab-extras emulab-fs emulab-genilib emulab-medusa emulab-ops emulab-protogeni emulab-pubsub emulab-tftp-hpa emulab-tipserv emulab-ipmitool-old libtelnet otcl xerces-c2 p5-IO-EventMux p5-IO-EventMux-Socket-MsgHdr p5-Privileges-Drop p5-RPC-Async py-pyangbind emulab-msboss emulab-msops"
 
 echo "Copying Emulab ports ..."
 for PORT in $PORTS
@@ -23,6 +23,19 @@ do
 	exit 1
     fi
 done
+
+# gnuplot-emulab has to go into math subdir
+PORT=gnuplot-emulab
+if [ -d "$PORTSDIR/math/$PORT" ]
+then
+    echo "WARNING: $PORT already installed, skipping..."
+else
+    cp -r $SRCDIR/$PORT $PORTSDIR/math
+fi
+if [ "$?" != "0" ]
+then
+    exit 1
+fi
 
 # "register" the emulab ports
 if [ ! -e "$PORTSDIR/$PORTSUBDIR/Makefile.orig" ]

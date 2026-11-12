@@ -92,7 +92,7 @@ swig/perl/ABAC.pm swig/perl/abac_wrap.cxx: swig/perl/chunk.i swig/perl/language.
 INCLUDES = -I$(top_builddir)/libabac \
            $(XMLSEC1_INCLUDES) $(XML2_INCLUDES) $(OPENSSL_INCLUDES)
 
-AM_CFLAGS = -DABAC_VERSION=\""$(VERSION)\"" -Wall -Werror
+AM_CFLAGS = -DABAC_VERSION=\""$(VERSION)\"" -Wall -Werror -Wno-error=deprecated-declarations
 
 ACLOCAL_AMFLAGS=-I m4
 

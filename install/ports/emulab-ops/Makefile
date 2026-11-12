@@ -23,15 +23,25 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on what is done for boss
 #
+.if (${EMULAB_PORTVERSION} == "14.5")
+USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mysqli \
+		opcache openssl pdo pcre phar posix random session \
+		simplexml sockets spl tokenizer xml xmlreader xmlwriter
+.else
+.  if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
+# add opcache, get rid of modules that no longer exist
 USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
 		opcache openssl pdo phar posix session simplexml sockets \
 		tokenizer xml xmlreader xmlrpc xmlwriter
+.  else
+.  endif
+.endif
 
 #
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
+.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5" || ${EMULAB_PORTVERSION} == "14.5")
 www_apache24_SET=	SUEXEC
 .else
 .endif
@@ -103,6 +113,7 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
+	${PYTHON_PKGNAMEPREFIX}setuptools>0:${PORTSDIR}/devel/py-setuptools \
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
 	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban \
 	${PYTHON_PKGNAMEPREFIX}tornado>0:${PORTSDIR}/www/py-tornado \

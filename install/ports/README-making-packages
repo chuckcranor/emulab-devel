@@ -1,10 +1,10 @@
 Making boss/ops/fs/etc. packages. This is only for the latest FreeBSD
-(as of this writing, 13.5). If you need help with older packages, check out
+(as of this writing, 14.5). If you need help with older packages, check out
 an older version of this document.
 
 As of FreeBSD 10, I started using the quarterly ports release at the time
-of the OS release and then update the packages quarterly. For the 13.5
-release, I am currently using 2025Q1.
+of the OS release and then update the packages quarterly. For the 14.5
+release, I am currently using 2026Q4.
 
 ################ TL;DR ################
 
@@ -13,7 +13,7 @@ version as I tend not to update anything below the TL;DR. SO TREAT THIS
 SECTION AS THE DEFINITIVE TEXT! I leave the later stuff just as it might
 still contain some useful tidbit that I should extract at some point.
 
-0. Updating the Emulab package repo (13.5 specific).
+0. Updating the Emulab package repo (14.5 specific).
 
    Occasionally you will want to make sure the ports are up to date.
    We track the "quarterly" branch of ports, so within a three month
@@ -26,32 +26,32 @@ still contain some useful tidbit that I should extract at some point.
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/13.5/ports on ops
+   a. Make sure the ports tree in /share/freebsd/14.5/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/13.5/ports
+      cd /share/freebsd/14.5/ports
       sudo git pull
 
    b. Make sure the Emulab ports are up to date.
 
-      cd /share/freebsd/13.5/ports/misc
+      cd /share/freebsd/14.5/ports/misc
       diff -r ~mike/testbed-clean/install/ports .
       <update anything that is out of sync>
 
-   c. Swapin a FreeBSD 13.5 node (experiment emulab-ops/freebsd133-64).
+   c. Swapin a FreeBSD 14.5 node (experiment emulab-ops/freebsd144-64).
       This will give you a d740 which is the best thing to use.
 
    d. Mount the ports and source trees.
 
       cd /usr
-      sudo mount -o ro fs:/share/freebsd/13.5/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/13.5/src /usr/src
+      sudo mount -o ro fs:/share/freebsd/14.5/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/14.5/src /usr/src
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-DEFAULT_VERSIONS=perl5=5.36 python=3.11 python3=3.11 php=8.1 mysql=106m apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS=perl5=5.42 python=3.12 python3=3.12 php=8.2 mysql=10.11m apache=2.4 tcltk=8.6
 DEFAULT_VERSIONS+=ssl=base
 
       We also add a bunch of custom port configurations to avoid needing to
@@ -67,10 +67,11 @@ devel_cmake_UNSET+=MANPAGES
 devel_doxygen_UNSET+=LATEX
 devel_protobuf-c_UNSET+=DOXYGEN
 security_py-certbot_UNSET+=MANPAGES
-lang_php81-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD ICONV JSON \
-			   MYSQLI OPCACHE OPENSSL PDO PHAR POSIX \
-			   SESSION SIMPLEXML SOCKETS TOKENIZER XML XMLREADER \
-			   XMLRPC XMLWRITER
+BUILD_ONLY_DEFAULT_PHP_FLAVOR=yes
+lang_php82-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
+			   MYSQLI OPCACHE OPENSSL PDO PCRE PHAR POSIX \
+			   RANDOM SESSION SIMPLEXML SOCKETS SPL TOKENIZER \
+			   XML XMLREADER XMLWRITER
 mail_dovcot_UNSET+=LDAP
 mail_opendkim_SET+=STOCK_RESOLVER
 mail_opendkim_UNSET+=UNBOUND
@@ -82,7 +83,7 @@ security_p11-kit_UNSET+=MANPAGES
       - tcl86 (build error)
 
    f1.(NEW for 2022!) You do not need to do f2 below if you are running
-      on the newest 13.5 image which has a 64GB root partition.
+      on the newest 14.5 image which has a 64GB root partition.
 
    f2.(NEW for 2020!) Create a /usr/obj filesystem. There is not enough
       space in the root filesystem to hold all the build trees. You need
@@ -115,7 +116,7 @@ security_p11-kit_UNSET+=MANPAGES
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/13.5/packages
+      pushd /share/freebsd/14.5/packages
       pkg add pkg-*
       pkg add ca_root*
       popd
@@ -126,10 +127,22 @@ security_p11-kit_UNSET+=MANPAGES
 
    j. Build em all:
 
+      As of 14.3 there is some sort of build issue having to do with the
+      "bootstrap" flavor of a couple of packages. There is apparently some sort
+      of race condition with making cargo, related to gobject-introspection
+      and glib20 which was resolved by creating a bootstrap FLAVOR of those
+      packages. Something does not get cleaned up properly if you try to clean
+      out the entire ports tree (ala, step 'g' above) and do this again.
+      This probably only affects attempts to do a second or beyond try to
+      build the packages, but I don't know for sure.
+
        setenv PACKAGES /usr/obj/ports/packages
        rm -f $PACKAGES/All/*
        setenv myFLAGS DISABLE_VULNERABILITIES=1
        date > /tmp/START
+       # XXX something that has popped up as of 14.3
+       (cd /usr/ports/devel/glib20 ; make FLAVOR=bootstrap clean)
+       (cd /usr/ports/devel/gobject-introspection ; make FLAVOR=bootstrap clean)
        foreach d (boss ops fs protogeni genilib tipserv extras)
            (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
@@ -151,7 +164,7 @@ security_p11-kit_UNSET+=MANPAGES
        date > /tmp/END2
 
    l. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/13.5/ports with a newer version of the port
+      to update /share/freebsd/14.5/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
@@ -179,7 +192,7 @@ security_p11-kit_UNSET+=MANPAGES
    p. Save packages and update tarball and repo. On boss:
 
        set www=/usr/testbed/www
-       cd /share/freebsd/13.5
+       cd /share/freebsd/14.5
        mkdir packages
        scp pcXXX:/usr/obj/ports/packages/All/\* packages/
        sudo chown -R root:wheel packages
@@ -187,23 +200,23 @@ security_p11-kit_UNSET+=MANPAGES
       For testing purposes (see next step), start with the ports in
       "Emulab-devel" repo.
 
-       sudo mv $www/FreeBSD/13.5-devel/{packages,Opackages}
-       sudo mkdir $www/FreeBSD/13.5-devel
-       sudo cp -rp packages $www/FreeBSD/13.5-devel/packages
-       sudo pkg repo $www/FreeBSD/13.5-devel/packages
+       sudo mv $www/FreeBSD/14.5-devel/{packages,Opackages}
+       sudo mkdir $www/FreeBSD/14.5-devel
+       sudo cp -rp packages $www/FreeBSD/14.5-devel/packages
+       sudo pkg repo $www/FreeBSD/14.5-devel/packages
 
       Do the following when you are sure everything is good.
       
-       set tball="FreeBSD-13.5-packages-64-`date +%Y%m%d`.tar.gz"
+       set tball="FreeBSD-14.5-packages-64-`date +%Y%m%d`.tar.gz"
        sudo tar czf $tball packages
        sudo cp $tball $www/downloads/
-       sudo ln -sfn $tball $www/downloads/FreeBSD-13.5-packages-64.tar.gz
-       sudo mv $www/FreeBSD/13.5/{packages,Opackages}
-       sudo cp -rp packages $www/FreeBSD/13.5/
-       sudo pkg repo $www/FreeBSD/13.5/packages
+       sudo ln -sfn $tball $www/downloads/FreeBSD-14.5-packages-64.tar.gz
+       sudo mv $www/FreeBSD/14.5/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/14.5/
+       sudo pkg repo $www/FreeBSD/14.5/packages
 
        # tar up the ports tree that corresponds to these packages
-       set tball="FreeBSD-13.5-ports.tar.gz"
+       set tball="FreeBSD-14.5-ports.tar.gz"
        sudo tar --exclude=ports/.svn --exclude=ports/.git -czf $tball ports
        sudo cp $tball $www/downloads/
 
@@ -212,7 +225,7 @@ security_p11-kit_UNSET+=MANPAGES
       /etc/pkg/Emulab-devel.conf:
       
 Emulab-devel: {
-  url: "https://www.emulab.net/FreeBSD/13.5-devel/packages",
+  url: "https://www.emulab.net/FreeBSD/14.5-devel/packages",
   mirror_type: NONE,
   enabled: yes
 }
@@ -275,8 +288,6 @@ Emulab-devel: {
         PD
         PA emulab-boss
         PA emulab-protogeni
-        PA emulab-fs
-        PA emulab-tipserv
         PA emulab-extras
 	PA emulab-msboss
         PC
@@ -288,7 +299,6 @@ Emulab-devel: {
         PA emulab-ops
         PA emulab-fs
         PA emulab-genilib
-        PA emulab-tipserv
         PA emulab-extras
 	PA emulab-msops
         PC
@@ -430,11 +440,18 @@ b. Allocate a node on which to build everything and load the appropriate
    DEFAULT_VERSIONS=perl5=5.32 python=3.7 python3=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
-   # for 13.5
+   # for 13.3
    DEFAULT_VERSIONS=perl5=5.32 python=3.8 python3=3.8 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
-   To avoid 
+   # for 13.5
+   DEFAULT_VERSIONS=perl5=5.36 python3=3.9 php=8.1 mysql=106m apache=2.4 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
+   # for 14.5
+   DEFAULT_VERSIONS=perl5=5.42 python=3.12 python3=3.12 php=8.2 mysql=10.11m apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
 5. Set non-standard options on some ports.
 
     * Perl. For perl 5.20 make sure that THREADS is defined. It should be,
@@ -615,7 +632,7 @@ c. As part of the boss/ops/etc. install, we will need to start creating a file
    /etc/pkg/Emulab.conf with:
 
 Emulab: {
-  url: "https://www.emulab.net/FreeBSD/13.5/packages",
+  url: "https://www.emulab.net/FreeBSD/14.5/packages",
   mirror_type: NONE,
   enabled: yes
 }

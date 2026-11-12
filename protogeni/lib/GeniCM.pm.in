@@ -6203,8 +6203,9 @@ sub SliverWorkAux($)
     if (GeniUsage->NewManifest($aggregate, $manifest, $rspec)) {
 	print STDERR "GeniUsage->NewManifest($aggregate) failed\n";
     }
-    $aggregate->SetSpeaksFor($speaksfor)
-	if (defined($speaksfor));
+    if (defined($speaksfor) && $aggregate->SetSpeaksFor($speaksfor)) {
+	print STDERR "SetSpeaksFor($speaksfor) failed\n";
+    }
     
     #
     # Each new aggregate gets a history record.

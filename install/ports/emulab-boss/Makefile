@@ -27,19 +27,25 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
-.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
+.if (${EMULAB_PORTVERSION} == "14.5")
+USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mysqli \
+		opcache openssl pdo pcre phar posix random session \
+		simplexml sockets spl tokenizer xml xmlreader xmlwriter
+.else
+.  if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
 # add opcache, get rid of modules that no longer exist
 USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
 		opcache openssl pdo phar posix session simplexml sockets \
 		tokenizer xml xmlreader xmlrpc xmlwriter
-.else
+.  else
+.  endif
 .endif
 
 #
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
+.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5" || ${EMULAB_PORTVERSION} == "14.5")
 www_apache24_SET=	SUEXEC
 .else
 .endif
@@ -165,6 +171,10 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban \
 	${PYTHON_PKGNAMEPREFIX}fastapi>0:${PORTSDIR}/www/py-fastapi
 
+# for cloudinit proxy
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}uvicorn>0:${PORTSDIR}/www/py-uvicorn
+
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER) \
@@ -174,7 +184,7 @@ RUN_DEPENDS+=	\
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
-	named:${PORTSDIR}/dns/bind918 \
+	named:${PORTSDIR}/dns/bind${BIND_VER} \
 	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
 
 # XXX For building loghole doc from www/tutorial

@@ -69,6 +69,10 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x \
 	${LOCALBASE}/libdata/ldconfig/compat12x-amd64:${PORTSDIR}/misc/compat12x \
 	/compat/linux/etc/os-release:${PORTSDIR}/emulators/linux_base-c7
+.if (${EMULAB_PORTVERSION} == "14.5")
+RUN_DEPENDS+=	\
+	${LOCALBASE}/libdata/ldconfig/compat13x-amd64:${PORTSDIR}/misc/compat13x
+.endif
 
 USES=		perl5 python:$(PY_VER) php
 

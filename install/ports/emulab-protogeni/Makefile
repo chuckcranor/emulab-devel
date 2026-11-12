@@ -23,7 +23,7 @@ WANT_PHP_MOD=	yes
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5")
+.if (${EMULAB_PORTVERSION} == "9.3" || ${EMULAB_PORTVERSION} == "9.5" || ${EMULAB_PORTVERSION} == "14.5")
 www_apache24_SET=	SUEXEC
 .else
 .endif
@@ -62,7 +62,7 @@ RUN_DEPENDS+=	\
 
 # apache related ports
 RUN_DEPENDS+=	\
-	${LOCALBASE}/${APACHEMODDIR}/mod_wsgi.so:${PORTSDIR}/www/mod_wsgi4 \
+	${LOCALBASE}/${APACHEMODDIR}/mod_wsgi.so:${PORTSDIR}/www/mod_wsgi \
 	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid \
 	p5-FCGI>=0.74:${PORTSDIR}/www/p5-FCGI
 
