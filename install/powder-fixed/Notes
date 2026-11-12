@@ -385,7 +385,8 @@ On boss start this up:
 
 And log into the experiment node and run:
 
-	node> /usr/libexec/uhd/examples/tx_waveforms --ant TX/RX --channel 0 --rate 1e6 --freq 3550e6 --gain 50
+	node> /usr/libexec/uhd/examples/tx_waveforms \
+	    --ant TX/RX --channel 0 --rate 1e6 --freq 3550e6 --gain 50
 
     Let it run while watching the output from rfmonitor_daemon.log. It might
     take til the second report to see anything. Ideally you want to see this:
@@ -496,7 +497,7 @@ Checking a mobile endpoint.
 5. Make sure syncthing has been reinstalled and activated. This is what
    is used to transfer the RF monitor logs back to boss.
    If /usr/testbed/etc/syncthing exists, then all is well and you are
-   done. Other follow the instructions in powder/syncthing/README.
+   done. Otherwise follow the instructions in powder/syncthing/README.
    You do not need to do the initial steps that apply to the mothership.
    Start with step 6 to create a tarball of the needed config, and then
    all the following steps under "To add collection of RF monitoring data".
@@ -636,3 +637,85 @@ Problems I have encountered:
 
    To be extra safe, reboot and watch the console for other errors because
    this most like happened due to filesystem errors.
+
+5. Error generating certificate for local user
+
+   [ This is an error caused by updating Emulab software on an aggregate
+     (bus or fixed) without first upgrading the packages. Late-Leigh Emulab
+     software requires the p5-Crypt-JWT package which our old 13.5 package
+     set did not include. In general, you should follow the instructions in
+     boss:~stoller/testbed-noelvin/README.mike when upgrading for the first
+     time post-Leigh. See updating-endpoints.txt in that same directory for
+     a list of MEs and their state w.r.t. upgrading (FEs have all been done). ]
+
+   If you get an error email with a subject like:
+
+     POWDERBUS6183: Failed: mkusercert -p ********** 2040
+
+   along with:
+
+     POWDERBUS6183: Failed: mkusercert 2040
+     POWDERBUS6183: Error generating missing certificate for estanl0
+
+   you have probably encountered an incomplete install. First you will need
+   to finish the install as mentioned above. After that you try again to
+   create account, which should re-run the failed command.
+   password (mkusercert -p) so you can rerun the failed command. On the
+   aggregate boss do:
+
+     wap tbacct add <failed-user-id>
+
+   where the user ID is the "GENI uid" and not the Portal user id;
+   e.g. "estanl0" and not "estanley".
+
+6. Problems with "ed1" node on mobile node
+
+   First make sure the "ed1" should be powered up:
+
+     wap power status ed1-real
+
+   It may not be if the node is not in an experiment or if nodes have
+   been powered off due to high temperature or running on battery.
+   Usually in this situation, the boss VM will be powered off as well
+   and you won't be able to do any of this anyway!
+
+   The usual problem is that you cannot reach the management interface
+   which manifests as problem power cycle/on/off-ing the node.
+
+   Login to the boss and see if you can access the management interface
+   at "ed1-mng" (10.10.11.5 on all buses). If not, try power cycling the
+   ed1 node via the arduino:
+
+     # Note "ed1-real" and not "ed1" which uses the node IPMI
+     wap power cycle ed1-real
+
+   Maybe power it off, wait, power it on. If it still does not ping, see
+   if it is DHCPing:
+
+     tail /usr/testbed/log/dhcpd.log
+
+   If it still does not ping, then someone will have to go physically look
+   at it and see if it has power, the cables are connected, etc. Note that
+   it is worth trying a lot of things remotely here, since going out to
+   the ME is a lot of work:
+
+     * reboot the boss VM
+
+     * shutdown the boss VM and make sure the Arduino is working on
+       the control node ("/usr/local/bin/get_arduino_data.py -v")
+       and that it indicates that the bus is not on battery or acc power.
+
+     * reboot the control node
+
+   If you can access the management interface, you can get on to it by
+   using your SOCKS proxy (this assumes you can "ssh -D" to the boss
+   as you so you can use the proxy).
+
+   Once on the management web page (user "ADMIN", password in the boss node
+   /usr/testbed/etc/ipmi.pswd file) you can use the KVM (BEWARE: it will
+   try to use a java-based KVM app by default, make sure you use the HTML5
+   interface instead). Then you can power cycle it, get into the BIOS, and
+   check various settings most importantly the boot order. If the boot order
+   appears to have been reset and/or the BIOS time is wrong (back in 2020),
+   then the CMOS battery is probably dead and the whole ME will have to
+   be brought in to be disassembled to get to the battery.
