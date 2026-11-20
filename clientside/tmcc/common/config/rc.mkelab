@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2025 University of Utah and the Flux Group.
+# Copyright (c) 2004-2026 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2824,7 +2824,7 @@ sub SetupBossNode($)
 	}
     }
     print RC "network_interfaces=\"\$network_interfaces lo0\"\n";
-    print RC "static_routes=\"outerboss vnodes\"\n";
+    print RC "static_routes=\"\$static_routes outerboss vnodes\"\n";
     print RC "route_outerboss=\"$outer_bossip $outer_routerip\"\n";
     print RC "route_vnodes=\"-net ". $emulabconfig{"JAILIPBASE"} .
 	" -netmask " . $emulabconfig{"JAILIPMASK"} .
