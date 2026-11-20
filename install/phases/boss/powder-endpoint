@@ -157,7 +157,7 @@ sub Install($$$)
 		DoneIfPackageInstalled("telegraf", 0);
 		# Oh, this is clever.
 		$ENV{"ASSUME_ALWAYS_YES"} = "true";
-		ExecQuietFatal("pkg install telegraf");
+		ExecQuietFatal("pkg install -r Emulab telegraf");
 	    };
 	    my $config = "$TOP_OBJDIR/install/powder-fixed/telegraf.conf";
 	    my $password;
